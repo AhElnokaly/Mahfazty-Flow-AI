@@ -1,0 +1,7 @@
+{
+  "name": "Mahfazty Flow",
+  "description": "Smart Personal Finance & Cash Flow App with AI-powered insights, hierarchical group tracking, and detailed analytics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

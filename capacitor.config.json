@@ -1,0 +1,9 @@
+
+{
+  "appId": "com.mahfazty.flow",
+  "appName": "Mahfazty Flow",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

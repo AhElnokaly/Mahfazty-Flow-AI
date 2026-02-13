@@ -1,0 +1,28 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans bg-slate-50 text-slate-900;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dark body {
+    @apply bg-slate-950 text-white;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 4px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full;
+}
+.dark ::-webkit-scrollbar-thumb {
+    @apply bg-slate-700;
+}
