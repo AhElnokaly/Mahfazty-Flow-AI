@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { AppState, Group, Transaction, TransactionType, Client, UserProfile, AppNotification, ApiConfig, ChatMessage, CustomWidget, ApiKeyDefinition, Installment } from './types';
+import { AppState, Group, Transaction, TransactionType, Client, UserProfile, AppNotification, ChatMessage, CustomWidget, Installment } from './types';
 
 const INITIAL_STATE: AppState = {
   walletBalance: 24500,
@@ -26,17 +26,10 @@ const INITIAL_STATE: AppState = {
   isPro: false,
   autoSync: true,
   isSyncing: false,
-  isOnline: navigator.onLine,
+  isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
   lastSyncTimestamp: new Date().toISOString(),
   syncLocationSet: false,
   syncProvider: 'local',
-  apiConfig: {
-    provider: 'gemini',
-    keys: [],
-    activeKeyId: undefined,
-    model: 'gemini-3-flash-preview',
-    status: 'idle'
-  },
   chatHistory: [],
   proChatHistory: [],
   activeWidgets: ['cash_flow', 'lifestyle_radar'],
@@ -68,9 +61,6 @@ interface AppContextType {
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => void;
     payInstallment: (id: string, penalty?: number) => void;
     setPro: (val: boolean) => void;
-    addApiKey: (key: string, label: string, linkedToGoogle?: boolean) => void;
-    removeApiKey: (id: string) => void;
-    setActiveApiKey: (id: string) => void;
     addChatMessage: (msg: ChatMessage, isProChat?: boolean) => void;
     updateProfile: (profile: UserProfile) => void;
     setNotification: (notif: AppState['notification']) => void;
@@ -108,9 +98,6 @@ type Action =
   | { type: 'ADD_INSTALLMENT'; payload: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'> }
   | { type: 'PAY_INSTALLMENT'; payload: { id: string; penalty: number } }
   | { type: 'SET_PRO'; payload: boolean }
-  | { type: 'ADD_API_KEY'; payload: { key: string; label: string; linkedToGoogle?: boolean } }
-  | { type: 'REMOVE_API_KEY'; payload: string }
-  | { type: 'SET_ACTIVE_API_KEY'; payload: string }
   | { type: 'ADD_CHAT_MESSAGE'; payload: { msg: ChatMessage; isProChat: boolean } }
   | { type: 'TOGGLE_LANGUAGE' }
   | { type: 'TOGGLE_DARK_MODE' }
@@ -135,20 +122,9 @@ type Action =
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
     case 'LOGIN': {
-      // Simulate auto-provisioning a key if user is new
-      const hasKeys = state.apiConfig.keys.length > 0;
-      let newApiConfig = { ...state.apiConfig };
-      
-      if (!hasKeys) {
-        const defaultKey = { id: 'key_google_default', key: '', label: 'Cloud Default Key', linkedToGoogle: true, isRateLimited: false };
-        newApiConfig.keys = [defaultKey];
-        newApiConfig.activeKeyId = 'key_google_default';
-      }
-
       return { 
         ...state, 
         userProfile: { ...state.userProfile, ...action.payload, isAuthenticated: true },
-        apiConfig: newApiConfig,
         notification: { message: `Welcome back, ${action.payload.name}!`, type: 'success' }
       };
     }
@@ -159,34 +135,16 @@ const appReducer = (state: AppState, action: Action): AppState => {
       const newBalance = action.payload.type === TransactionType.INCOME 
         ? state.walletBalance + action.payload.amount 
         : state.walletBalance - action.payload.amount;
-      
-      // Check budget alert
-      let notification = state.notification;
-      if (action.payload.type === TransactionType.EXPENSE) {
-        const group = state.groups.find(g => g.id === action.payload.groupId);
-        if (group && group.monthlyBudget) {
-           const currentMonthSpending = state.transactions
-             .filter(t => t.groupId === group.id && t.type === TransactionType.EXPENSE && t.date.startsWith(new Date().toISOString().slice(0, 7)))
-             .reduce((s, t) => s + t.amount, 0) + action.payload.amount;
-           
-           if (currentMonthSpending > group.monthlyBudget) {
-              notification = { message: `⚠️ Budget Alert: ${group.name} exceeded!`, type: 'error' };
-           }
-        }
-      }
-
-      return { ...state, transactions: [newTransaction, ...state.transactions], walletBalance: newBalance, notification };
+      return { ...state, transactions: [newTransaction, ...state.transactions], walletBalance: newBalance };
     }
     case 'ADD_GROUP':
       return { ...state, groups: [...state.groups, { id: Date.now().toString(), name: action.payload.name, icon: action.payload.icon, monthlyBudget: action.payload.budget }] };
-    case 'SET_GROUP_BUDGET':
-      return { ...state, groups: state.groups.map(g => g.id === action.payload.id ? { ...g, monthlyBudget: action.payload.amount } : g) };
-    case 'ADD_API_KEY': {
-      const newKey = { id: Date.now().toString(), key: action.payload.key, label: action.payload.label, linkedToGoogle: action.payload.linkedToGoogle, isRateLimited: false };
-      return { ...state, apiConfig: { ...state.apiConfig, keys: [...state.apiConfig.keys, newKey], activeKeyId: state.apiConfig.activeKeyId === 'key_google_default' ? newKey.id : (state.apiConfig.activeKeyId || newKey.id) } };
-    }
-    case 'SET_PRO':
-      return { ...state, isPro: action.payload };
+    case 'TOGGLE_LANGUAGE':
+      return { ...state, language: state.language === 'ar' ? 'en' : 'ar' };
+    case 'TOGGLE_DARK_MODE':
+      return { ...state, isDarkMode: !state.isDarkMode };
+    case 'SET_NOTIFICATION':
+      return { ...state, notification: action.payload };
     case 'RESET_DATA':
       return INITIAL_STATE;
     default:
@@ -196,12 +154,16 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(appReducer, INITIAL_STATE, (initial) => {
-    const persisted = localStorage.getItem('mahfazty_state_v12');
-    return persisted ? JSON.parse(persisted) : initial;
+    try {
+      const persisted = localStorage.getItem('mahfazty_v1_store');
+      return persisted ? { ...initial, ...JSON.parse(persisted) } : initial;
+    } catch (e) {
+      return initial;
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem('mahfazty_state_v12', JSON.stringify(state));
+    localStorage.setItem('mahfazty_v1_store', JSON.stringify(state));
   }, [state]);
 
   const actions = {
@@ -216,9 +178,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => dispatch({ type: 'ADD_INSTALLMENT', payload: i }),
     payInstallment: (id: string, penalty?: number) => dispatch({ type: 'PAY_INSTALLMENT', payload: { id, penalty: penalty || 0 } }),
     setPro: (val: boolean) => dispatch({ type: 'SET_PRO', payload: val }),
-    addApiKey: (key: string, label: string, linkedToGoogle?: boolean) => dispatch({ type: 'ADD_API_KEY', payload: { key, label, linkedToGoogle } }),
-    removeApiKey: (id: string) => dispatch({ type: 'REMOVE_API_KEY', payload: id }),
-    setActiveApiKey: (id: string) => dispatch({ type: 'SET_ACTIVE_API_KEY', payload: id }),
     addChatMessage: (msg: ChatMessage, isProChat = false) => dispatch({ type: 'ADD_CHAT_MESSAGE', payload: { msg, isProChat } }),
     updateProfile: (profile: UserProfile) => dispatch({ type: 'UPDATE_PROFILE', payload: profile }),
     setNotification: (notif: AppState['notification']) => dispatch({ type: 'SET_NOTIFICATION', payload: notif }),

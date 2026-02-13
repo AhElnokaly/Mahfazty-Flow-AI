@@ -1,4 +1,5 @@
 
+
 export enum TransactionType {
   INCOME = 'INCOME',
   EXPENSE = 'EXPENSE'
@@ -54,23 +55,6 @@ export interface Installment {
   linkedGroupId?: string;
 }
 
-export interface ApiKeyDefinition {
-  id: string;
-  key: string;
-  label: string; 
-  isRateLimited: boolean; 
-  lastUsed?: string;
-  linkedToGoogle?: boolean;
-}
-
-export interface ApiConfig {
-  provider: 'gemini' | 'openai' | 'local';
-  keys: ApiKeyDefinition[]; 
-  activeKeyId?: string; 
-  model: string;
-  status: 'connected' | 'error' | 'idle';
-}
-
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
@@ -114,7 +98,6 @@ export interface AppState {
   syncProvider: 'local' | 'cloud' | 'manual';
   cloudEndpoint?: string;
   userProfile: UserProfile;
-  apiConfig: ApiConfig;
   chatHistory: ChatMessage[];
   proChatHistory: ChatMessage[]; 
   activeWidgets: string[]; 

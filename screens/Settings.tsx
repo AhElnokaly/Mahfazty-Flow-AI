@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef } from 'react';
 import { useApp } from '../store';
 import { 
@@ -12,32 +13,17 @@ const AVATARS = [
 const Settings: React.FC = () => {
   const { state, dispatch } = useApp();
   const importFileRef = useRef<HTMLInputElement>(null);
-  const { language, autoSync, userProfile, isPro, cloudEndpoint, apiConfig } = state;
+  const { language, autoSync, userProfile, isPro, cloudEndpoint } = state;
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState(userProfile);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
-  const [newKey, setNewKey] = useState('');
-  const [newKeyLabel, setNewKeyLabel] = useState('');
-  const [showAddKey, setShowAddKey] = useState(false);
-  const [feedback, setFeedback] = useState('');
-  const [feedbackType, setFeedbackType] = useState('suggestion');
-  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
 
   const handleSaveProfile = () => {
     dispatch.updateProfile(profileForm);
     setIsEditingProfile(false);
     setShowAvatarPicker(false);
     dispatch.setNotification({ message: 'Profile Updated', type: 'success' });
-  };
-
-  const handleAddKey = () => {
-    if (!newKey.trim()) return;
-    dispatch.addApiKey(newKey.trim(), newKeyLabel.trim() || `Key ${apiConfig.keys.length + 1}`, true);
-    setNewKey('');
-    setNewKeyLabel('');
-    setShowAddKey(false);
-    dispatch.setNotification({ message: language === 'ar' ? 'تم ربط المفتاح بهويتك بنجاح' : 'API Key linked to identity', type: 'success' });
   };
 
   const handleLogout = () => {
@@ -90,88 +76,10 @@ const Settings: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* API Key Management */}
+        {/* System Settings & Backup */}
         <section className="space-y-6 lg:col-span-2">
-           <div className="flex items-center justify-between px-6">
-              <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[5px] flex items-center gap-2">
-                <Key size={12} /> {language === 'ar' ? 'إدارة مفاتيح الذكاء' : 'AI Intelligence Keys'}
-              </h3>
-              <button onClick={() => setShowAddKey(!showAddKey)} className="text-blue-600 text-xs font-black flex items-center gap-1">
-                {showAddKey ? <X size={14}/> : <Plus size={14}/>} 
-                {showAddKey ? 'Cancel' : (language === 'ar' ? 'إضافة مفتاح' : 'Add Key')}
-              </button>
-           </div>
-           
-           <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-6">
-             {showAddKey && (
-               <div className="p-6 bg-blue-50 dark:bg-blue-900/10 rounded-3xl animate-in slide-in-from-top-2 border border-blue-200 dark:border-blue-800">
-                  <div className="flex flex-col md:flex-row gap-3">
-                    <input 
-                      value={newKeyLabel}
-                      onChange={e => setNewKeyLabel(e.target.value)}
-                      placeholder={language === 'ar' ? 'تسمية المفتاح (مثال: Gemini Pro)' : 'Label (e.g. Gemini Pro)'}
-                      className="md:w-1/3 px-4 py-3 bg-white dark:bg-slate-800 rounded-2xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                    />
-                    <input 
-                      value={newKey}
-                      onChange={e => setNewKey(e.target.value)}
-                      type="password"
-                      placeholder="API Key..."
-                      className="flex-1 px-4 py-3 bg-white dark:bg-slate-800 rounded-2xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                    />
-                    <button onClick={handleAddKey} className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg shadow-blue-500/20">
-                      {language === 'ar' ? 'ربط' : 'Link'}
-                    </button>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2 text-blue-600">
-                     <ShieldCheck size={12} />
-                     <p className="text-[9px] font-bold uppercase tracking-widest">{language === 'ar' ? 'سيتم ربط هذا المفتاح تلقائياً بهويتك الرقمية' : 'This key will be securely linked to your identity'}</p>
-                  </div>
-               </div>
-             )}
-
-             <div className="space-y-3">
-               {apiConfig.keys.map(key => (
-                 <div key={key.id} className={`flex items-center justify-between p-4 rounded-3xl border ${apiConfig.activeKeyId === key.id ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-800'}`}>
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${apiConfig.activeKeyId === key.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-800 text-slate-400'}`}>
-                         <Key size={18} />
-                      </div>
-                      <div>
-                         <h4 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-2">
-                           {key.label}
-                           {key.linkedToGoogle && <ShieldCheck size={12} className="text-blue-500" />}
-                         </h4>
-                         <p className="text-[10px] text-slate-400 font-mono">
-                           {key.key.substring(0, 8)}...
-                         </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       {apiConfig.activeKeyId !== key.id && (
-                         <button onClick={() => dispatch.setActiveApiKey(key.id)} className="px-3 py-2 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-[9px] font-black uppercase">
-                            Set Default
-                         </button>
-                       )}
-                       <button onClick={() => dispatch.removeApiKey(key.id)} className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-800 text-rose-400 rounded-xl">
-                         <Trash2 size={16} />
-                       </button>
-                    </div>
-                 </div>
-               ))}
-               {apiConfig.keys.length === 0 && (
-                 <div className="py-12 text-center bg-slate-50 dark:bg-slate-900 rounded-[2.5rem] border border-dashed border-slate-200 dark:border-slate-800">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{language === 'ar' ? 'لا توجد مفاتيح مسجلة' : 'No API Keys Configured'}</p>
-                 </div>
-               )}
-             </div>
-           </div>
-        </section>
-
-        {/* Data Sync & Support */}
-        <section className="space-y-6">
-          <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[5px] px-6">System</h3>
-          <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-6">
+          <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[5px] px-6">System Management</h3>
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl">
                <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center">

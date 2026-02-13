@@ -1,57 +1,10 @@
+
 import { GoogleGenAI, FunctionDeclaration, Type, GenerateContentResponse, Tool } from "@google/genai";
-import { AppState, CustomWidget, ApiKeyDefinition } from "./types";
+import { AppState, CustomWidget } from "./types";
 
 /**
- * Executes an API call with automatic key rotation on 429/503 errors.
+ * Helper to get the financial context of the user for better AI reasoning.
  */
-const executeWithKeyRotation = async <T>(
-  state: AppState, 
-  apiCall: (ai: GoogleGenAI) => Promise<T>
-): Promise<T> => {
-  const { keys, activeKeyId } = state.apiConfig;
-  
-  if (!keys || keys.length === 0) {
-     throw new Error("No API keys configured.");
-  }
-
-  // Organize keys: Active first, then the rest
-  const activeKeyIndex = keys.findIndex(k => k.id === activeKeyId);
-  const orderedKeys = activeKeyIndex !== -1 
-    ? [keys[activeKeyIndex], ...keys.filter((_, i) => i !== activeKeyIndex)]
-    : [...keys];
-
-  let lastError: any = null;
-
-  for (const apiKeyDef of orderedKeys) {
-    if (!apiKeyDef.key) continue;
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: apiKeyDef.key });
-      const result = await apiCall(ai);
-      return result; // Success!
-    } catch (error: any) {
-      lastError = error;
-      const isRateLimit = 
-        error?.status === 429 || 
-        error?.code === 429 || 
-        error?.message?.includes('429') || 
-        error?.status === 'RESOURCE_EXHAUSTED';
-      
-      const isServerOverload = error?.status === 503 || error?.code === 503;
-
-      if (isRateLimit || isServerOverload) {
-        console.warn(`API Key (${apiKeyDef.label}) hit rate limit. Switching to next key...`);
-        // Continue loop to next key
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  console.error("All API keys exhausted or rate limited.");
-  throw lastError;
-};
-
 const getWalletContext = (state: AppState) => {
   const groupsSummary = state.groups.map(g => `Group: ${g.name}`).join(' | ');
   const installmentsSummary = state.installments.map(i => `${i.title} (${i.paidCount}/${i.installmentCount} paid)`).join(' | ');
@@ -135,10 +88,12 @@ export interface AIChatResponse {
   toolCall?: any; // To pass back to UI for confirmation
 }
 
+// Correct usage of GoogleGenAI: Create instance with process.env.API_KEY inside the call.
 export const sendChatMessage = async (state: AppState, message: string, isProChat = false, imageData?: { data: string, mimeType: string }): Promise<AIChatResponse> => {
   const history = isProChat ? state.proChatHistory : state.chatHistory;
 
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const modelName = state.isPro ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
     
     const parts: any[] = [{ text: message }];
@@ -161,18 +116,18 @@ export const sendChatMessage = async (state: AppState, message: string, isProCha
       tools.push({ functionDeclarations: [addInstallmentTool] });
     }
 
-    const response: GenerateContentResponse = await executeWithKeyRotation(state, (ai) => ai.models.generateContent({
+    const response: GenerateContentResponse = await ai.models.generateContent({
       model: modelName,
       contents: [
         ...history.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-        { role: 'user', parts: parts }
+        { role: 'user', parts: (parts.length > 1 ? { parts } : parts[0]) }
       ],
       config: { 
         systemInstruction: getSystemInstruction(state, isProChat ? 'architect' : 'assistant'),
         temperature: 0.5,
         tools: tools
       }
-    }));
+    });
 
     let outputText = response.text || "";
     let generatedWidget: CustomWidget | undefined;
@@ -203,6 +158,7 @@ export const sendChatMessage = async (state: AppState, message: string, isProCha
        }
     }
     
+    // Search Grounding URL Extraction
     if (state.isPro && isProChat && response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
       const chunks = response.candidates[0].groundingMetadata.groundingChunks;
       const urls = chunks.map((c: any) => c.web?.uri).filter(Boolean);
@@ -217,16 +173,15 @@ export const sendChatMessage = async (state: AppState, message: string, isProCha
 
   } catch (error: any) {
     console.error("AI Error:", error);
-    if (error.status === 429 || error.code === 429 || error.message?.includes('429') || error.status === 'RESOURCE_EXHAUSTED') {
-      return { text: state.language === 'ar' ? "⚠️ كل المفاتيح مشغولة حالياً (429)." : "⚠️ All API keys are rate-limited." };
-    }
     return { text: `System Alert: ${error.message}` };
   }
 };
 
+// Image Editing with Gemini 2.5 Flash Image
 export const editFinancialImage = async (state: AppState, prompt: string, base64Image: string, mimeType: string) => {
   try {
-    const response: GenerateContentResponse = await executeWithKeyRotation(state, (ai) => ai.models.generateContent({
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
@@ -234,7 +189,7 @@ export const editFinancialImage = async (state: AppState, prompt: string, base64
           { text: prompt }
         ],
       },
-    }));
+    });
 
     if (response.candidates?.[0]?.content?.parts) {
       const img = response.candidates[0].content.parts.find(p => p.inlineData);
@@ -251,13 +206,14 @@ export const editFinancialImage = async (state: AppState, prompt: string, base64
 
 export const suggestTransactionNote = async (state: AppState, data: { type: string, amount: string, currency: string, groupName: string, clientName: string, date: string }) => {
   try {
-    const response: GenerateContentResponse = await executeWithKeyRotation(state, (ai) => ai.models.generateContent({
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Smart note for: ${data.type} of ${data.amount} ${data.currency} via ${data.clientName}.`,
       config: {
         systemInstruction: `Max 4 words. Language: ${state.language === 'ar' ? 'Arabic' : 'English'}.`
       }
-    }));
+    });
     return response.text?.trim() || "";
   } catch (e) { 
     return ""; 

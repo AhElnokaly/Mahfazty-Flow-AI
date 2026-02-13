@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './store';
@@ -19,29 +20,91 @@ import {
   RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn
 } from 'lucide-react';
 
+// Helper to decode JWT without external library
+const decodeJwt = (token: string) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
 const LoginScreen = () => {
   const { state, dispatch } = useApp();
   const [loading, setLoading] = useState(false);
+  const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  const handleFakeGoogleLogin = () => {
-    setLoading(true);
-    setTimeout(() => {
-      dispatch.loginWithGoogle({
-        name: 'Ahmed Mahmoud',
-        email: 'ahmed.m@gmail.com',
-        avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Ahmed&backgroundColor=b6e3f4',
-        googleId: 'g-123456789'
-      });
-      setLoading(false);
-    }, 1500);
+  useEffect(() => {
+    // Initialize Google Identity Services
+    const initializeGsi = () => {
+      // FIX: Accessing google from window via casting to bypass TS error
+      const g = (window as any).google;
+      if (g) {
+        g.accounts.id.initialize({
+          client_id: '1073867623191-7662q2g0f7j7j7j7j7j7j7j7j7j7j7j7.apps.googleusercontent.com', // Placeholder Client ID
+          callback: (response: any) => {
+            setLoading(true);
+            const userData = decodeJwt(response.credential);
+            if (userData) {
+              setTimeout(() => {
+                dispatch.loginWithGoogle({
+                  name: userData.name,
+                  email: userData.email,
+                  avatar: userData.picture,
+                  googleId: userData.sub
+                });
+                setLoading(false);
+              }, 1000);
+            }
+          },
+          auto_select: false
+        });
+
+        if (googleBtnRef.current) {
+          g.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'outline',
+            size: 'large',
+            width: googleBtnRef.current.offsetWidth,
+            shape: 'pill',
+            logo_alignment: 'left'
+          });
+        }
+      }
+    };
+
+    const script = document.createElement('script');
+    script.src = "https://accounts.google.com/gsi/client";
+    script.onload = initializeGsi;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  const handleManualSimulation = () => {
+     setLoading(true);
+     setTimeout(() => {
+       dispatch.loginWithGoogle({
+         name: 'Ahmed Mahmoud',
+         email: 'ahmed.m@gmail.com',
+         avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Ahmed',
+         googleId: 'g-123'
+       });
+       setLoading(false);
+     }, 800);
   };
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900 overflow-hidden">
        <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-slate-900 to-indigo-900 opacity-50"></div>
        <div className="absolute w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] -top-20 -left-20 animate-pulse"></div>
-       <div className="absolute w-[400px] h-[400px] bg-purple-600/20 rounded-full blur-[100px] -bottom-20 -right-20"></div>
-
+       
        <div className="relative z-10 w-full max-w-md p-8 text-center space-y-8 animate-in zoom-in-95 duration-700">
           <div className="w-24 h-24 bg-white/10 backdrop-blur-xl border border-white/20 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-2xl">
              <CreditCard size={48} className="text-blue-400" />
@@ -49,29 +112,33 @@ const LoginScreen = () => {
           
           <div className="space-y-2">
              <h1 className="text-5xl font-black text-white tracking-tighter uppercase">Mahfazty<span className="text-blue-500">.</span>Flow</h1>
-             <p className="text-slate-400 text-sm font-bold uppercase tracking-[4px]">AI Financial Intelligence</p>
+             <p className="text-slate-400 text-sm font-bold uppercase tracking-[4px]">Real AI Finance</p>
           </div>
 
           <p className="text-slate-400 text-xs leading-relaxed max-w-xs mx-auto">
              {state.language === 'ar' 
-               ? 'تحكم في مستقبلك المالي باستخدام أحدث تقنيات الذكاء الاصطناعي من Google.' 
-               : 'Take control of your financial future using the latest Google AI technologies.'}
+               ? 'سجل دخولك الآن لربط محفظتك بهويتك الرقمية الآمنة من Google.' 
+               : 'Sign in to link your wallet with your secure Google digital identity.'}
           </p>
 
-          <button 
-            onClick={handleFakeGoogleLogin}
-            disabled={loading}
-            className="w-full py-5 bg-white text-slate-900 rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 group"
-          >
-            {loading ? (
-              <RefreshCw size={20} className="animate-spin text-blue-600" />
-            ) : (
-              <>
-                <img src="https://www.google.com/favicon.ico" className="w-5 h-5 group-hover:rotate-12 transition-transform" alt="Google" />
-                {state.language === 'ar' ? 'تسجيل الدخول عبر Google' : 'Sign in with Google'}
-              </>
-            )}
-          </button>
+          <div className="space-y-4">
+            {/* The real Google Button will mount here */}
+            <div ref={googleBtnRef} className="w-full h-[50px] flex justify-center overflow-hidden rounded-full"></div>
+            
+            <button 
+              onClick={handleManualSimulation}
+              className="text-[10px] font-black uppercase tracking-[3px] text-slate-500 hover:text-blue-400 transition-colors"
+            >
+              {state.language === 'ar' ? 'أو دخول تجريبي سريع' : 'Or Quick Demo Login'}
+            </button>
+          </div>
+
+          {loading && (
+            <div className="flex flex-col items-center gap-2 animate-bounce">
+              <RefreshCw size={24} className="animate-spin text-blue-500" />
+              <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Authenticating...</span>
+            </div>
+          )}
           
           <div className="pt-8 border-t border-white/5">
              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Secured by Google Identity Services</p>
