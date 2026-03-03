@@ -13,11 +13,12 @@ import Settings from './screens/Settings';
 import ProUpgrade from './screens/ProUpgrade';
 import ClientsManager from './screens/ClientsManager';
 import Installments from './screens/Installments';
+import Onboarding from './screens/Onboarding';
 import { 
   LayoutDashboard, BarChart3, Layers, User, 
   Bell, Plus, History as HistoryIcon,
   CheckCircle2, AlertCircle, Sun, Moon,
-  RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn
+  RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn, Eye, EyeOff, Key, ShieldCheck
 } from 'lucide-react';
 
 // Helper to decode JWT without external library
@@ -34,114 +35,172 @@ const decodeJwt = (token: string) => {
   }
 };
 
-const LoginScreen = () => {
+// --- New Welcome Screen Component ---
+const WelcomeScreen = () => {
   const { state, dispatch } = useApp();
+  const [view, setView] = useState<'landing' | 'login' | 'signup'>('landing');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // Initialize Google Identity Services
-    const initializeGsi = () => {
-      // FIX: Accessing google from window via casting to bypass TS error
-      const g = (window as any).google;
-      if (g) {
-        g.accounts.id.initialize({
-          client_id: '1073867623191-7662q2g0f7j7j7j7j7j7j7j7j7j7j7j7.apps.googleusercontent.com', // Placeholder Client ID
-          callback: (response: any) => {
-            setLoading(true);
-            const userData = decodeJwt(response.credential);
-            if (userData) {
-              setTimeout(() => {
-                dispatch.loginWithGoogle({
-                  name: userData.name,
-                  email: userData.email,
-                  avatar: userData.picture,
-                  googleId: userData.sub
-                });
-                setLoading(false);
-              }, 1000);
-            }
-          },
-          auto_select: false
-        });
-
-        if (googleBtnRef.current) {
-          g.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'outline',
-            size: 'large',
-            width: googleBtnRef.current.offsetWidth,
-            shape: 'pill',
-            logo_alignment: 'left'
-          });
-        }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username || !password) return;
+    
+    setLoading(true);
+    setTimeout(() => {
+      if (view === 'signup') {
+        dispatch.signup(username, password);
+      } else {
+        dispatch.login(username, password);
       }
-    };
-
-    const script = document.createElement('script');
-    script.src = "https://accounts.google.com/gsi/client";
-    script.onload = initializeGsi;
-    document.body.appendChild(script);
-
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, []);
-
-  const handleManualSimulation = () => {
-     setLoading(true);
-     setTimeout(() => {
-       dispatch.loginWithGoogle({
-         name: 'Ahmed Mahmoud',
-         email: 'ahmed.m@gmail.com',
-         avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Ahmed',
-         googleId: 'g-123'
-       });
-       setLoading(false);
-     }, 800);
+      setLoading(false);
+    }, 800);
   };
 
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900 overflow-hidden">
-       <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-slate-900 to-indigo-900 opacity-50"></div>
-       <div className="absolute w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] -top-20 -left-20 animate-pulse"></div>
-       
-       <div className="relative z-10 w-full max-w-md p-8 text-center space-y-8 animate-in zoom-in-95 duration-700">
-          <div className="w-24 h-24 bg-white/10 backdrop-blur-xl border border-white/20 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-2xl">
-             <CreditCard size={48} className="text-blue-400" />
-          </div>
+  const handleGuest = () => {
+    setLoading(true);
+    setTimeout(() => {
+      dispatch.guestLogin();
+      setLoading(false);
+    }, 500);
+  };
+
+  if (view === 'landing') {
+    return (
+      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-slate-950 overflow-hidden text-white">
+        {/* Background Effects */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900 via-slate-950 to-slate-950 opacity-80"></div>
+        <div className="absolute w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse"></div>
+        
+        <div className="relative z-10 max-w-md w-full px-6 text-center space-y-10 animate-in fade-in zoom-in-95 duration-1000">
           
-          <div className="space-y-2">
-             <h1 className="text-5xl font-black text-white tracking-tighter uppercase">Mahfazty<span className="text-blue-500">.</span>Flow</h1>
-             <p className="text-slate-400 text-sm font-bold uppercase tracking-[4px]">Real AI Finance</p>
+          {/* Logo & Hero */}
+          <div className="space-y-6">
+            <div className="w-28 h-28 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-2xl shadow-blue-500/30 mb-8 transform hover:scale-105 transition-transform duration-500">
+               <CreditCard size={56} className="text-white" />
+            </div>
+            <h1 className="text-5xl md:text-6xl font-black tracking-tighter uppercase leading-none">
+              Mahfazty<span className="text-blue-500">.</span>Flow
+            </h1>
+            <p className="text-slate-400 text-sm md:text-base font-medium tracking-wide max-w-xs mx-auto leading-relaxed">
+              {state.language === 'ar' 
+                ? 'تحكم في أموالك بذكاء اصطناعي حقيقي وخصوصية تامة.' 
+                : 'Master your finances with real AI and complete privacy.'}
+            </p>
           </div>
 
-          <p className="text-slate-400 text-xs leading-relaxed max-w-xs mx-auto">
-             {state.language === 'ar' 
-               ? 'سجل دخولك الآن لربط محفظتك بهويتك الرقمية الآمنة من Google.' 
-               : 'Sign in to link your wallet with your secure Google digital identity.'}
-          </p>
-
-          <div className="space-y-4">
-            {/* The real Google Button will mount here */}
-            <div ref={googleBtnRef} className="w-full h-[50px] flex justify-center overflow-hidden rounded-full"></div>
+          {/* Action Buttons */}
+          <div className="space-y-4 pt-4">
+            <button 
+              onClick={() => setView('login')}
+              className="w-full py-4 rounded-2xl bg-white text-slate-950 font-black uppercase tracking-widest hover:bg-slate-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl"
+            >
+              {state.language === 'ar' ? 'تسجيل الدخول' : 'Login'}
+            </button>
             
             <button 
-              onClick={handleManualSimulation}
-              className="text-[10px] font-black uppercase tracking-[3px] text-slate-500 hover:text-blue-400 transition-colors"
+              onClick={() => setView('signup')}
+              className="w-full py-4 rounded-2xl bg-white/10 border border-white/10 text-white font-black uppercase tracking-widest hover:bg-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all backdrop-blur-md"
             >
-              {state.language === 'ar' ? 'أو دخول تجريبي سريع' : 'Or Quick Demo Login'}
+              {state.language === 'ar' ? 'إنشاء حساب جديد' : 'Create Account'}
             </button>
+
+            <div className="pt-4">
+              <button 
+                onClick={handleGuest}
+                className="text-slate-500 text-xs font-bold uppercase tracking-[2px] hover:text-blue-400 transition-colors flex items-center justify-center gap-2 mx-auto group"
+              >
+                {state.language === 'ar' ? 'تخطى و جرب كضيف' : 'Skip & Try as Guest'}
+                <span className="group-hover:translate-x-1 transition-transform">→</span>
+              </button>
+            </div>
           </div>
 
-          {loading && (
-            <div className="flex flex-col items-center gap-2 animate-bounce">
-              <RefreshCw size={24} className="animate-spin text-blue-500" />
-              <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Authenticating...</span>
-            </div>
-          )}
-          
-          <div className="pt-8 border-t border-white/5">
-             <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Secured by Google Identity Services</p>
+          {/* Footer Info */}
+          <div className="pt-12 flex justify-center gap-6 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+            <span className="flex items-center gap-1"><ShieldCheck size={12} /> Local Storage</span>
+            <span className="flex items-center gap-1"><Zap size={12} /> AI Powered</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Login / Signup Form View
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950 overflow-hidden">
+       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
+       
+       <div className="relative z-10 w-full max-w-md p-8 animate-in slide-in-from-bottom-8 duration-500">
+          <button 
+            onClick={() => setView('landing')}
+            className="absolute top-8 left-8 text-slate-500 hover:text-white transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest"
+          >
+            ← {state.language === 'ar' ? 'عودة' : 'Back'}
+          </button>
+
+          <div className="text-center mb-10 space-y-2">
+            <h2 className="text-3xl font-black text-white uppercase tracking-tight">
+              {view === 'login' 
+                ? (state.language === 'ar' ? 'مرحباً بعودتك' : 'Welcome Back') 
+                : (state.language === 'ar' ? 'انضم إلينا' : 'Join Us')}
+            </h2>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">
+              {view === 'login' ? 'Enter your credentials' : 'Start your journey'}
+            </p>
+          </div>
+
+          <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[2.5rem] space-y-6 shadow-2xl">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                  {state.language === 'ar' ? 'اسم المستخدم' : 'Username'}
+                </label>
+                <div className="relative group">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
+                  <input 
+                    type="text" 
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
+                    placeholder="username"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                  {state.language === 'ar' ? 'كلمة المرور' : 'Password'}
+                </label>
+                <div className="relative group">
+                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
+                  <input 
+                    type="password" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
+                    placeholder="••••••••"
+                  />
+                </div>
+              </div>
+
+              <button 
+                type="submit"
+                disabled={loading}
+                className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all mt-4 ${
+                  view === 'signup' 
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950' 
+                    : 'bg-blue-600 hover:bg-blue-500 text-white'
+                } shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
+              >
+                {loading && <RefreshCw className="animate-spin" size={16} />}
+                {view === 'signup' 
+                  ? (state.language === 'ar' ? 'إنشاء حساب' : 'Create Account') 
+                  : (state.language === 'ar' ? 'تسجيل الدخول' : 'Sign In')}
+              </button>
+            </form>
           </div>
        </div>
     </div>
@@ -166,6 +225,11 @@ const HeaderActions = () => {
     if (navigator.vibrate) navigator.vibrate(15);
     dispatch.toggleDarkMode();
   };
+  
+  const handleTogglePrivacy = () => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    dispatch.togglePrivacyMode();
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -188,10 +252,13 @@ const HeaderActions = () => {
            <button onClick={handleToggleTheme} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-700 hover:bg-amber-50 transition-colors">
              {state.isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
            </button>
+           <button onClick={handleTogglePrivacy} className={`w-8 h-8 flex items-center justify-center rounded-xl border transition-colors ${state.isPrivacyMode ? 'bg-blue-500 text-white border-blue-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-700'}`}>
+             {state.isPrivacyMode ? <EyeOff size={15} /> : <Eye size={15} />}
+           </button>
         </div>
 
         <div className="flex flex-col items-center">
-          <h1 className="text-sm sm:text-lg font-black text-slate-950 dark:text-white uppercase tracking-[4px] cursor-pointer" onClick={() => navigate('/')}>
+          <h1 className="text-sm sm:text-lg font-black text-slate-900 dark:text-white uppercase tracking-[4px] cursor-pointer" onClick={() => navigate('/')}>
             {state.language === 'ar' ? 'محفظتي' : 'Mahfazty'}
           </h1>
           {state.isPro && (
@@ -241,8 +308,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  if (!state.hasSeenOnboarding) {
+    return <Onboarding />;
+  }
+
   if (!state.userProfile.isAuthenticated) {
-     return <LoginScreen />;
+     return <WelcomeScreen />;
   }
 
   const navItems = [

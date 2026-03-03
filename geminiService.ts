@@ -88,134 +88,218 @@ export interface AIChatResponse {
   toolCall?: any; // To pass back to UI for confirmation
 }
 
-// Correct usage of GoogleGenAI: Create instance with process.env.API_KEY inside the call.
-export const sendChatMessage = async (state: AppState, message: string, isProChat = false, imageData?: { data: string, mimeType: string }): Promise<AIChatResponse> => {
-  const history = isProChat ? state.proChatHistory : state.chatHistory;
+// Helper to get active API key
+export const getActiveApiKey = (state: AppState, excludedIds: string[] = []) => {
+  const { apiKeys, activeApiKeyId } = state;
+  
+  // Filter out blocked keys and explicitly excluded keys (failed in current session)
+  const availableKeys = apiKeys.filter(k => !k.isBlocked && !excludedIds.includes(k.id));
 
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const modelName = state.isPro ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
-    
-    const parts: any[] = [{ text: message }];
-    if (imageData) {
-      parts.push({
-        inlineData: {
-          data: imageData.data,
-          mimeType: imageData.mimeType
+  // 1. Try to use the specifically active key if it's available and not excluded
+  if (activeApiKeyId && !excludedIds.includes(activeApiKeyId)) {
+    const activeKey = availableKeys.find(k => k.id === activeApiKeyId);
+    if (activeKey) {
+      return activeKey;
+    }
+  }
+
+  // 2. Fallback: Find the first available key
+  if (availableKeys.length > 0) {
+    return availableKeys[0];
+  }
+
+  return null;
+};
+
+// Correct usage of GoogleGenAI: Create instance with process.env.API_KEY inside the call.
+export const sendChatMessage = async (state: AppState, dispatch: any, message: string, isProChat = false, imageData?: { data: string, mimeType: string }): Promise<AIChatResponse> => {
+  const history = isProChat ? state.proChatHistory : state.chatHistory;
+  
+  let excludedIds: string[] = [];
+  let attempt = 0;
+  // Allow trying all available keys
+  const maxAttempts = state.apiKeys.length > 0 ? state.apiKeys.length : 1;
+
+  while (attempt < maxAttempts) {
+    const activeKeyConfig = getActiveApiKey(state, excludedIds);
+
+    if (!activeKeyConfig) {
+      return { text: state.language === 'ar' ? 'يرجى إضافة مفتاح API نشط في الإعدادات.' : 'Please add an active API Key in Settings.' };
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: activeKeyConfig.key });
+      const modelName = state.isPro ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+      
+      const parts: any[] = [{ text: message }];
+      if (imageData) {
+        parts.push({
+          inlineData: {
+            data: imageData.data,
+            mimeType: imageData.mimeType
+          }
+        });
+      }
+
+      const tools: Tool[] = [];
+      if (state.isPro && isProChat) {
+        // Pro users get Search and Chart tools + Installment
+        tools.push({ googleSearch: {} });
+        tools.push({ functionDeclarations: [createChartTool, addInstallmentTool] });
+      } else {
+        // Standard users get Installment tool
+        tools.push({ functionDeclarations: [addInstallmentTool] });
+      }
+
+      const response: GenerateContentResponse = await ai.models.generateContent({
+        model: modelName,
+        contents: [
+          ...history.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+          { role: 'user', parts: (parts.length > 1 ? { parts } : parts[0]) }
+        ],
+        config: { 
+          systemInstruction: getSystemInstruction(state, isProChat ? 'architect' : 'assistant'),
+          temperature: 0.5,
+          tools: tools
         }
       });
-    }
 
-    const tools: Tool[] = [];
-    if (state.isPro && isProChat) {
-      // Pro users get Search and Chart tools + Installment
-      tools.push({ googleSearch: {} });
-      tools.push({ functionDeclarations: [createChartTool, addInstallmentTool] });
-    } else {
-      // Standard users get Installment tool
-      tools.push({ functionDeclarations: [addInstallmentTool] });
-    }
+      let outputText = response.text || "";
+      let generatedWidget: CustomWidget | undefined;
+      let toolCallData: any = null;
 
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: modelName,
-      contents: [
-        ...history.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-        { role: 'user', parts: (parts.length > 1 ? { parts } : parts[0]) }
-      ],
-      config: { 
-        systemInstruction: getSystemInstruction(state, isProChat ? 'architect' : 'assistant'),
-        temperature: 0.5,
-        tools: tools
-      }
-    });
-
-    let outputText = response.text || "";
-    let generatedWidget: CustomWidget | undefined;
-    let toolCallData: any = null;
-
-    if (response.functionCalls && response.functionCalls.length > 0) {
-       for (const call of response.functionCalls) {
-         if (call.name === 'create_chart') {
-           generatedWidget = {
-             id: `custom-${Date.now()}`,
-             title: call.args.title as string,
-             description: (call.args.description as string) || 'AI Generated Insight',
-             chartType: call.args.chartType as any,
-             dataSource: call.args.dataSource as any,
-             groupBy: call.args.groupBy as any,
-             colorTheme: (call.args.colorTheme as any) || 'blue'
-           } as CustomWidget;
-           outputText += `\n\n[System: Generated Chart "${call.args.title}"]`;
+      if (response.functionCalls && response.functionCalls.length > 0) {
+         for (const call of response.functionCalls) {
+           if (call.name === 'create_chart') {
+             generatedWidget = {
+               id: `custom-${Date.now()}`,
+               title: call.args.title as string,
+               description: (call.args.description as string) || 'AI Generated Insight',
+               chartType: call.args.chartType as any,
+               dataSource: call.args.dataSource as any,
+               groupBy: call.args.groupBy as any,
+               colorTheme: (call.args.colorTheme as any) || 'blue'
+             } as CustomWidget;
+             outputText += `\n\n[System: Generated Chart "${call.args.title}"]`;
+           }
+           
+           if (call.name === 'add_installment_plan') {
+             toolCallData = {
+               name: 'add_installment_plan',
+               args: call.args
+             };
+             outputText += `\n\n[System: Proposed Installment Plan for "${call.args.title}"]`;
+           }
          }
-         
-         if (call.name === 'add_installment_plan') {
-           toolCallData = {
-             name: 'add_installment_plan',
-             args: call.args
-           };
-           outputText += `\n\n[System: Proposed Installment Plan for "${call.args.title}"]`;
-         }
-       }
-    }
-    
-    // Search Grounding URL Extraction
-    if (state.isPro && isProChat && response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-      const chunks = response.candidates[0].groundingMetadata.groundingChunks;
-      const urls = chunks.map((c: any) => c.web?.uri).filter(Boolean);
-      if (urls.length > 0) {
-        const uniqueUrls = [...new Set(urls)].slice(0, 3);
-        const sourceTitle = state.language === 'ar' ? 'مصادر البيانات الحية' : 'Live Data Sources';
-        outputText += `\n\n--- ${sourceTitle} ---\n` + uniqueUrls.join('\n');
       }
+      
+      // Search Grounding URL Extraction
+      if (state.isPro && isProChat && response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
+        const chunks = response.candidates[0].groundingMetadata.groundingChunks;
+        const urls = chunks.map((c: any) => c.web?.uri).filter(Boolean);
+        if (urls.length > 0) {
+          const uniqueUrls = [...new Set(urls)].slice(0, 3);
+          const sourceTitle = state.language === 'ar' ? 'مصادر البيانات الحية' : 'Live Data Sources';
+          outputText += `\n\n--- ${sourceTitle} ---\n` + uniqueUrls.join('\n');
+        }
+      }
+
+      // Success! Update usage count
+      if (dispatch) dispatch.incrementApiKeyUsage(activeKeyConfig.id);
+      return { text: outputText, chartWidget: generatedWidget, toolCall: toolCallData };
+
+    } catch (error: any) {
+      console.error(`AI Error (Key: ${activeKeyConfig.name}):`, error);
+      
+      // Auto-switch logic
+      if (error.message?.includes('429') || error.message?.includes('403') || error.message?.includes('key') || error.message?.includes('quota')) {
+         if (dispatch) dispatch.blockApiKey(activeKeyConfig.id);
+         excludedIds.push(activeKeyConfig.id);
+         attempt++;
+         // Continue to next iteration to try next key
+         continue;
+      }
+
+      return { text: `System Alert: ${error.message}` };
     }
-
-    return { text: outputText, chartWidget: generatedWidget, toolCall: toolCallData };
-
-  } catch (error: any) {
-    console.error("AI Error:", error);
-    return { text: `System Alert: ${error.message}` };
   }
+
+  return { text: state.language === 'ar' ? 'فشلت جميع مفاتيح API. يرجى التحقق من الإعدادات.' : 'All API Keys failed. Please check Settings.' };
 };
 
 // Image Editing with Gemini 2.5 Flash Image
-export const editFinancialImage = async (state: AppState, prompt: string, base64Image: string, mimeType: string) => {
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          { inlineData: { data: base64Image, mimeType: mimeType } },
-          { text: prompt }
-        ],
-      },
-    });
+export const editFinancialImage = async (state: AppState, dispatch: any, prompt: string, base64Image: string, mimeType: string) => {
+  let excludedIds: string[] = [];
+  let attempt = 0;
+  const maxAttempts = state.apiKeys.length > 0 ? state.apiKeys.length : 1;
 
-    if (response.candidates?.[0]?.content?.parts) {
-      const img = response.candidates[0].content.parts.find(p => p.inlineData);
-      if (img?.inlineData) {
-        return `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}`;
+  while (attempt < maxAttempts) {
+    const activeKeyConfig = getActiveApiKey(state, excludedIds);
+    if (!activeKeyConfig) return null;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: activeKeyConfig.key });
+      const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [
+            { inlineData: { data: base64Image, mimeType: mimeType } },
+            { text: prompt }
+          ],
+        },
+      });
+
+      if (response.candidates?.[0]?.content?.parts) {
+        const img = response.candidates[0].content.parts.find(p => p.inlineData);
+        if (img?.inlineData) {
+          if (dispatch) dispatch.incrementApiKeyUsage(activeKeyConfig.id);
+          return `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}`;
+        }
       }
+      return null;
+    } catch (error: any) {
+      console.error(`Image Edit Error (Key: ${activeKeyConfig.name}):`, error);
+      if (error.message?.includes('429') || error.message?.includes('403') || error.message?.includes('key') || error.message?.includes('quota')) {
+         if (dispatch) dispatch.blockApiKey(activeKeyConfig.id);
+         excludedIds.push(activeKeyConfig.id);
+         attempt++;
+         continue;
+      }
+      return null;
     }
-    return null;
-  } catch (error) {
-    console.error("Image Edit Error:", error);
-    return null;
   }
+  return null;
 };
 
-export const suggestTransactionNote = async (state: AppState, data: { type: string, amount: string, currency: string, groupName: string, clientName: string, date: string }) => {
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Smart note for: ${data.type} of ${data.amount} ${data.currency} via ${data.clientName}.`,
-      config: {
-        systemInstruction: `Max 4 words. Language: ${state.language === 'ar' ? 'Arabic' : 'English'}.`
+export const suggestTransactionNote = async (state: AppState, dispatch: any, data: { type: string, amount: string, currency: string, groupName: string, clientName: string, date: string }) => {
+  let excludedIds: string[] = [];
+  let attempt = 0;
+  const maxAttempts = state.apiKeys.length > 0 ? state.apiKeys.length : 1;
+
+  while (attempt < maxAttempts) {
+    const activeKeyConfig = getActiveApiKey(state, excludedIds);
+    if (!activeKeyConfig) return "";
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: activeKeyConfig.key });
+      const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Smart note for: ${data.type} of ${data.amount} ${data.currency} via ${data.clientName}.`,
+        config: {
+          systemInstruction: `Max 4 words. Language: ${state.language === 'ar' ? 'Arabic' : 'English'}.`
+        }
+      });
+      if (dispatch) dispatch.incrementApiKeyUsage(activeKeyConfig.id);
+      return response.text?.trim() || "";
+    } catch (e: any) { 
+      if (e.message?.includes('429') || e.message?.includes('403') || e.message?.includes('key') || e.message?.includes('quota')) {
+         if (dispatch) dispatch.blockApiKey(activeKeyConfig.id);
+         excludedIds.push(activeKeyConfig.id);
+         attempt++;
+         continue;
       }
-    });
-    return response.text?.trim() || "";
-  } catch (e) { 
-    return ""; 
+      return ""; 
+    }
   }
+  return "";
 };

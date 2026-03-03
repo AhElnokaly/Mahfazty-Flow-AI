@@ -259,7 +259,7 @@ const AIInsights: React.FC = () => {
     dispatch.addChatMessage({ role: 'user', text: userMsg + (currentImageData ? ` [Attached: ${selectedImage?.file.name}]` : ''), timestamp: new Date().toISOString() }, activeTab === 'architect');
     
     setIsChatting(true);
-    const response = await sendChatMessage(state, userMsg, activeTab === 'architect', currentImageData);
+    const response = await sendChatMessage(state, dispatch, userMsg, activeTab === 'architect', currentImageData);
     
     dispatch.addChatMessage({ role: 'model', text: response.text, timestamp: new Date().toISOString() }, activeTab === 'architect');
 
@@ -301,7 +301,7 @@ const AIInsights: React.FC = () => {
   const handleImageEdit = async (msg: string) => {
     if (!selectedImage) return;
     setIsChatting(true);
-    const editedUrl = await editFinancialImage(state, msg || "Improve the quality of this receipt", selectedImage.base64, selectedImage.file.type);
+    const editedUrl = await editFinancialImage(state, dispatch, msg || "Improve the quality of this receipt", selectedImage.base64, selectedImage.file.type);
     if (editedUrl) {
       dispatch.addChatMessage({ role: 'user', text: `${language === 'ar' ? 'تعديل سحري:' : 'Magic Edit:'} ${msg || 'Auto'}`, timestamp: new Date().toISOString() }, false);
       dispatch.addChatMessage({ role: 'model', text: `![Edited Image](${editedUrl})`, timestamp: new Date().toISOString() }, false);

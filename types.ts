@@ -35,9 +35,8 @@ export interface UserProfile {
   name: string;
   email: string;
   avatar: string;
-  googleId?: string;
   isAuthenticated: boolean;
-  preferredApiKeyId?: string; // Link to default key
+  preferredApiKeyId?: string; 
 }
 
 export interface Installment {
@@ -80,9 +79,28 @@ export interface CustomWidget {
   colorTheme: 'blue' | 'emerald' | 'rose' | 'amber' | 'purple';
 }
 
+export interface ApiKey {
+  id: string;
+  name: string;
+  key: string;
+  usageCount: number;
+  isBlocked?: boolean;
+  lastUsed?: string;
+}
+
+export interface SyncLogEntry {
+  id: string;
+  type: 'push' | 'pull';
+  status: 'success' | 'error';
+  timestamp: string;
+  details?: string;
+}
+
 export interface AppState {
   walletBalance: number;
   baseCurrency: string;
+  apiKeys: ApiKey[];
+  activeApiKeyId?: string;
   groups: Group[];
   transactions: Transaction[];
   clients: Client[];
@@ -90,6 +108,7 @@ export interface AppState {
   language: 'ar' | 'en';
   isDarkMode: boolean;
   isPro: boolean;
+  isPrivacyMode: boolean; // New: Toggle to blur financial numbers
   autoSync: boolean;
   isSyncing: boolean;
   isOnline: boolean;
@@ -97,6 +116,8 @@ export interface AppState {
   syncLocationSet: boolean;
   syncProvider: 'local' | 'cloud' | 'manual';
   cloudEndpoint?: string;
+  cloudToken?: string;
+  syncHistory: SyncLogEntry[];
   userProfile: UserProfile;
   chatHistory: ChatMessage[];
   proChatHistory: ChatMessage[]; 
@@ -117,4 +138,5 @@ export interface AppState {
     type: 'info' | 'success' | 'error';
   } | null;
   notificationHistory: AppNotification[];
+  hasSeenOnboarding: boolean;
 }

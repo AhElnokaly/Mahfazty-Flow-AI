@@ -73,22 +73,86 @@ const GroupsManager: React.FC = () => {
           return (
             <div key={group.id} className="bg-white dark:bg-slate-800 rounded-[3rem] border border-slate-50 dark:border-slate-800 shadow-sm overflow-hidden">
               <div className="px-8 py-6 flex flex-col gap-4">
-                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-50 dark:bg-slate-900 text-2xl rounded-2xl flex items-center justify-center">{group.icon || '📁'}</div>
-                      <div>
-                        <h3 className="font-black text-slate-900 dark:text-white text-base">{group.name}</h3>
-                        <div className="flex gap-4 mt-1">
-                          <span className="text-[9px] text-emerald-600 font-black uppercase">In: ${stats.income.toLocaleString()}</span>
-                          <span className="text-[9px] text-rose-600 font-black uppercase">Out: ${stats.expense.toLocaleString()}</span>
+                 {isEditing ? (
+                   <div className="flex flex-col gap-4">
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                       <input 
+                         value={editGroupValue.name} 
+                         onChange={(e) => setEditGroupValue({...editGroupValue, name: e.target.value})} 
+                         className="px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold"
+                         placeholder="Group Name"
+                       />
+                       <input 
+                         value={editGroupValue.icon} 
+                         onChange={(e) => setEditGroupValue({...editGroupValue, icon: e.target.value})} 
+                         className="px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold"
+                         placeholder="Icon (emoji)"
+                       />
+                       <input 
+                         type="number"
+                         value={editGroupValue.monthlyBudget} 
+                         onChange={(e) => setEditGroupValue({...editGroupValue, monthlyBudget: Number(e.target.value)})} 
+                         className="px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold"
+                         placeholder="Monthly Budget"
+                       />
+                     </div>
+                     <div className="flex justify-end gap-2">
+                       <button 
+                         onClick={() => setEditingGroupId(null)}
+                         className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500"
+                       >
+                         <X size={18} />
+                       </button>
+                       <button 
+                         onClick={() => {
+                           dispatch.updateGroup(group.id, editGroupValue);
+                           setEditingGroupId(null);
+                         }}
+                         className="p-2 rounded-xl bg-emerald-500 text-white"
+                       >
+                         <Check size={18} />
+                       </button>
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-blue-50 dark:bg-slate-900 text-2xl rounded-2xl flex items-center justify-center">{group.icon || '📁'}</div>
+                        <div>
+                          <h3 className="font-black text-slate-900 dark:text-white text-base">{group.name}</h3>
+                          <div className="flex gap-4 mt-1">
+                            <span className="text-[9px] text-emerald-600 font-black uppercase">In: ${stats.income.toLocaleString()}</span>
+                            <span className="text-[9px] text-rose-600 font-black uppercase">Out: ${stats.expense.toLocaleString()}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{language === 'ar' ? 'الميزانية الشهرية' : 'Monthly Budget'}</p>
-                       <p className="text-lg font-black text-slate-900 dark:text-white">${budget.toLocaleString()}</p>
-                    </div>
-                 </div>
+                      <div className="text-right flex items-center gap-4">
+                         <div>
+                           <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{language === 'ar' ? 'الميزانية الشهرية' : 'Monthly Budget'}</p>
+                           <p className="text-lg font-black text-slate-900 dark:text-white">${budget.toLocaleString()}</p>
+                         </div>
+                         <div className="flex flex-col gap-2">
+                           <button 
+                             onClick={() => {
+                               setEditingGroupId(group.id);
+                               setEditGroupValue({ name: group.name, icon: group.icon || '📁', monthlyBudget: group.monthlyBudget || 0 });
+                             }}
+                             className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-blue-500"
+                           >
+                             <Edit3 size={16} />
+                           </button>
+                           <button 
+                             onClick={() => {
+                               if(confirm('Delete group?')) dispatch.deleteGroup(group.id);
+                             }}
+                             className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-rose-500"
+                           >
+                             <Trash2 size={16} />
+                           </button>
+                         </div>
+                      </div>
+                   </div>
+                 )}
 
                  {budget > 0 && (
                    <div className="space-y-2">

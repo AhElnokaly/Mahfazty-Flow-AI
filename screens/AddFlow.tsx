@@ -68,7 +68,7 @@ const AddFlow: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const response = await sendChatMessage(state, "Analyze this receipt. Extract ONLY a JSON: { 'amount': number, 'date': 'YYYY-MM-DD', 'note': 'string summary', 'type': 'EXPENSE'|'INCOME' }. If not a receipt, return empty JSON.", false, { data: base64, mimeType: file.type });
+        const response = await sendChatMessage(state, dispatch, "Analyze this receipt. Extract ONLY a JSON: { 'amount': number, 'date': 'YYYY-MM-DD', 'note': 'string summary', 'type': 'EXPENSE'|'INCOME' }. If not a receipt, return empty JSON.", false, { data: base64, mimeType: file.type });
         
         // Find JSON in response text
         const jsonMatch = response.text.match(/\{.*\}/s);

@@ -1,6 +1,8 @@
 
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { AppState, Group, Transaction, TransactionType, Client, UserProfile, AppNotification, ChatMessage, CustomWidget, Installment } from './types';
+import { AppState, Group, Transaction, TransactionType, Client, UserProfile, AppNotification, ChatMessage, CustomWidget, Installment, SyncLogEntry } from './types';
+import { cloudService } from './services/cloud';
+import { cryptoUtils } from './utils/crypto';
 
 const INITIAL_STATE: AppState = {
   walletBalance: 24500,
@@ -11,6 +13,8 @@ const INITIAL_STATE: AppState = {
     avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Guest',
     isAuthenticated: false
   },
+  apiKeys: [],
+  activeApiKeyId: undefined,
   groups: [
     { id: 'g_installments', name: 'الأقساط والديون', icon: '💸', monthlyBudget: 5000 },
     { id: 'g1', name: 'المنزل', icon: '🏠', monthlyBudget: 8000 },
@@ -24,6 +28,7 @@ const INITIAL_STATE: AppState = {
   language: 'ar',
   isDarkMode: false,
   isPro: false,
+  isPrivacyMode: false,
   autoSync: true,
   isSyncing: false,
   isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
@@ -44,14 +49,24 @@ const INITIAL_STATE: AppState = {
     autoAnalysisInterval: 'off'
   },
   notification: null,
-  notificationHistory: []
+  notificationHistory: [],
+  hasSeenOnboarding: false,
+  syncHistory: []
 };
 
 interface AppContextType {
   state: AppState;
   dispatch: {
-    loginWithGoogle: (user: Partial<UserProfile>) => void;
+    login: (username: string, password?: string) => void;
+    signup: (username: string, password?: string) => void;
+    guestLogin: () => void;
     logout: () => void;
+    completeOnboarding: () => void;
+    addApiKey: (name: string, key: string) => void;
+    deleteApiKey: (id: string) => void;
+    setActiveApiKey: (id: string) => void;
+    incrementApiKeyUsage: (id: string) => void;
+    blockApiKey: (id: string) => void;
     addTransaction: (t: Omit<Transaction, 'id'>) => void;
     updateTransaction: (id: string, t: Partial<Transaction>) => void;
     deleteTransaction: (id: string) => void;
@@ -69,6 +84,7 @@ interface AppContextType {
     removeAnalyticsWidget: (id: string) => void;
     toggleLanguage: () => void;
     toggleDarkMode: () => void;
+    togglePrivacyMode: () => void;
     toggleAutoSync: () => void;
     deleteGroup: (id: string) => void;
     addClient: (name: string, groupId: string, icon?: string) => void;
@@ -81,14 +97,25 @@ interface AppContextType {
     importState: (jsonData: string) => void;
     markNotificationsRead: () => void;
     clearNotificationHistory: () => void;
+    enableCloudSync: (token: string) => void;
+    disableCloudSync: () => void;
+    syncWithCloud: () => Promise<void>;
+    pullFromCloud: () => Promise<void>;
   };
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 type Action = 
-  | { type: 'LOGIN'; payload: Partial<UserProfile> }
+  | { type: 'LOGIN'; payload: { username: string } }
+  | { type: 'SIGNUP'; payload: { username: string } }
+  | { type: 'GUEST_LOGIN' }
   | { type: 'LOGOUT' }
+  | { type: 'ADD_API_KEY'; payload: { name: string; key: string } }
+  | { type: 'DELETE_API_KEY'; payload: string }
+  | { type: 'SET_ACTIVE_API_KEY'; payload: string }
+  | { type: 'INCREMENT_API_USAGE'; payload: string }
+  | { type: 'BLOCK_API_KEY'; payload: string }
   | { type: 'ADD_TRANSACTION'; payload: Omit<Transaction, 'id'> }
   | { type: 'UPDATE_TRANSACTION'; payload: { id: string; update: Partial<Transaction> } }
   | { type: 'DELETE_TRANSACTION'; payload: string }
@@ -101,6 +128,7 @@ type Action =
   | { type: 'ADD_CHAT_MESSAGE'; payload: { msg: ChatMessage; isProChat: boolean } }
   | { type: 'TOGGLE_LANGUAGE' }
   | { type: 'TOGGLE_DARK_MODE' }
+  | { type: 'TOGGLE_PRIVACY_MODE' }
   | { type: 'SET_NOTIFICATION'; payload: AppState['notification'] }
   | { type: 'UPDATE_PROFILE'; payload: UserProfile }
   | { type: 'ADD_CUSTOM_WIDGET'; payload: CustomWidget }
@@ -117,19 +145,87 @@ type Action =
   | { type: 'IMPORT_STATE'; payload: any }
   | { type: 'MARK_NOTIFICATIONS_READ' }
   | { type: 'CLEAR_NOTIFICATIONS' }
-  | { type: 'TOGGLE_AUTO_SYNC' };
+  | { type: 'TOGGLE_AUTO_SYNC' }
+  | { type: 'COMPLETE_ONBOARDING' }
+  | { type: 'ENABLE_CLOUD_SYNC'; payload: string }
+  | { type: 'DISABLE_CLOUD_SYNC' }
+  | { type: 'SYNC_SUCCESS'; payload: string }
+  | { type: 'ADD_SYNC_LOG'; payload: SyncLogEntry };
 
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
     case 'LOGIN': {
       return { 
         ...state, 
-        userProfile: { ...state.userProfile, ...action.payload, isAuthenticated: true },
-        notification: { message: `Welcome back, ${action.payload.name}!`, type: 'success' }
+        userProfile: { 
+          ...state.userProfile, 
+          name: action.payload.username,
+          username: action.payload.username,
+          isAuthenticated: true 
+        },
+        notification: { message: `Welcome back, ${action.payload.username}!`, type: 'success' }
+      };
+    }
+    case 'SIGNUP': {
+      return { 
+        ...state, 
+        userProfile: { 
+          ...state.userProfile, 
+          name: action.payload.username,
+          username: action.payload.username,
+          isAuthenticated: true 
+        },
+        notification: { message: `Welcome, ${action.payload.username}! Your account is ready.`, type: 'success' }
+      };
+    }
+    case 'GUEST_LOGIN': {
+      return {
+        ...state,
+        userProfile: {
+          ...state.userProfile,
+          name: 'Guest User',
+          username: 'guest',
+          isAuthenticated: true,
+          avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Guest'
+        },
+        notification: { message: 'Welcome Guest! Data is stored locally.', type: 'info' }
       };
     }
     case 'LOGOUT':
       return { ...state, userProfile: INITIAL_STATE.userProfile, notification: { message: 'Logged out successfully', type: 'info' } };
+    case 'ADD_API_KEY': {
+      const newKey = {
+        id: Date.now().toString(),
+        name: action.payload.name,
+        key: action.payload.key,
+        usageCount: 0
+      };
+      return { 
+        ...state, 
+        apiKeys: [...state.apiKeys, newKey],
+        activeApiKeyId: state.activeApiKeyId || newKey.id
+      };
+    }
+    case 'DELETE_API_KEY': {
+      const newKeys = state.apiKeys.filter(k => k.id !== action.payload);
+      return { 
+        ...state, 
+        apiKeys: newKeys,
+        activeApiKeyId: state.activeApiKeyId === action.payload ? (newKeys[0]?.id) : state.activeApiKeyId
+      };
+    }
+    case 'SET_ACTIVE_API_KEY':
+      return { ...state, activeApiKeyId: action.payload };
+    case 'INCREMENT_API_USAGE':
+      return {
+        ...state,
+        apiKeys: state.apiKeys.map(k => k.id === action.payload ? { ...k, usageCount: k.usageCount + 1, lastUsed: new Date().toISOString() } : k)
+      };
+    case 'BLOCK_API_KEY':
+      return {
+        ...state,
+        apiKeys: state.apiKeys.map(k => k.id === action.payload ? { ...k, isBlocked: true } : k)
+      };
     case 'ADD_TRANSACTION': {
       const newTransaction = { id: Date.now().toString(), ...action.payload };
       const newBalance = action.payload.type === TransactionType.INCOME 
@@ -143,10 +239,76 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, language: state.language === 'ar' ? 'en' : 'ar' };
     case 'TOGGLE_DARK_MODE':
       return { ...state, isDarkMode: !state.isDarkMode };
+    case 'TOGGLE_PRIVACY_MODE':
+      return { ...state, isPrivacyMode: !state.isPrivacyMode };
     case 'SET_NOTIFICATION':
       return { ...state, notification: action.payload };
+    case 'UPDATE_PROFILE':
+      return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
     case 'RESET_DATA':
       return INITIAL_STATE;
+    case 'IMPORT_STATE':
+      return { ...state, ...action.payload };
+    case 'ADD_INSTALLMENT':
+      return { ...state, installments: [...state.installments, { id: Date.now().toString(), ...action.payload, monthlyAmount: action.payload.totalAmount / action.payload.installmentCount, paidCount: 0, status: 'active' }] };
+    case 'PAY_INSTALLMENT':
+      return { 
+        ...state, 
+        installments: state.installments.map(i => i.id === action.payload.id ? { ...i, paidCount: i.paidCount + 1, status: i.paidCount + 1 >= i.installmentCount ? 'completed' : 'active', lastPaymentDate: new Date().toISOString() } : i),
+        walletBalance: state.walletBalance - (state.installments.find(i => i.id === action.payload.id)?.monthlyAmount || 0) - action.payload.penalty
+      };
+    case 'SET_PRO':
+      return { ...state, isPro: action.payload };
+    case 'ADD_CHAT_MESSAGE':
+      const chatKey = action.payload.isProChat ? 'proChatHistory' : 'chatHistory';
+      return { ...state, [chatKey]: [...state[chatKey], action.payload.msg] };
+    case 'ADD_CUSTOM_WIDGET':
+      return { ...state, customWidgets: [...state.customWidgets, action.payload] };
+    case 'ADD_ANALYTICS_WIDGET':
+      return { ...state, activeWidgets: [...state.activeWidgets, action.payload] };
+    case 'REMOVE_ANALYTICS_WIDGET':
+      return { ...state, activeWidgets: state.activeWidgets.filter(id => id !== action.payload) };
+    case 'DELETE_GROUP':
+      return { ...state, groups: state.groups.filter(g => g.id !== action.payload) };
+    case 'ADD_CLIENT':
+      return { ...state, clients: [...state.clients, { id: Date.now().toString(), ...action.payload }] };
+    case 'UPDATE_CLIENT':
+      return { ...state, clients: state.clients.map(c => c.id === action.payload.id ? { ...c, ...action.payload.update } : c) };
+    case 'DELETE_CLIENT':
+      return { ...state, clients: state.clients.filter(c => c.id !== action.payload) };
+    case 'UPDATE_INSTALLMENT':
+      return { ...state, installments: state.installments.map(i => i.id === action.payload.id ? { ...i, ...action.payload.update } : i) };
+    case 'DELETE_INSTALLMENT':
+      return { ...state, installments: state.installments.filter(i => i.id !== action.payload) };
+    case 'CLEAR_CHAT':
+      return { ...state, [action.payload ? 'proChatHistory' : 'chatHistory']: [] };
+    case 'MARK_NOTIFICATIONS_READ':
+      return { ...state, notificationHistory: state.notificationHistory.map(n => ({ ...n, read: true })) };
+    case 'CLEAR_NOTIFICATIONS':
+      return { ...state, notificationHistory: [] };
+    case 'TOGGLE_AUTO_SYNC':
+      return { ...state, autoSync: !state.autoSync };
+    case 'UPDATE_TRANSACTION':
+      return { 
+        ...state, 
+        transactions: state.transactions.map(t => t.id === action.payload.id ? { ...t, ...action.payload.update } : t) 
+      };
+    case 'DELETE_TRANSACTION':
+      return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
+    case 'UPDATE_GROUP':
+      return { ...state, groups: state.groups.map(g => g.id === action.payload.id ? { ...g, ...action.payload.update } : g) };
+    case 'SET_GROUP_BUDGET':
+      return { ...state, groups: state.groups.map(g => g.id === action.payload.id ? { ...g, monthlyBudget: action.payload.amount } : g) };
+    case 'COMPLETE_ONBOARDING':
+      return { ...state, hasSeenOnboarding: true };
+    case 'ENABLE_CLOUD_SYNC':
+      return { ...state, syncProvider: 'cloud', cloudToken: action.payload, isSyncing: true };
+    case 'DISABLE_CLOUD_SYNC':
+      return { ...state, syncProvider: 'local', cloudToken: undefined };
+    case 'SYNC_SUCCESS':
+      return { ...state, lastSyncTimestamp: action.payload, isSyncing: false };
+    case 'ADD_SYNC_LOG':
+      return { ...state, syncHistory: [action.payload, ...state.syncHistory].slice(0, 50) }; // Keep last 50 logs
     default:
       return state;
   }
@@ -156,19 +318,83 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [state, dispatch] = useReducer(appReducer, INITIAL_STATE, (initial) => {
     try {
       const persisted = localStorage.getItem('mahfazty_v1_store');
-      return persisted ? { ...initial, ...JSON.parse(persisted) } : initial;
+      if (persisted) {
+        const parsed = JSON.parse(persisted);
+        // Deep merge userProfile to ensure no missing keys
+        return {
+          ...initial,
+          ...parsed,
+          userProfile: { ...initial.userProfile, ...parsed.userProfile },
+          // Ensure arrays are at least empty arrays if missing
+          apiKeys: parsed.apiKeys || initial.apiKeys,
+          groups: parsed.groups || initial.groups,
+          transactions: parsed.transactions || initial.transactions,
+          clients: parsed.clients || initial.clients,
+          installments: parsed.installments || initial.installments,
+          chatHistory: parsed.chatHistory || initial.chatHistory,
+          proChatHistory: parsed.proChatHistory || initial.proChatHistory,
+          customWidgets: parsed.customWidgets || initial.customWidgets,
+          activeWidgets: parsed.activeWidgets || initial.activeWidgets,
+          notificationHistory: parsed.notificationHistory || initial.notificationHistory,
+          hasSeenOnboarding: parsed.hasSeenOnboarding ?? initial.hasSeenOnboarding
+        };
+      }
+      return initial;
     } catch (e) {
+      console.error("State hydration failed:", e);
       return initial;
     }
   });
 
   useEffect(() => {
     localStorage.setItem('mahfazty_v1_store', JSON.stringify(state));
+    if (state.userProfile.isAuthenticated && state.userProfile.username) {
+      localStorage.setItem(`mahfazty_user_${state.userProfile.username}`, JSON.stringify(state));
+    }
   }, [state]);
 
   const actions = {
-    loginWithGoogle: (user: Partial<UserProfile>) => dispatch({ type: 'LOGIN', payload: user }),
+    login: (username: string, password?: string) => {
+      const savedData = localStorage.getItem(`mahfazty_user_${username}`);
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData);
+          dispatch({ type: 'IMPORT_STATE', payload: { ...parsed, userProfile: { ...parsed.userProfile, isAuthenticated: true } } });
+        } catch (e) {
+          dispatch({ type: 'LOGIN', payload: { username } });
+        }
+      } else {
+        dispatch({ type: 'LOGIN', payload: { username } });
+      }
+    },
+    signup: (username: string, password?: string) => {
+      if (localStorage.getItem(`mahfazty_user_${username}`)) {
+        dispatch({ type: 'SET_NOTIFICATION', payload: { message: 'User already exists. Please login.', type: 'error' } });
+        return;
+      }
+      dispatch({ type: 'SIGNUP', payload: { username } });
+    },
+    guestLogin: () => {
+      // Check for existing guest data
+      const savedData = localStorage.getItem('mahfazty_user_guest');
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData);
+          dispatch({ type: 'IMPORT_STATE', payload: { ...parsed, userProfile: { ...parsed.userProfile, isAuthenticated: true } } });
+        } catch (e) {
+          dispatch({ type: 'GUEST_LOGIN' });
+        }
+      } else {
+        dispatch({ type: 'GUEST_LOGIN' });
+      }
+    },
     logout: () => dispatch({ type: 'LOGOUT' }),
+    completeOnboarding: () => dispatch({ type: 'COMPLETE_ONBOARDING' }),
+    addApiKey: (name: string, key: string) => dispatch({ type: 'ADD_API_KEY', payload: { name, key } }),
+    deleteApiKey: (id: string) => dispatch({ type: 'DELETE_API_KEY', payload: id }),
+    setActiveApiKey: (id: string) => dispatch({ type: 'SET_ACTIVE_API_KEY', payload: id }),
+    incrementApiKeyUsage: (id: string) => dispatch({ type: 'INCREMENT_API_USAGE', payload: id }),
+    blockApiKey: (id: string) => dispatch({ type: 'BLOCK_API_KEY', payload: id }),
     addTransaction: (t: Omit<Transaction, 'id'>) => dispatch({ type: 'ADD_TRANSACTION', payload: t }),
     updateTransaction: (id: string, t: Partial<Transaction>) => dispatch({ type: 'UPDATE_TRANSACTION', payload: { id, update: t } }),
     deleteTransaction: (id: string) => dispatch({ type: 'DELETE_TRANSACTION', payload: id }),
@@ -186,6 +412,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     removeAnalyticsWidget: (id: string) => dispatch({ type: 'REMOVE_ANALYTICS_WIDGET', payload: id }),
     toggleLanguage: () => dispatch({ type: 'TOGGLE_LANGUAGE' }),
     toggleDarkMode: () => dispatch({ type: 'TOGGLE_DARK_MODE' }),
+    togglePrivacyMode: () => dispatch({ type: 'TOGGLE_PRIVACY_MODE' }),
     toggleAutoSync: () => dispatch({ type: 'TOGGLE_AUTO_SYNC' }),
     deleteGroup: (id: string) => dispatch({ type: 'DELETE_GROUP', payload: id }),
     addClient: (name: string, groupId: string, icon?: string) => dispatch({ type: 'ADD_CLIENT', payload: { name, groupId, icon } }),
@@ -198,7 +425,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     importState: (jsonData: string) => dispatch({ type: 'IMPORT_STATE', payload: JSON.parse(jsonData) }),
     markNotificationsRead: () => dispatch({ type: 'MARK_NOTIFICATIONS_READ' }),
     clearNotificationHistory: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
+    enableCloudSync: (token: string) => dispatch({ type: 'ENABLE_CLOUD_SYNC', payload: token }),
+    disableCloudSync: () => dispatch({ type: 'DISABLE_CLOUD_SYNC' }),
+    syncWithCloud: async () => {
+      if (state.syncProvider !== 'cloud' || !state.cloudToken) return;
+      try {
+        // Derive key from token (which is JWT signed with secret, but here we need a user secret)
+        // For this implementation, we will use a fixed salt with the token itself as password for simplicity
+        // In a real E2EE, we would ask for a separate password.
+        // To make it seamless, we'll use the user's username as part of the key derivation.
+        const key = await cryptoUtils.deriveKey(state.userProfile.username || 'default');
+        
+        // Encrypt state
+        const stateStr = JSON.stringify(state);
+        const { cipherText, iv } = await cryptoUtils.encrypt(stateStr, key);
+        
+        // Send encrypted data (we wrap it in an object to include IV)
+        const payload = {
+          encrypted: true,
+          data: cipherText,
+          iv: iv
+        };
+
+        await cloudService.pushData(state.cloudToken, payload as any);
+        
+        const timestamp = new Date().toISOString();
+        dispatch({ type: 'SYNC_SUCCESS', payload: timestamp });
+        dispatch({ 
+          type: 'ADD_SYNC_LOG', 
+          payload: { id: Date.now().toString(), type: 'push', status: 'success', timestamp, details: 'Encrypted push successful' } 
+        });
+      } catch (e: any) {
+        console.error('Sync failed:', e);
+        dispatch({ type: 'SET_NOTIFICATION', payload: { message: 'Cloud sync failed', type: 'error' } });
+        dispatch({ 
+          type: 'ADD_SYNC_LOG', 
+          payload: { id: Date.now().toString(), type: 'push', status: 'error', timestamp: new Date().toISOString(), details: e.message } 
+        });
+      }
+    },
+    pullFromCloud: async () => {
+      if (state.syncProvider !== 'cloud' || !state.cloudToken) return;
+      try {
+        const { data, timestamp } = await cloudService.pullData(state.cloudToken);
+        if (data) {
+          let decryptedState = data;
+          
+          // Check if data is encrypted
+          if ((data as any).encrypted) {
+            const key = await cryptoUtils.deriveKey(state.userProfile.username || 'default');
+            const decryptedStr = await cryptoUtils.decrypt((data as any).data, (data as any).iv, key);
+            decryptedState = JSON.parse(decryptedStr);
+          }
+
+          dispatch({ type: 'IMPORT_STATE', payload: { ...decryptedState, cloudToken: state.cloudToken, syncProvider: 'cloud' } });
+          dispatch({ type: 'SYNC_SUCCESS', payload: timestamp });
+          dispatch({ type: 'SET_NOTIFICATION', payload: { message: 'Data synced from cloud', type: 'success' } });
+          dispatch({ 
+            type: 'ADD_SYNC_LOG', 
+            payload: { id: Date.now().toString(), type: 'pull', status: 'success', timestamp, details: 'Encrypted pull successful' } 
+          });
+        }
+      } catch (e: any) {
+        console.error('Pull failed:', e);
+        dispatch({ type: 'SET_NOTIFICATION', payload: { message: 'Failed to pull data', type: 'error' } });
+        dispatch({ 
+          type: 'ADD_SYNC_LOG', 
+          payload: { id: Date.now().toString(), type: 'pull', status: 'error', timestamp: new Date().toISOString(), details: e.message } 
+        });
+      }
+    }
   };
+
+  // Auto-sync effect
+  useEffect(() => {
+    if (state.autoSync && state.syncProvider === 'cloud' && state.cloudToken) {
+      const timer = setTimeout(() => {
+        actions.syncWithCloud();
+      }, 5000); // Debounce sync by 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [state, state.autoSync, state.syncProvider, state.cloudToken]);
+
+  // Pull on mount
+  useEffect(() => {
+    if (state.syncProvider === 'cloud' && state.cloudToken) {
+      actions.pullFromCloud();
+    }
+  }, []);
 
   return React.createElement(AppContext.Provider, { value: { state, dispatch: actions } }, children);
 };

@@ -1,4 +1,5 @@
 
+
 import React, { useMemo } from 'react';
 import { useApp } from '../store';
 import { 
@@ -16,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 const Dashboard: React.FC = () => {
   const { state } = useApp();
   const navigate = useNavigate();
-  const { language, walletBalance, transactions, groups, isPro, baseCurrency } = state;
+  const { language, walletBalance, transactions, groups, isPro, baseCurrency, isPrivacyMode } = state;
 
   // --- Calculations ---
   const totalExpenses = transactions
@@ -59,6 +60,7 @@ const Dashboard: React.FC = () => {
         income,
         expense,
         icon: group.icon,
+        monthlyBudget: group.monthlyBudget || 0,
         style: cardStyles[index % cardStyles.length]
       };
     });
@@ -98,6 +100,9 @@ const Dashboard: React.FC = () => {
     }
     return data;
   }, [transactions]);
+
+  // Privacy Blur Helper
+  const privacyClass = isPrivacyMode ? 'blur-sm select-none' : '';
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
@@ -144,7 +149,7 @@ const Dashboard: React.FC = () => {
          <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-emerald-100 dark:border-emerald-900/30 shadow-sm flex items-center justify-between group hover:shadow-lg transition-all">
             <div>
                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'إجمالي الدخل' : 'Total Income'}</p>
-               <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">
+               <p className={`text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter ${privacyClass}`}>
                  ${totalIncome.toLocaleString()}
                </p>
             </div>
@@ -157,7 +162,7 @@ const Dashboard: React.FC = () => {
          <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-rose-100 dark:border-rose-900/30 shadow-sm flex items-center justify-between group hover:shadow-lg transition-all">
             <div>
                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'إجمالي المصاريف' : 'Total Expenses'}</p>
-               <p className="text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tighter">
+               <p className={`text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tighter ${privacyClass}`}>
                  ${totalExpenses.toLocaleString()}
                </p>
             </div>
@@ -201,14 +206,29 @@ const Dashboard: React.FC = () => {
                     </div>
                  </div>
                  <h4 className="text-xs font-black uppercase tracking-widest opacity-70 mb-1">{account.name}</h4>
-                 <p className="text-2xl font-black tracking-tighter">${account.balance.toLocaleString()}</p>
+                 <p className={`text-2xl font-black tracking-tighter ${privacyClass}`}>${account.balance.toLocaleString()}</p>
                  
-                 <div className="mt-6 pt-4 border-t border-white/10 flex justify-between">
+                 {account.monthlyBudget > 0 && (
+                   <div className="mt-3">
+                     <div className="flex justify-between text-[8px] font-black uppercase tracking-widest opacity-80 mb-1">
+                       <span>{Math.min((account.expense / account.monthlyBudget) * 100).toFixed(0)}% Used</span>
+                       <span>${account.monthlyBudget.toLocaleString()}</span>
+                     </div>
+                     <div className="h-1.5 bg-black/20 rounded-full overflow-hidden">
+                       <div 
+                         className={`h-full ${account.expense > account.monthlyBudget ? 'bg-rose-400' : 'bg-white/90'}`} 
+                         style={{ width: `${Math.min((account.expense / account.monthlyBudget) * 100, 100)}%` }}
+                       />
+                     </div>
+                   </div>
+                 )}
+
+                 <div className="mt-4 pt-4 border-t border-white/10 flex justify-between">
                     <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-300">
-                      <ArrowUpLeft size={10} /> ${account.income.toLocaleString()}
+                      <ArrowUpLeft size={10} /> <span className={privacyClass}>${account.income.toLocaleString()}</span>
                     </div>
                     <div className="flex items-center gap-1 text-[9px] font-bold text-rose-300">
-                      <ArrowDownLeft size={10} /> ${account.expense.toLocaleString()}
+                      <ArrowDownLeft size={10} /> <span className={privacyClass}>${account.expense.toLocaleString()}</span>
                     </div>
                  </div>
                </div>
