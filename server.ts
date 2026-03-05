@@ -11,7 +11,7 @@ import fs from 'fs';
 dotenv.config();
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'mahfazty-secret-key-change-this';
 
 // Database Setup
@@ -76,7 +76,6 @@ app.post('/api/auth/signup', async (req, res) => {
     if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return res.status(409).json({ error: 'Username already exists' });
     }
-    console.error(err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -126,7 +125,7 @@ app.post('/api/sync/push', authenticateToken, (req: any, res) => {
         data = excluded.data,
         updated_at = CURRENT_TIMESTAMP
     `);
-    const info = stmt.run(userId, JSON.stringify(data));
+    stmt.run(userId, JSON.stringify(data));
     res.json({ success: true, timestamp: new Date().toISOString() });
   } catch (err) {
     console.error(err);
@@ -162,13 +161,8 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Production static file serving
-    app.use(express.static('dist'));
-    
-    // SPA fallback
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve('dist', 'index.html'));
-    });
+    // Production static file serving would go here
+    // app.use(express.static('dist'));
   }
 
   app.listen(PORT, '0.0.0.0', () => {
