@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -11,14 +10,24 @@ import fs from 'fs';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 const JWT_SECRET = process.env.JWT_SECRET || 'mahfazty-secret-key-change-this';
 
 // Database Setup
-const dbDir = path.resolve('data');
+const isProduction = process.env.NODE_ENV === 'production';
+const dbDir = isProduction ? '/tmp/mahfazty-data' : path.resolve('data');
+
 if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir);
+  try {
+    fs.mkdirSync(dbDir, { recursive: true });
+  } catch (err) {
+    console.error(`Failed to create database directory at ${dbDir}:`, err);
+    // Fallback to memory if filesystem is completely locked (unlikely in /tmp)
+    // But better-sqlite3 doesn't support fallback easily without changing the constructor
+    throw err;
+  }
 }
+
 const db = new Database(path.join(dbDir, 'mahfazty.db'));
 
 // Initialize Tables
@@ -76,6 +85,7 @@ app.post('/api/auth/signup', async (req, res) => {
     if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return res.status(409).json({ error: 'Username already exists' });
     }
+    console.error(err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -125,7 +135,7 @@ app.post('/api/sync/push', authenticateToken, (req: any, res) => {
         data = excluded.data,
         updated_at = CURRENT_TIMESTAMP
     `);
-    stmt.run(userId, JSON.stringify(data));
+    const info = stmt.run(userId, JSON.stringify(data));
     res.json({ success: true, timestamp: new Date().toISOString() });
   } catch (err) {
     console.error(err);
@@ -155,14 +165,20 @@ app.get('/api/sync/pull', authenticateToken, (req: any, res) => {
 // Vite Middleware (for development)
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    // Production static file serving would go here
-    // app.use(express.static('dist'));
+    // Production static file serving
+    app.use(express.static('dist'));
+    
+    // SPA fallback
+    app.get('*', (req, res) => {
+      res.sendFile(path.resolve('dist', 'index.html'));
+    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
