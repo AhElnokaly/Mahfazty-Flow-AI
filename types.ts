@@ -25,6 +25,8 @@ export interface TransactionItem {
   name: string;
   price: number;
   quantity: number;
+  category?: string;
+  barcode?: string;
 }
 
 export interface Transaction {

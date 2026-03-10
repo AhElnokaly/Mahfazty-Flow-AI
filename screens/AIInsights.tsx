@@ -121,7 +121,7 @@ const formatBold = (text: string) => {
 // --- PROPOSAL CARD: PROFESSIONAL EDITION ---
 const InstallmentProposal: React.FC<{ data: any, onAccept: () => void, onReject: () => void }> = ({ data, onAccept, onReject }) => {
   return (
-    <div className="mt-6 bg-white dark:bg-slate-900 rounded-[24px] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
+    <div className="mt-6 bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
       {/* Header Verdict */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-4 text-white flex justify-between items-center">
          <div className="flex items-center gap-2">
@@ -351,30 +351,30 @@ const AIInsights: React.FC = () => {
       </div>
 
       {/* Tabs Switcher */}
-      <div className="flex gap-2 p-1.5 bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-700">
+      <div className="flex gap-2 p-1.5 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-100 dark:border-slate-700">
         <button 
           onClick={() => setActiveTab('assistant')}
-          className={`flex-1 py-4 rounded-[2rem] flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-blue-500'}`}
+          className={`flex-1 py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-blue-500'}`}
         >
           <MessageSquare size={16} /> {language === 'ar' ? 'المساعد' : 'Assistant'}
         </button>
         <button 
           onClick={() => setActiveTab('architect')}
-          className={`flex-1 py-4 rounded-[2rem] flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'architect' ? 'bg-[#101827] text-amber-400 shadow-lg border border-amber-400/20' : 'text-slate-400 hover:text-amber-500'}`}
+          className={`flex-1 py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'architect' ? 'bg-[#101827] text-amber-400 shadow-lg border border-amber-400/20' : 'text-slate-400 hover:text-amber-500'}`}
         >
           <Terminal size={16} /> {language === 'ar' ? 'المهندس' : 'Architect'}
           {!isPro && <ShieldCheck size={12} className="opacity-50" />}
         </button>
         <button 
           onClick={() => setActiveTab('studio')}
-          className={`flex-1 py-4 rounded-[2rem] flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'studio' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-purple-500'}`}
+          className={`flex-1 py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'studio' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-purple-500'}`}
         >
           <Wand2 size={16} /> {language === 'ar' ? 'الاستوديو' : 'Studio'}
         </button>
       </div>
 
       {/* Chat Window Container */}
-      <div className={`bg-white dark:bg-slate-800 rounded-[3rem] shadow-2xl border border-slate-50 dark:border-slate-700 flex flex-col min-h-[550px] overflow-hidden relative ${activeTab === 'architect' && !isPro ? 'grayscale opacity-60' : ''}`}>
+      <div className={`bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-50 dark:border-slate-700 flex flex-col min-h-[550px] overflow-hidden relative ${activeTab === 'architect' && !isPro ? 'grayscale opacity-60' : ''}`}>
         
         {/* Pro Barrier for Architect Mode */}
         {activeTab === 'architect' && !isPro && (
@@ -397,14 +397,14 @@ const AIInsights: React.FC = () => {
                 {!selectedImage ? (
                   <div 
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full max-w-sm aspect-video border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[3rem] flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-slate-100 transition-all text-slate-400"
+                    className="w-full max-w-sm aspect-video border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-slate-100 transition-all text-slate-400"
                   >
                     <Upload size={32} />
                     <span className="text-[10px] font-black uppercase tracking-widest">{language === 'ar' ? 'ارفع صورة المستند المالي' : 'Upload Financial Doc'}</span>
                   </div>
                 ) : (
                   <div className="relative group w-full max-w-sm">
-                    <img src={selectedImage.preview} className="w-full rounded-[2.5rem] shadow-2xl border-4 border-purple-500/20" />
+                    <img src={selectedImage.preview} className="w-full rounded-3xl shadow-2xl border-4 border-purple-500/20" />
                     <button onClick={() => setSelectedImage(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg"><X size={16}/></button>
                   </div>
                 )}
@@ -422,7 +422,7 @@ const AIInsights: React.FC = () => {
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${msg.role === 'user' ? 'bg-blue-600 border-blue-500 text-white shadow-blue-500/20' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'}`}>
                       {msg.role === 'user' ? <img src={userProfile.avatar} className="w-full h-full object-cover rounded-xl" /> : <Bot size={18} className="text-blue-500" />}
                     </div>
-                    <div className={`p-4 md:p-5 rounded-[1.5rem] text-xs shadow-sm max-w-[85%] ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-slate-900 dark:text-slate-200 rounded-tl-none border border-slate-100 dark:border-slate-800 shadow-xl shadow-black/5'}`}>
+                    <div className={`p-4 md:p-5 rounded-2xl text-xs shadow-sm max-w-[85%] ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-slate-900 dark:text-slate-200 rounded-tl-none border border-slate-100 dark:border-slate-800 shadow-xl shadow-black/5'}`}>
                       {msg.text.includes('![Edited Image]') ? (
                         <div className="space-y-3">
                           <img src={msg.text.match(/\((.*?)\)/)?.[1] || ''} className="w-full rounded-xl shadow-md" alt="Magic Edit Output" />
@@ -464,7 +464,7 @@ const AIInsights: React.FC = () => {
 
         {/* Feature Library Launcher Overlay */}
         {showFeatureLibrary && (
-          <div className="absolute bottom-24 left-6 right-6 z-[60] p-6 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-[3rem] shadow-2xl border border-blue-100 dark:border-blue-900 animate-in slide-in-from-bottom-10">
+          <div className="absolute bottom-24 left-6 right-6 z-[60] p-6 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-blue-100 dark:border-blue-900 animate-in slide-in-from-bottom-10">
              <div className="flex justify-between items-center mb-6">
                 <h3 className="text-sm font-black uppercase tracking-widest text-blue-600 flex items-center gap-2">
                   <LayoutGrid size={18} /> {language === 'ar' ? 'مكتبة ميزات الذكاء' : 'AI Capability Library'}
@@ -516,7 +516,7 @@ const AIInsights: React.FC = () => {
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
                 placeholder={activeTab === 'studio' ? (language === 'ar' ? 'صف التعديل...' : 'Describe edit...') : (language === 'ar' ? 'اسأل أي شيء مالي...' : 'Ask anything financial...')}
-                className="w-full py-4 pl-5 pr-5 bg-slate-50 dark:bg-slate-900 border border-transparent rounded-[2rem] text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
+                className="w-full py-4 pl-5 pr-5 bg-slate-50 dark:bg-slate-900 border border-transparent rounded-full text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
               />
             </div>
 

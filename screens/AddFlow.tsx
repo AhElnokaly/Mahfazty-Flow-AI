@@ -2,17 +2,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../store';
 import { TransactionType, TransactionItem } from '../types';
-import { ArrowLeft, Save, TrendingUp, TrendingDown, Calendar, User, FileText, ChevronRight, Layers, Sparkles, Loader2, Camera, Scan, Plus, Trash2, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Save, TrendingUp, TrendingDown, Calendar, User, FileText, ChevronRight, Layers, Sparkles, Loader2, Camera, Scan, Plus, Trash2, ShoppingCart, Tag, Barcode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { suggestTransactionNote, sendChatMessage } from '../geminiService';
 
 const CURRENCIES = ['EGP', 'USD', 'EUR', 'GBP', 'SAR', 'AED'];
+const ITEM_CATEGORIES = ['Groceries', 'Electronics', 'Clothing', 'Home', 'Health', 'Entertainment', 'Transport', 'Other'];
 
 const AddFlow: React.FC = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
-  const { language, groups, clients, baseCurrency } = state;
+  const { language, groups, clients, baseCurrency, transactions } = state;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [amount, setAmount] = useState('');
@@ -22,8 +24,11 @@ const AddFlow: React.FC = () => {
   const [note, setNote] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isScanningBarcode, setIsScanningBarcode] = useState(false);
   const [items, setItems] = useState<TransactionItem[]>([]);
   const [showItems, setShowItems] = useState(false);
+  const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   
   const [date, setDate] = useState(() => {
     const d = new Date();
@@ -69,7 +74,7 @@ const AddFlow: React.FC = () => {
   };
 
   const handleAddItem = () => {
-    setItems([...items, { id: Date.now().toString(), name: '', price: 0, quantity: 1 }]);
+    setItems([...items, { id: Date.now().toString(), name: '', price: 0, quantity: 1, category: 'Other' }]);
   };
 
   const handleUpdateItem = (id: string, field: keyof TransactionItem, value: string | number) => {
@@ -79,6 +84,36 @@ const AddFlow: React.FC = () => {
       }
       return item;
     }));
+  };
+
+  const handleItemNameChange = (id: string, value: string, index: number) => {
+    handleUpdateItem(id, 'name', value);
+    
+    // Auto-complete logic
+    if (value.length > 1) {
+      const allItemNames = transactions.flatMap(t => t.items?.map(i => i.name) || []);
+      const uniqueNames = Array.from(new Set(allItemNames));
+      const matches = uniqueNames.filter(name => name.toLowerCase().includes(value.toLowerCase())).slice(0, 5);
+      setSuggestions(matches);
+      setActiveItemIndex(index);
+    } else {
+      setSuggestions([]);
+      setActiveItemIndex(null);
+    }
+  };
+
+  const selectSuggestion = (id: string, suggestion: string) => {
+    handleUpdateItem(id, 'name', suggestion);
+    
+    // Try to auto-fill category and price based on past transactions
+    const pastItem = transactions.flatMap(t => t.items || []).find(i => i.name === suggestion);
+    if (pastItem) {
+      if (pastItem.category) handleUpdateItem(id, 'category', pastItem.category);
+      if (pastItem.price) handleUpdateItem(id, 'price', pastItem.price);
+    }
+    
+    setSuggestions([]);
+    setActiveItemIndex(null);
   };
 
   const handleRemoveItem = (id: string) => {
@@ -100,7 +135,7 @@ const AddFlow: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const response = await sendChatMessage(state, dispatch, "Analyze this receipt. Extract ONLY a JSON: { 'amount': number, 'date': 'YYYY-MM-DD', 'note': 'string summary', 'type': 'EXPENSE'|'INCOME', 'items': [{'name': 'string', 'price': number, 'quantity': number}] }. If not a receipt, return empty JSON.", false, { data: base64, mimeType: file.type });
+        const response = await sendChatMessage(state, dispatch, "Analyze this receipt. Extract ONLY a JSON: { 'amount': number, 'date': 'YYYY-MM-DD', 'note': 'string summary', 'type': 'EXPENSE'|'INCOME', 'items': [{'name': 'string', 'price': number, 'quantity': number, 'category': 'string'}] }. If not a receipt, return empty JSON.", false, { data: base64, mimeType: file.type });
         
         // Find JSON in response text
         const jsonMatch = response.text.match(/\{.*\}/s);
@@ -115,7 +150,8 @@ const AddFlow: React.FC = () => {
               id: Date.now().toString() + Math.random().toString(),
               name: item.name || 'Item',
               price: Number(item.price) || 0,
-              quantity: Number(item.quantity) || 1
+              quantity: Number(item.quantity) || 1,
+              category: item.category || 'Other'
             })));
             setShowItems(true);
           }
@@ -128,6 +164,38 @@ const AddFlow: React.FC = () => {
       dispatch.setNotification({ message: 'OCR Failed', type: 'error' });
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handleBarcodeScan = async (e: React.ChangeEvent<HTMLInputElement>, itemId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanningBarcode(true);
+    vibrate();
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const response = await sendChatMessage(state, dispatch, "Analyze this barcode image. If it's a product barcode, identify the product name and a general category. Return ONLY a JSON: { 'name': 'string', 'category': 'string', 'barcode': 'string' }. If not a barcode, return empty JSON.", false, { data: base64, mimeType: file.type });
+        
+        const jsonMatch = response.text.match(/\{.*\}/s);
+        if (jsonMatch) {
+          const data = JSON.parse(jsonMatch[0]);
+          if (data.name) handleUpdateItem(itemId, 'name', data.name);
+          if (data.category) handleUpdateItem(itemId, 'category', data.category);
+          if (data.barcode) handleUpdateItem(itemId, 'barcode', data.barcode);
+          
+          dispatch.setNotification({ message: language === 'ar' ? 'تم مسح الباركود بنجاح' : 'Barcode scanned successfully', type: 'success' });
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      dispatch.setNotification({ message: 'Barcode Scan Failed', type: 'error' });
+    } finally {
+      setIsScanningBarcode(false);
     }
   };
 
@@ -168,7 +236,7 @@ const AddFlow: React.FC = () => {
             <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white leading-tight">
               {language === 'ar' ? 'إضافة تدفق مالي' : 'New Flow Entry'}
             </h2>
-            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[3px] mt-1">Financial Wizard</p>
+            <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Financial Wizard</p>
           </div>
         </div>
 
@@ -182,16 +250,16 @@ const AddFlow: React.FC = () => {
              {isScanning ? <Loader2 className="animate-spin" size={24} /> : <Scan size={24} />}
              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" capture="environment" />
           </div>
-          <span className="text-[8px] font-black uppercase text-blue-600 tracking-widest">{language === 'ar' ? 'مسح إيصال' : 'Scan Receipt'}</span>
+          <span className="text-[10px] font-black uppercase text-blue-600 tracking-widest">{language === 'ar' ? 'مسح إيصال' : 'Scan Receipt'}</span>
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-5 gap-8 pb-32">
         <div className="lg:col-span-3 space-y-8">
-          <div className="bg-white dark:bg-slate-800 p-8 md:p-10 rounded-[40px] md:rounded-[56px] shadow-2xl border border-slate-100 dark:border-slate-800/50">
+          <div className="bg-white dark:bg-slate-800 p-8 md:p-10 rounded-3xl md:rounded-[2.5rem] shadow-2xl border border-slate-100 dark:border-slate-800/50">
             
             <div className="mb-8 md:mb-12">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[4px] mb-4 px-2">
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4 px-2">
                 {language === 'ar' ? 'قيمة التدفق المالي' : 'Transaction Value'}
               </label>
               <div className="relative">
@@ -212,7 +280,7 @@ const AddFlow: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
               <div className="space-y-4">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-3px px-2">
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-2">
                   <Layers className="inline-block mr-2" size={14} /> {language === 'ar' ? 'المجموعة' : 'Group'}
                 </label>
                 <div className="relative">
@@ -227,7 +295,7 @@ const AddFlow: React.FC = () => {
               </div>
 
               <div className="space-y-4">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-3px px-2">
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-2">
                   <User className="inline-block mr-2" size={14} /> {language === 'ar' ? 'جهة التعامل' : 'Entity'}
                 </label>
                 <div className="relative">
@@ -248,14 +316,14 @@ const AddFlow: React.FC = () => {
                   className={`flex flex-col items-center justify-center py-6 rounded-3xl font-black transition-all ${type === TransactionType.EXPENSE ? 'bg-rose-500 text-white shadow-xl' : 'bg-slate-50 dark:bg-slate-900 text-slate-400'}`}
                 >
                   <TrendingDown size={28} className="mb-2" />
-                  <span className="text-[10px] uppercase tracking-widest">{language === 'ar' ? 'مصروف' : 'Expense'}</span>
+                  <span className="text-xs uppercase tracking-widest">{language === 'ar' ? 'مصروف' : 'Expense'}</span>
                 </button>
                 <button
                   type="button" onClick={() => setType(TransactionType.INCOME)}
                   className={`flex flex-col items-center justify-center py-6 rounded-3xl font-black transition-all ${type === TransactionType.INCOME ? 'bg-emerald-500 text-white shadow-xl' : 'bg-slate-50 dark:bg-slate-900 text-slate-400'}`}
                 >
                   <TrendingUp size={28} className="mb-2" />
-                  <span className="text-[10px] uppercase tracking-widest">{language === 'ar' ? 'دخل' : 'Income'}</span>
+                  <span className="text-xs uppercase tracking-widest">{language === 'ar' ? 'دخل' : 'Income'}</span>
                 </button>
               </div>
             </div>
@@ -263,7 +331,7 @@ const AddFlow: React.FC = () => {
             {/* Itemized Transaction Section */}
             <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800/50">
               <div className="flex items-center justify-between mb-4">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[4px] px-2 flex items-center gap-2">
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
                   <ShoppingCart size={14} />
                   {language === 'ar' ? 'تفاصيل السلع (اختياري)' : 'Itemized Details (Optional)'}
                 </label>
@@ -276,7 +344,7 @@ const AddFlow: React.FC = () => {
                       handleAddItem();
                     }
                   }}
-                  className="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1 hover:underline"
+                  className="text-xs font-bold text-blue-500 uppercase flex items-center gap-1 hover:underline"
                 >
                   {showItems ? (language === 'ar' ? 'إخفاء' : 'Hide') : (language === 'ar' ? 'إضافة سلع' : 'Add Items')}
                 </button>
@@ -285,42 +353,103 @@ const AddFlow: React.FC = () => {
               {showItems && (
                 <div className="space-y-4 animate-in slide-in-from-top-2">
                   {items.map((item, index) => (
-                    <div key={item.id} className="flex flex-col sm:flex-row gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 relative group">
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
-                          placeholder={language === 'ar' ? 'اسم السلعة...' : 'Item name...'}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      <div className="flex gap-3">
-                        <div className="w-24">
+                    <div key={item.id} className="flex flex-col gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 relative group">
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1 relative">
                           <input
-                            type="number"
-                            value={item.price || ''}
-                            onChange={(e) => handleUpdateItem(item.id, 'price', parseFloat(e.target.value) || 0)}
-                            placeholder={language === 'ar' ? 'السعر' : 'Price'}
+                            type="text"
+                            value={item.name}
+                            onChange={(e) => handleItemNameChange(item.id, e.target.value, index)}
+                            placeholder={language === 'ar' ? 'اسم السلعة...' : 'Item name...'}
                             className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
                           />
+                          {activeItemIndex === index && suggestions.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden">
+                              {suggestions.map((suggestion, sIndex) => (
+                                <button
+                                  key={sIndex}
+                                  type="button"
+                                  onClick={() => selectSuggestion(item.id, suggestion)}
+                                  className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                                >
+                                  {suggestion}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <div className="w-20">
-                          <input
-                            type="number"
-                            value={item.quantity || ''}
-                            onChange={(e) => handleUpdateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                            placeholder={language === 'ar' ? 'الكمية' : 'Qty'}
-                            className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
-                          />
+                        <div className="flex gap-3">
+                          <div className="w-24">
+                            <input
+                              type="number"
+                              value={item.price || ''}
+                              onChange={(e) => handleUpdateItem(item.id, 'price', parseFloat(e.target.value) || 0)}
+                              placeholder={language === 'ar' ? 'السعر' : 'Price'}
+                              className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="w-20">
+                            <input
+                              type="number"
+                              value={item.quantity || ''}
+                              onChange={(e) => handleUpdateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
+                              placeholder={language === 'ar' ? 'الكمية' : 'Qty'}
+                              className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                            />
+                          </div>
                         </div>
                       </div>
+                      
+                      <div className="flex flex-col sm:flex-row gap-3 items-center">
+                        <div className="flex-1 w-full relative">
+                          <select
+                            value={item.category || 'Other'}
+                            onChange={(e) => handleUpdateItem(item.id, 'category', e.target.value)}
+                            className="w-full px-4 py-3 pl-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500 appearance-none"
+                          >
+                            {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        </div>
+                        <div className="flex-1 w-full relative flex items-center gap-2">
+                           <div className="relative flex-1">
+                             <input
+                                type="text"
+                                value={item.barcode || ''}
+                                onChange={(e) => handleUpdateItem(item.id, 'barcode', e.target.value)}
+                                placeholder={language === 'ar' ? 'الباركود...' : 'Barcode...'}
+                                className="w-full px-4 py-3 pl-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                              />
+                              <Barcode size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                           </div>
+                           <button
+                             type="button"
+                             disabled={isScanningBarcode}
+                             onClick={() => {
+                               const input = document.getElementById(`barcode-scan-${item.id}`);
+                               if (input) input.click();
+                             }}
+                             className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                           >
+                             {isScanningBarcode ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                             <input 
+                               id={`barcode-scan-${item.id}`}
+                               type="file" 
+                               accept="image/*" 
+                               capture="environment" 
+                               className="hidden" 
+                               onChange={(e) => handleBarcodeScan(e, item.id)}
+                             />
+                           </button>
+                        </div>
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(item.id)}
-                        className="absolute -top-2 -right-2 sm:static sm:top-auto sm:right-auto w-8 h-8 sm:w-auto sm:h-auto bg-rose-100 sm:bg-transparent text-rose-500 rounded-full sm:rounded-none flex items-center justify-center hover:text-rose-600 transition-colors"
+                        className="absolute -top-2 -right-2 w-8 h-8 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center hover:text-rose-600 transition-colors shadow-sm"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   ))}
@@ -340,7 +469,7 @@ const AddFlow: React.FC = () => {
         </div>
 
         <div className="lg:col-span-2 space-y-8">
-           <div className="bg-white dark:bg-slate-800 p-8 md:p-10 rounded-[40px] md:rounded-[56px] shadow-2xl border border-slate-100 dark:border-slate-800/50 space-y-8">
+           <div className="bg-white dark:bg-slate-800 p-8 md:p-10 rounded-3xl md:rounded-[2.5rem] shadow-2xl border border-slate-100 dark:border-slate-800/50 space-y-8">
              <div className="space-y-4">
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white outline-none" />
              </div>

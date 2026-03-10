@@ -7,6 +7,7 @@ import {
   ArrowUpRight, ArrowDownRight, Calendar, Smile, AlertCircle, Target
 } from 'lucide-react';
 import { TransactionType } from '../types';
+import ConfirmModal from '../components/ConfirmModal';
 
 const GroupsManager: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -19,9 +20,16 @@ const GroupsManager: React.FC = () => {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editGroupValue, setEditGroupValue] = useState({ name: '', icon: '', monthlyBudget: 0 });
 
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
+  const [editClientValue, setEditClientValue] = useState({ name: '', icon: '' });
+
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [newClientName, setNewClientName] = useState('');
   const [newClientIcon, setNewClientIcon] = useState('👤');
+
+  // Delete confirmation states
+  const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
 
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
@@ -54,22 +62,36 @@ const GroupsManager: React.FC = () => {
     return { income, expense };
   };
 
+  const confirmDeleteGroup = () => {
+    if (groupToDelete) {
+      dispatch.deleteGroup(groupToDelete);
+      setGroupToDelete(null);
+    }
+  };
+
+  const confirmDeleteClient = () => {
+    if (clientToDelete) {
+      dispatch.deleteClient(clientToDelete);
+      setClientToDelete(null);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500 pb-20 px-2">
       <div className="text-center py-6">
         <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
           {language === 'ar' ? 'هيكلة الميزانية' : 'Budget Architecture'}
         </h2>
-        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[4px] mt-2">
+        <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-2">
           Manage spending limits per portfolio
         </p>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] shadow-sm border border-slate-50 dark:border-slate-800">
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800">
         <form onSubmit={handleAddGroup} className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder={language === 'ar' ? 'اسم المجموعة...' : 'Group name...'} className="md:col-span-2 px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
           <input type="number" value={newGroupBudget} onChange={(e) => setNewGroupBudget(e.target.value)} placeholder={language === 'ar' ? 'الميزانية...' : 'Budget...'} className="px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
-          <button type="submit" className="bg-blue-600 text-white rounded-[20px] font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-500/20">
+          <button type="submit" className="bg-blue-600 text-white rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-500/20">
             {language === 'ar' ? 'إنشاء' : 'Create'}
           </button>
         </form>
@@ -84,7 +106,7 @@ const GroupsManager: React.FC = () => {
           const isOver = progress > 100;
 
           return (
-            <div key={group.id} className="bg-white dark:bg-slate-800 rounded-[3rem] border border-slate-50 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div key={group.id} className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-50 dark:border-slate-800 shadow-sm overflow-hidden">
               <div className="px-8 py-6 flex flex-col gap-4">
                  {isEditing ? (
                    <div className="flex flex-col gap-4">
@@ -141,7 +163,7 @@ const GroupsManager: React.FC = () => {
                       </div>
                       <div className="text-right flex items-center gap-4">
                          <div>
-                           <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{language === 'ar' ? 'الميزانية الشهرية' : 'Monthly Budget'}</p>
+                           <p className="text-xs font-black uppercase text-slate-400 mb-1">{language === 'ar' ? 'الميزانية الشهرية' : 'Monthly Budget'}</p>
                            <p className="text-lg font-black text-slate-900 dark:text-white">${budget.toLocaleString()}</p>
                          </div>
                          <div className="flex flex-col gap-2">
@@ -163,7 +185,7 @@ const GroupsManager: React.FC = () => {
                            </button>
                            <button 
                              onClick={() => {
-                               if(confirm('Delete group?')) dispatch.deleteGroup(group.id);
+                               setGroupToDelete(group.id);
                              }}
                              className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-rose-500"
                            >
@@ -195,7 +217,7 @@ const GroupsManager: React.FC = () => {
                      </h4>
                      <button 
                        onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}
-                       className="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1 hover:underline"
+                       className="text-xs font-bold text-blue-500 uppercase flex items-center gap-1 hover:underline"
                      >
                        {expandedGroupId === group.id ? (language === 'ar' ? 'إخفاء' : 'Hide') : (language === 'ar' ? 'إضافة عميل' : 'Add Client')}
                        {expandedGroupId === group.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -204,22 +226,67 @@ const GroupsManager: React.FC = () => {
 
                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                      {clients.filter(c => c.groupId === group.id).map(client => (
-                       <div key={client.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                         <div className="flex items-center gap-3">
-                           <div className="w-8 h-8 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm text-sm">
-                             {client.icon || '👤'}
+                       editingClientId === client.id ? (
+                         <div key={client.id} className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-200 dark:border-blue-800">
+                           <div className="flex items-center gap-2 flex-1">
+                             <input 
+                               value={editClientValue.icon} 
+                               onChange={(e) => setEditClientValue({...editClientValue, icon: e.target.value})} 
+                               className="w-10 h-8 px-1 bg-white dark:bg-slate-800 rounded-lg text-center text-sm outline-none" 
+                             />
+                             <input 
+                               value={editClientValue.name} 
+                               onChange={(e) => setEditClientValue({...editClientValue, name: e.target.value})} 
+                               className="flex-1 px-3 py-1 bg-white dark:bg-slate-800 rounded-lg text-xs font-bold outline-none" 
+                             />
                            </div>
-                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{client.name}</span>
+                           <div className="flex gap-1 ml-2">
+                             <button 
+                               onClick={() => {
+                                 dispatch.updateClient(client.id, editClientValue);
+                                 setEditingClientId(null);
+                               }}
+                               className="text-emerald-500 hover:text-emerald-600 p-1 bg-white dark:bg-slate-800 rounded-lg"
+                             >
+                               <Check size={14} />
+                             </button>
+                             <button 
+                               onClick={() => setEditingClientId(null)}
+                               className="text-slate-400 hover:text-slate-500 p-1 bg-white dark:bg-slate-800 rounded-lg"
+                             >
+                               <X size={14} />
+                             </button>
+                           </div>
                          </div>
-                         <button 
-                           onClick={() => {
-                             if(confirm('Delete client?')) dispatch.deleteClient(client.id);
-                           }}
-                           className="text-slate-400 hover:text-rose-500 p-1"
-                         >
-                           <Trash2 size={14} />
-                         </button>
-                       </div>
+                       ) : (
+                         <div key={client.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                           <div className="flex items-center gap-3">
+                             <div className="w-8 h-8 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm text-sm">
+                               {client.icon || '👤'}
+                             </div>
+                             <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{client.name}</span>
+                           </div>
+                           <div className="flex gap-1">
+                             <button 
+                               onClick={() => {
+                                 setEditingClientId(client.id);
+                                 setEditClientValue({ name: client.name, icon: client.icon || '👤' });
+                               }}
+                               className="text-slate-400 hover:text-blue-500 p-1"
+                             >
+                               <Edit3 size={14} />
+                             </button>
+                             <button 
+                               onClick={() => {
+                                 setClientToDelete(client.id);
+                               }}
+                               className="text-slate-400 hover:text-rose-500 p-1"
+                             >
+                               <Trash2 size={14} />
+                             </button>
+                           </div>
+                         </div>
+                       )
                      ))}
                    </div>
 
@@ -248,6 +315,26 @@ const GroupsManager: React.FC = () => {
           );
         })}
       </div>
+
+      <ConfirmModal
+        isOpen={!!groupToDelete}
+        onClose={() => setGroupToDelete(null)}
+        onConfirm={confirmDeleteGroup}
+        title={language === 'ar' ? 'تأكيد المسح' : 'Confirm Delete'}
+        message={language === 'ar' ? 'هل أنت متأكد من مسح هذه المجموعة؟ سيتم مسح جميع العملاء والمعاملات المرتبطة بها.' : 'Are you sure you want to delete this group? All associated clients and transactions will be deleted.'}
+        confirmText={language === 'ar' ? 'مسح' : 'Delete'}
+        cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
+      />
+
+      <ConfirmModal
+        isOpen={!!clientToDelete}
+        onClose={() => setClientToDelete(null)}
+        onConfirm={confirmDeleteClient}
+        title={language === 'ar' ? 'تأكيد المسح' : 'Confirm Delete'}
+        message={language === 'ar' ? 'هل أنت متأكد من مسح هذه الجهة؟ سيتم مسح جميع المعاملات المرتبطة بها.' : 'Are you sure you want to delete this client? All associated transactions will be deleted.'}
+        confirmText={language === 'ar' ? 'مسح' : 'Delete'}
+        cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
+      />
     </div>
   );
 };

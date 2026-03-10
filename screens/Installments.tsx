@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Installment } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import ConfirmModal from '../components/ConfirmModal';
 
 const Installments: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -30,6 +31,9 @@ const Installments: React.FC = () => {
   const [payId, setPayId] = useState<string | null>(null);
   const [penalty, setPenalty] = useState(0);
 
+  // Delete confirmation state
+  const [installmentToDelete, setInstallmentToDelete] = useState<string | null>(null);
+
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
   };
@@ -49,8 +53,15 @@ const Installments: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    vibrate();
-    dispatch.deleteInstallment(id);
+    setInstallmentToDelete(id);
+  };
+
+  const confirmDelete = () => {
+    if (installmentToDelete) {
+      vibrate();
+      dispatch.deleteInstallment(installmentToDelete);
+      setInstallmentToDelete(null);
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -167,7 +178,7 @@ const Installments: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
            {/* Stats Cards */}
            <div className="lg:col-span-2 grid grid-cols-2 gap-4">
-              <div className="bg-slate-900 text-white p-6 rounded-[32px] shadow-xl flex flex-col justify-between relative overflow-hidden">
+              <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col justify-between relative overflow-hidden">
                  <div className="absolute top-0 right-0 p-4 opacity-10"><Calendar size={64} /></div>
                  <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'الالتزام الشهري' : 'Monthly Commitment'}</p>
@@ -179,7 +190,7 @@ const Installments: React.FC = () => {
                  </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                  <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'إجمالي الدين المتبقي' : 'Total Remaining Debt'}</p>
                     <p className="text-2xl font-black text-rose-600 dark:text-rose-400">${stats.totalRemainingAmount.toLocaleString()}</p>
@@ -194,14 +205,14 @@ const Installments: React.FC = () => {
                  </div>
               </div>
 
-              <div className="bg-emerald-50 dark:bg-emerald-900/10 p-6 rounded-[32px] border border-emerald-100 dark:border-emerald-800/30 flex flex-col justify-between">
+              <div className="bg-emerald-50 dark:bg-emerald-900/10 p-6 rounded-3xl border border-emerald-100 dark:border-emerald-800/30 flex flex-col justify-between">
                  <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-1">{language === 'ar' ? 'تم سداده' : 'Total Paid'}</p>
                     <p className="text-xl font-black text-emerald-700 dark:text-emerald-300">${stats.totalPaidAmount.toLocaleString()}</p>
                  </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                  <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'أقساط متبقية' : 'Remaining Installments'}</p>
                     <p className="text-xl font-black text-slate-800 dark:text-white">{stats.totalRemainingMonths} <span className="text-xs">{language === 'ar' ? 'شهر' : 'Months'}</span></p>
@@ -210,7 +221,7 @@ const Installments: React.FC = () => {
            </div>
 
            {/* Chart */}
-           <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center relative">
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center relative">
                <h3 className="absolute top-6 left-6 text-[10px] font-black uppercase tracking-widest text-slate-400">{language === 'ar' ? 'هيكل الديون' : 'Debt Structure'}</h3>
                <div className="w-full h-[160px] mt-4">
                   <ResponsiveContainer width="100%" height="100%">
@@ -251,7 +262,7 @@ const Installments: React.FC = () => {
 
       {/* 3. ADD / EDIT FORM */}
       {showAdd && (
-        <form onSubmit={handleSave} className="bg-white dark:bg-slate-800 p-8 rounded-[40px] shadow-2xl border border-slate-100 dark:border-slate-700 animate-in slide-in-from-top-4">
+        <form onSubmit={handleSave} className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-700 animate-in slide-in-from-top-4">
            <h3 className="text-xl font-black text-slate-900 dark:text-white mb-6 uppercase flex items-center gap-2">
               <CreditCard className="text-rose-500" /> 
               {editingId ? (language === 'ar' ? 'تعديل الخطة' : 'Edit Plan') : (language === 'ar' ? 'إنشاء خطة تقسيط' : 'Create Installment Plan')}
@@ -348,7 +359,7 @@ const Installments: React.FC = () => {
              const progress = (inst.paidCount / inst.installmentCount) * 100;
              const isNearEnd = progress > 80;
              return (
-               <div key={inst.id} className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden">
+               <div key={inst.id} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden">
                   {/* Progress Bar Background */}
                   <div className="absolute bottom-0 left-0 h-1.5 bg-slate-100 dark:bg-slate-700 w-full">
                      <div className={`h-full ${isNearEnd ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div>
@@ -403,7 +414,7 @@ const Installments: React.FC = () => {
       {/* 5. PAY MODAL */}
       {payId && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-           <div className="bg-white dark:bg-slate-800 p-8 rounded-[40px] w-full max-w-md shadow-2xl animate-in zoom-in-95">
+           <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl animate-in zoom-in-95">
               <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
                  <DollarSign size={32} />
               </div>
@@ -431,6 +442,16 @@ const Installments: React.FC = () => {
            </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!installmentToDelete}
+        onClose={() => setInstallmentToDelete(null)}
+        onConfirm={confirmDelete}
+        title={language === 'ar' ? 'تأكيد المسح' : 'Confirm Delete'}
+        message={language === 'ar' ? 'هل أنت متأكد من مسح هذا القسط؟ لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this installment? This action cannot be undone.'}
+        confirmText={language === 'ar' ? 'مسح' : 'Delete'}
+        cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
+      />
     </div>
   );
 };

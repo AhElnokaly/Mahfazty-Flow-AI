@@ -3,12 +3,12 @@ import { useApp } from '../store';
 import { 
   ComposedChart, Line, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, CartesianGrid,
-  PieChart as RePieChart, Pie, Cell, AreaChart, Area, BarChart, LabelList
+  PieChart as RePieChart, Pie, Cell, AreaChart, Area, BarChart, LabelList, Legend
 } from 'recharts';
 import { 
   Activity, Target, PieChart, ArrowUpRight, ArrowDownRight, Zap, Star,
   Trash2, Plus, X, BarChart3, TrendingUp, Users, BrainCircuit, Sparkles,
-  Filter, Calendar, ChevronDown
+  Filter, Calendar, ChevronDown, Tag
 } from 'lucide-react';
 import { TransactionType, CustomWidget, Transaction } from '../types';
 
@@ -79,6 +79,17 @@ const WIDGET_LIBRARY = [
     descEn: 'Track price changes of frequently bought items.',
     descAr: 'تتبع تغير أسعار السلع المشتراة بشكل متكرر.',
     pro: false
+  },
+  {
+    id: 'price_comparison',
+    icon: Tag,
+    color: 'text-purple-500',
+    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
+    titleEn: 'Store Price Comparison',
+    titleAr: 'مقارنة الأسعار بين المتاجر',
+    descEn: 'Compare item prices across different stores.',
+    descAr: 'مقارنة أسعار السلع بين المتاجر المختلفة.',
+    pro: true
   }
 ];
 
@@ -150,6 +161,7 @@ const ChartWidget: React.FC<{
   // Local Filtering State
   const [timeRange, setTimeRange] = useState<'1W' | '1M' | '1Y' | 'ALL'>('1M');
   const [filterEntity, setFilterEntity] = useState<string>('all');
+  const [detailedItem, setDetailedItem] = useState<string | null>(null);
 
   // 1. Filter Transactions based on local state
   const filteredTransactions = useMemo(() => {
@@ -329,6 +341,42 @@ const ChartWidget: React.FC<{
 
         return Object.values(chartDataMap).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       }
+      case 'price_comparison': {
+        // Find items bought from different stores
+        const itemStorePrices: Record<string, Record<string, number[]>> = {};
+        
+        filteredTransactions.forEach((t: Transaction) => {
+          if (t.type === TransactionType.EXPENSE && t.items && t.items.length > 0 && t.clientId) {
+            const clientName = clients.find(c => c.id === t.clientId)?.name || 'Unknown';
+            t.items.forEach(item => {
+              const name = item.name.trim().toLowerCase();
+              if (!name) return;
+              if (!itemStorePrices[name]) itemStorePrices[name] = {};
+              if (!itemStorePrices[name][clientName]) itemStorePrices[name][clientName] = [];
+              itemStorePrices[name][clientName].push(item.price);
+            });
+          }
+        });
+
+        // Filter items bought from at least 2 different stores
+        const comparedItems = Object.entries(itemStorePrices)
+          .filter(([_, stores]) => Object.keys(stores).length >= 2)
+          .sort((a, b) => Object.keys(b[1]).length - Object.keys(a[1]).length)
+          .slice(0, 5); // Top 5 items
+
+        if (comparedItems.length === 0) return [];
+
+        // Transform into Recharts format: { name: 'Milk', 'Store A': 2.5, 'Store B': 2.8 }
+        return comparedItems.map(([itemName, stores]) => {
+          const dataPoint: any = { name: itemName.charAt(0).toUpperCase() + itemName.slice(1) };
+          Object.entries(stores).forEach(([storeName, prices]) => {
+            // Calculate average price for the store
+            const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+            dataPoint[storeName] = Number(avgPrice.toFixed(2));
+          });
+          return dataPoint;
+        });
+      }
       default:
         return [];
     }
@@ -349,7 +397,7 @@ const ChartWidget: React.FC<{
   };
 
   return (
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-800 relative group animate-in zoom-in-95 duration-300">
+    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 relative group animate-in zoom-in-95 duration-300">
        <button 
          onClick={() => dispatch.removeAnalyticsWidget(widgetId)}
          className="absolute top-4 right-4 p-2 bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-rose-500 rounded-full opacity-0 group-hover:opacity-100 transition-all z-10"
@@ -562,10 +610,51 @@ const ChartWidget: React.FC<{
                          stroke={COLORS[idx % COLORS.length]} 
                          strokeWidth={3} 
                          dot={{r: 4, strokeWidth: 2, fill: '#fff'}} 
-                         activeDot={{r: 6, strokeWidth: 0}}
+                         activeDot={{r: 6, strokeWidth: 0, onClick: () => setDetailedItem(name)}}
+                         style={{ cursor: 'pointer' }}
                        />
                      ))}
                    </ComposedChart>
+                 );
+               }
+
+               // --- Store Price Comparison ---
+               if (widgetId === 'price_comparison') {
+                 if (chartData.length === 0) {
+                   return (
+                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                       <Tag size={32} className="mb-2 opacity-50" />
+                       <p className="text-xs font-bold text-center px-4">
+                         {language === 'ar' 
+                           ? 'لا توجد بيانات كافية. قم بشراء نفس السلعة من متاجر مختلفة للمقارنة.' 
+                           : 'Not enough data. Buy the same item from different stores to compare.'}
+                       </p>
+                     </div>
+                   );
+                 }
+
+                 // Extract store names (keys other than 'name')
+                 const storeNames = Object.keys(chartData[0] || {}).filter(k => k !== 'name');
+                 const COLORS = ['#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b', '#3b82f6'];
+
+                 return (
+                   <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                     <CartesianGrid stroke="#f1f5f9" vertical={false} strokeDasharray="3 3" />
+                     <XAxis dataKey="name" tick={{fontSize: 10, fill: '#64748b', fontWeight: 'bold'}} axisLine={false} tickLine={false} dy={10} />
+                     <YAxis tick={{fontSize: 10, fill: '#64748b', fontWeight: 'bold'}} axisLine={false} tickLine={false} dx={-10} />
+                     <Tooltip content={<CustomTooltip />} cursor={{fill: 'transparent'}} />
+                     <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '10px' }} />
+                     {storeNames.map((store, idx) => (
+                       <Bar 
+                         key={store} 
+                         dataKey={store} 
+                         name={store} 
+                         fill={COLORS[idx % COLORS.length]} 
+                         radius={[4, 4, 0, 0]}
+                         barSize={20}
+                       />
+                     ))}
+                   </BarChart>
                  );
                }
 
@@ -617,6 +706,122 @@ const ChartWidget: React.FC<{
              })()}
           </ResponsiveContainer>
        </div>
+
+       {/* Detailed Item Modal */}
+       {detailedItem && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setDetailedItem(null)}></div>
+           <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden relative flex flex-col animate-in zoom-in-95 duration-300">
+             <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+               <div className="flex items-center gap-4">
+                 <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-2xl flex items-center justify-center">
+                   <Tag size={24} />
+                 </div>
+                 <div>
+                   <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{detailedItem}</h3>
+                   <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-widest">
+                     {language === 'ar' ? 'سجل الأسعار المفصل' : 'Detailed Price History'}
+                   </p>
+                 </div>
+               </div>
+               <button onClick={() => setDetailedItem(null)} className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-rose-500 shadow-sm"><X size={20}/></button>
+             </div>
+             
+             <div className="overflow-y-auto p-6">
+               {/* Extract all transactions for this item */}
+               {(() => {
+                 const itemTransactions = transactions.filter((t: Transaction) => 
+                   t.items && t.items.some(i => i.name === detailedItem)
+                 ).map((t: Transaction) => {
+                   const item = t.items!.find(i => i.name === detailedItem)!;
+                   return {
+                     date: t.date,
+                     price: item.price,
+                     quantity: item.quantity,
+                     category: item.category,
+                     note: t.note,
+                     clientId: t.clientId
+                   };
+                 }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                 if (itemTransactions.length === 0) return null;
+
+                 const latestPrice = itemTransactions[0].price;
+                 const oldestPrice = itemTransactions[itemTransactions.length - 1].price;
+                 const priceChange = latestPrice - oldestPrice;
+                 const priceChangePercent = oldestPrice > 0 ? (priceChange / oldestPrice) * 100 : 0;
+
+                 return (
+                   <div className="space-y-6">
+                     {/* Stats Row */}
+                     <div className="grid grid-cols-3 gap-4">
+                       <div className="bg-slate-50 dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800">
+                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{language === 'ar' ? 'أحدث سعر' : 'Latest Price'}</p>
+                         <p className="text-2xl font-black text-slate-900 dark:text-white">${latestPrice.toLocaleString()}</p>
+                       </div>
+                       <div className="bg-slate-50 dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800">
+                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{language === 'ar' ? 'التغير' : 'Change'}</p>
+                         <div className="flex items-center gap-2">
+                           <p className={`text-2xl font-black ${priceChange > 0 ? 'text-rose-500' : priceChange < 0 ? 'text-emerald-500' : 'text-slate-500'}`}>
+                             {priceChange > 0 ? '+' : ''}{priceChange.toLocaleString()}
+                           </p>
+                           <span className={`text-xs font-bold px-2 py-1 rounded-lg ${priceChange > 0 ? 'bg-rose-100 text-rose-700' : priceChange < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
+                             {priceChangePercent > 0 ? '+' : ''}{priceChangePercent.toFixed(1)}%
+                           </span>
+                         </div>
+                       </div>
+                       <div className="bg-slate-50 dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800">
+                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{language === 'ar' ? 'مرات الشراء' : 'Purchases'}</p>
+                         <p className="text-2xl font-black text-slate-900 dark:text-white">{itemTransactions.length}</p>
+                       </div>
+                     </div>
+
+                     {/* Detailed List */}
+                     <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+                       <table className="w-full text-left border-collapse">
+                         <thead>
+                           <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{language === 'ar' ? 'السعر' : 'Price'}</th>
+                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{language === 'ar' ? 'الكمية' : 'Qty'}</th>
+                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{language === 'ar' ? 'المتجر/العميل' : 'Store/Client'}</th>
+                           </tr>
+                         </thead>
+                         <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+                           {itemTransactions.map((t: any, idx: number) => {
+                             const client = globalState.clients.find((c: any) => c.id === t.clientId);
+                             return (
+                               <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                                 <td className="px-6 py-4 text-xs font-bold text-slate-600 dark:text-slate-300">
+                                   {new Date(t.date).toLocaleDateString()}
+                                 </td>
+                                 <td className="px-6 py-4 text-sm font-black text-slate-900 dark:text-white">
+                                   ${t.price.toLocaleString()}
+                                 </td>
+                                 <td className="px-6 py-4 text-xs font-bold text-slate-500">
+                                   {t.quantity}
+                                 </td>
+                                 <td className="px-6 py-4">
+                                   <div className="flex items-center gap-2">
+                                     <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px]">
+                                       {client?.icon || '🏪'}
+                                     </span>
+                                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{client?.name || '-'}</span>
+                                   </div>
+                                 </td>
+                               </tr>
+                             )
+                           })}
+                         </tbody>
+                       </table>
+                     </div>
+                   </div>
+                 );
+               })()}
+             </div>
+           </div>
+         </div>
+       )}
     </div>
   );
 };
@@ -646,17 +851,17 @@ const Analytics: React.FC = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-3 gap-3">
-         <div className="bg-emerald-500 text-white p-5 rounded-[24px] shadow-lg shadow-emerald-500/20">
+         <div className="bg-emerald-500 text-white p-5 rounded-3xl shadow-lg shadow-emerald-500/20">
             <ArrowUpRight size={24} className="mb-2 opacity-80" />
             <p className="text-[9px] font-black uppercase tracking-widest opacity-80">{language === 'ar' ? 'الدخل' : 'In'}</p>
             <p className="text-sm font-black">${totalIncome.toLocaleString()}</p>
          </div>
-         <div className="bg-rose-500 text-white p-5 rounded-[24px] shadow-lg shadow-rose-500/20">
+         <div className="bg-rose-500 text-white p-5 rounded-3xl shadow-lg shadow-rose-500/20">
             <ArrowDownRight size={24} className="mb-2 opacity-80" />
             <p className="text-[9px] font-black uppercase tracking-widest opacity-80">{language === 'ar' ? 'المصاريف' : 'Out'}</p>
             <p className="text-sm font-black">${totalExpense.toLocaleString()}</p>
          </div>
-         <div className="bg-blue-600 text-white p-5 rounded-[24px] shadow-lg shadow-blue-500/20">
+         <div className="bg-blue-600 text-white p-5 rounded-3xl shadow-lg shadow-blue-500/20">
             <Target size={24} className="mb-2 opacity-80" />
             <p className="text-[9px] font-black uppercase tracking-widest opacity-80">{language === 'ar' ? 'الادخار' : 'Savings'}</p>
             <p className="text-sm font-black">{savingsRate.toFixed(1)}%</p>
@@ -677,7 +882,7 @@ const Analytics: React.FC = () => {
          {/* Add Widget Button */}
          <button 
            onClick={() => setShowAddModal(true)}
-           className="min-h-[350px] rounded-[32px] border-4 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center gap-3 text-slate-400 hover:text-blue-500 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-all group"
+           className="min-h-[350px] rounded-3xl border-4 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center gap-3 text-slate-400 hover:text-blue-500 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-all group"
          >
            <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-900 group-hover:scale-110 transition-transform flex items-center justify-center">
              <Plus size={32} />
@@ -690,7 +895,7 @@ const Analytics: React.FC = () => {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setShowAddModal(false)}></div>
-          <div className="bg-white dark:bg-slate-800 rounded-[40px] shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden relative flex flex-col animate-in zoom-in-95 duration-300">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden relative flex flex-col animate-in zoom-in-95 duration-300">
              <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                <div>
                  <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'مكتبة التحليلات' : 'Analytics Library'}</h3>
@@ -705,7 +910,7 @@ const Analytics: React.FC = () => {
                   const isLocked = widget.pro && !isPro;
                   
                   return (
-                    <div key={widget.id} className={`p-6 rounded-[32px] border transition-all relative ${isActive ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-blue-300'}`}>
+                    <div key={widget.id} className={`p-6 rounded-3xl border transition-all relative ${isActive ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-blue-300'}`}>
                        <div className="flex items-start justify-between mb-4">
                           <div className={`w-12 h-12 ${widget.bgColor} ${widget.color} rounded-2xl flex items-center justify-center`}>
                              <widget.icon size={24} />
@@ -728,7 +933,7 @@ const Analytics: React.FC = () => {
                        <p className="text-[10px] font-bold text-slate-500 leading-relaxed">{language === 'ar' ? widget.descAr : widget.descEn}</p>
                        
                        {isLocked && (
-                         <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-[1px] rounded-[32px] flex items-center justify-center">
+                         <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-[1px] rounded-3xl flex items-center justify-center">
                             <button onClick={() => { setShowAddModal(false); window.location.hash = '#/upgrade'; }} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase shadow-xl hover:scale-105 transition-transform">
                                Unlock Pro
                             </button>
@@ -746,7 +951,7 @@ const Analytics: React.FC = () => {
                         {state.customWidgets.map((widget: CustomWidget) => {
                             const isActive = activeWidgets.includes(widget.id);
                             return (
-                                <div key={widget.id} className={`p-6 rounded-[32px] border transition-all relative ${isActive ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-purple-300'}`}>
+                                <div key={widget.id} className={`p-6 rounded-3xl border transition-all relative ${isActive ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-purple-300'}`}>
                                     <div className="flex items-start justify-between mb-4">
                                         <div className={`w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-2xl flex items-center justify-center`}>
                                             <BrainCircuit size={24} />

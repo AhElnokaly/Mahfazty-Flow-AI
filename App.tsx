@@ -334,7 +334,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       }}
     >
       <HeaderActions />
-      <main className={`flex-1 w-full max-w-screen-xl mx-auto px-4 py-8 md:px-8 mb-24 relative ${state.language === 'ar' ? 'text-right' : 'text-left'}`}>
+        {/* +++ تم تعديل المسافات السفلية (mb-28) لضمان عدم تغطية المحتوى بناءً على طلبك +++ */}
+        <main className={`flex-1 w-full max-w-screen-xl mx-auto px-4 py-6 md:px-8 mb-28 relative ${state.language === 'ar' ? 'text-right' : 'text-left'}`}>
         {state.notification && (
           <div className="absolute top-0 left-0 right-0 z-[60] flex justify-center px-4 pointer-events-none">
             <div className={`mt-2 px-6 py-4 rounded-3xl shadow-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 w-full max-w-md border border-white/10 backdrop-blur-xl pointer-events-auto transform hover:scale-[1.02] transition-transform ${state.notification.type === 'success' ? 'bg-emerald-500/90 text-white' : 'bg-rose-500/90 text-white'}`}>
@@ -348,17 +349,18 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         )}
         {children}
       </main>
-      <div className="fixed bottom-6 left-0 right-0 flex justify-center z-40 px-4">
-        <nav className="h-16 md:h-18 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/40 dark:border-slate-700/50 flex items-center justify-around px-2 sm:px-4 rounded-[2.5rem] shadow-[0_20px_40px_rgba(0,0,0,0.1)] w-full sm:w-[480px]">
+      <div className="fixed bottom-0 sm:bottom-6 left-0 right-0 flex justify-center z-40 sm:px-4">
+        {/* +++ تم تعديل شريط التنقل ليكون بعرض الشاشة على الموبايل مع تحسين الخطوط بناءً على طلبك +++ */}
+        <nav className="h-16 md:h-18 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t sm:border border-slate-200 dark:border-slate-800 flex items-center justify-around px-2 sm:px-4 sm:rounded-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.05)] sm:shadow-[0_20px_40px_rgba(0,0,0,0.1)] w-full sm:w-[480px]">
           {navItems.map((item) => (
-            <Link key={item.path} to={item.path} className={`flex flex-col items-center gap-1 p-2 transition-all ${location.pathname === item.path ? 'text-blue-600 dark:text-blue-400 -translate-y-1.5' : 'text-slate-400 hover:text-slate-600'}`}>
+            <Link key={item.path} to={item.path} className={`flex flex-col items-center gap-1 p-2 transition-all ${location.pathname === item.path ? 'text-blue-600 dark:text-blue-400 -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}>
               <item.icon size={22} strokeWidth={location.pathname === item.path ? 2.5 : 2} />
-              <span className={`text-[8px] font-black uppercase tracking-widest ${location.pathname === item.path ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>{item.label}</span>
+              <span className={`text-[10px] font-bold ${location.pathname === item.path ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>{item.label}</span>
             </Link>
           ))}
         </nav>
       </div>
-      <Link to="/add" className="fixed bottom-24 right-6 sm:right-[calc(50%-230px)] w-14 h-14 bg-blue-600 text-white rounded-[22px] shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white dark:border-slate-800">
+      <Link to="/add" className="fixed bottom-20 sm:bottom-24 right-6 sm:right-[calc(50%-230px)] w-14 h-14 bg-blue-600 text-white rounded-[22px] shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white dark:border-slate-800">
         <Plus size={28} />
       </Link>
     </div>

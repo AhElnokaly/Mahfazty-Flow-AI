@@ -7,6 +7,7 @@ import { AuthModal } from '../components/AuthModal';
 import { 
   Trash2, Edit3, Globe, Zap, Share2, Upload, Server, Info, ToggleLeft, ToggleRight, Check, CreditCard, ExternalLink, Key, Plus, MessageCircle, Mail, AlertTriangle, X, LogOut, ShieldCheck, Eye, EyeOff, RefreshCcw, Cloud, CloudOff, RefreshCw
 } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
 
 const AVATARS = [
   'Ahmed', 'Sara', 'Mohamed', 'Mona', 'Zaid', 'Noor', 'Adam', 'Eva', 'Leo', 'Mia'
@@ -22,6 +23,9 @@ const Settings: React.FC = () => {
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showCloudAuth, setShowCloudAuth] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Delete confirmation state
+  const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
 
   const handleSaveProfile = () => {
     dispatch.updateProfile(profileForm);
@@ -42,6 +46,13 @@ const Settings: React.FC = () => {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', `mahfazty_backup.json`);
     linkElement.click();
+  };
+
+  const confirmDeleteKey = () => {
+    if (keyToDelete) {
+      dispatch.deleteApiKey(keyToDelete);
+      setKeyToDelete(null);
+    }
   };
 
   return (
@@ -133,7 +144,9 @@ const Settings: React.FC = () => {
                                <RefreshCcw size={16} />
                              </button>
                            )}
-                           <button onClick={() => dispatch.deleteApiKey(key.id)} className="p-2 hover:bg-rose-100 text-rose-500 rounded-lg transition-colors">
+                           <button onClick={() => {
+                             setKeyToDelete(key.id);
+                           }} className="p-2 hover:bg-rose-100 text-rose-500 rounded-lg transition-colors">
                              <Trash2 size={16} />
                            </button>
                         </div>
@@ -393,6 +406,16 @@ const Settings: React.FC = () => {
       <div className="p-16 text-center space-y-6 opacity-30">
         <p className="text-[8px] font-black uppercase tracking-[8px] text-slate-400">Mahfazty Flow v12.1 Security Cloud Edition</p>
       </div>
+
+      <ConfirmModal
+        isOpen={!!keyToDelete}
+        onClose={() => setKeyToDelete(null)}
+        onConfirm={confirmDeleteKey}
+        title={language === 'ar' ? 'تأكيد المسح' : 'Confirm Delete'}
+        message={language === 'ar' ? 'هل أنت متأكد من مسح مفتاح الـ API؟ لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this API key? This action cannot be undone.'}
+        confirmText={language === 'ar' ? 'مسح' : 'Delete'}
+        cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
+      />
     </div>
   );
 };

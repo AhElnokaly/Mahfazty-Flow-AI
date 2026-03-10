@@ -5,7 +5,7 @@ import { useApp } from '../store';
 import { 
   Plus, MoreHorizontal, ArrowUpRight, Sparkles, Zap, ShieldCheck,
   ArrowDownLeft, ArrowUpLeft, Wallet, ArrowDownRight, TrendingUp, TrendingDown,
-  Target, ChevronRight, PieChart as PieIcon
+  Target, ChevronRight, PieChart as PieIcon, Calendar, Clock, ArrowRight
 } from 'lucide-react';
 import { 
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Tooltip 
@@ -17,9 +17,30 @@ import { useNavigate } from 'react-router-dom';
 const Dashboard: React.FC = () => {
   const { state } = useApp();
   const navigate = useNavigate();
-  const { language, walletBalance, transactions, groups, isPro, baseCurrency, isPrivacyMode } = state;
+  const { language, walletBalance, transactions, groups, installments, isPro, baseCurrency, isPrivacyMode } = state;
 
   // --- Calculations ---
+  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const lastMonthStr = lastMonthDate.toISOString().slice(0, 7);
+
+  const currentMonthIncome = transactions
+    .filter(t => t.type === TransactionType.INCOME && t.date.startsWith(currentMonthStr))
+    .reduce((s, t) => s + t.amount, 0);
+  const lastMonthIncome = transactions
+    .filter(t => t.type === TransactionType.INCOME && t.date.startsWith(lastMonthStr))
+    .reduce((s, t) => s + t.amount, 0);
+  const incomeChange = lastMonthIncome === 0 ? 0 : ((currentMonthIncome - lastMonthIncome) / lastMonthIncome) * 100;
+
+  const currentMonthExpense = transactions
+    .filter(t => t.type === TransactionType.EXPENSE && t.date.startsWith(currentMonthStr))
+    .reduce((s, t) => s + t.amount, 0);
+  const lastMonthExpense = transactions
+    .filter(t => t.type === TransactionType.EXPENSE && t.date.startsWith(lastMonthStr))
+    .reduce((s, t) => s + t.amount, 0);
+  const expenseChange = lastMonthExpense === 0 ? 0 : ((currentMonthExpense - lastMonthExpense) / lastMonthExpense) * 100;
+
   const totalExpenses = transactions
     .filter(t => t.type === TransactionType.EXPENSE)
     .reduce((s, t) => s + t.amount, 0);
@@ -28,7 +49,15 @@ const Dashboard: React.FC = () => {
     .filter(t => t.type === TransactionType.INCOME)
     .reduce((s, t) => s + t.amount, 0);
 
-  const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
+  const savingsRate = currentMonthIncome > 0 ? ((currentMonthIncome - currentMonthExpense) / currentMonthIncome) * 100 : 0;
+
+  const recentTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
+  }, [transactions]);
+
+  const upcomingInstallments = useMemo(() => {
+    return installments.filter(i => i.status === 'active').slice(0, 3);
+  }, [installments]);
 
   const accountCards = useMemo(() => {
     // Elegant Gradients instead of flat colors
@@ -105,82 +134,112 @@ const Dashboard: React.FC = () => {
   const privacyClass = isPrivacyMode ? 'blur-sm select-none' : '';
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700 pb-20">
+    <div className="space-y-6 animate-in fade-in duration-700 pb-20 px-2 max-w-5xl mx-auto">
       
-      {/* 1. AI Quick Audit Card */}
-      <section>
+      {/* Quick Actions & AI Card */}
+      {/* +++ تم تعديل حواف البطاقات والمسافات الداخلية بناءً على طلبك +++ */}
+      <section className="flex flex-col md:flex-row gap-4">
         <div 
           onClick={() => navigate('/ai')}
-          className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-indigo-700 rounded-[32px] p-8 md:p-10 text-white shadow-xl shadow-blue-500/20 cursor-pointer group transition-all hover:scale-[1.01]"
+          className="flex-1 relative overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-indigo-700 rounded-3xl p-5 md:p-6 text-white shadow-lg shadow-blue-500/20 cursor-pointer group transition-all hover:scale-[1.01]"
         >
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:scale-110 transition-transform duration-1000"></div>
           
           <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                  <Sparkles size={20} className="text-amber-300 animate-pulse" />
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Sparkles size={16} className="text-amber-300 animate-pulse" />
                 </div>
-                <h3 className="text-lg md:text-xl font-black uppercase tracking-widest">{language === 'ar' ? 'فحص مالي ذكي' : 'AI Financial Audit'}</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wide">{language === 'ar' ? 'فحص مالي ذكي' : 'AI Financial Audit'}</h3>
               </div>
-              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/20 ${isPro ? 'bg-amber-400 text-amber-950' : 'bg-white/10 text-white/60'}`}>
-                {isPro ? <Zap size={12} fill="currentColor" /> : <ShieldCheck size={12} />}
-                <span className="text-[9px] font-black uppercase tracking-widest">
+              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border border-white/20 ${isPro ? 'bg-amber-400 text-amber-950' : 'bg-white/10 text-white/60'}`}>
+                {isPro ? <Zap size={10} fill="currentColor" /> : <ShieldCheck size={10} />}
+                <span className="text-[10px] font-bold uppercase tracking-wide">
                   {isPro ? 'Pro Powered' : 'Standard'}
                 </span>
               </div>
             </div>
             
             <div className="flex items-center justify-between">
-              <p className="text-xs md:text-sm font-bold text-blue-100/80 leading-relaxed max-w-[400px]">
+              <p className="text-xs font-bold text-blue-100/80 leading-relaxed max-w-[300px]">
                 {isPro 
                   ? (language === 'ar' ? 'تم تفعيل Gemini Pro لتحليل عميق لتوجهات السوق والأسعار الحقيقية.' : 'Gemini Pro active: Deep analysis of market trends and real-time prices.')
                   : (language === 'ar' ? 'احصل على تحليل فوري لنفقاتك وتوصيات لتحسين ادخارك.' : 'Get instant analysis of your spending and tips to boost savings.')}
               </p>
-              <ArrowUpRight size={28} className="group-hover:translate-x-2 group-hover:-translate-y-2 transition-transform" />
+              <ArrowUpRight size={24} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
             </div>
           </div>
         </div>
+
+        <button 
+          onClick={() => navigate('/history')}
+          className="md:w-32 bg-emerald-500 hover:bg-emerald-600 text-white rounded-3xl p-5 md:p-6 flex flex-col items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
+        >
+          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+            <Plus size={24} />
+          </div>
+          <span className="text-xs font-bold uppercase tracking-wide text-center">
+            {language === 'ar' ? 'إضافة' : 'Quick Add'}
+          </span>
+        </button>
       </section>
 
       {/* 2. Global Stats Bar (Dedicated Income/Expense Cards) */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
          {/* Income Stat */}
-         <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-emerald-100 dark:border-emerald-900/30 shadow-sm flex items-center justify-between group hover:shadow-lg transition-all">
-            <div>
-               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'إجمالي الدخل' : 'Total Income'}</p>
-               <p className={`text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter ${privacyClass}`}>
-                 ${totalIncome.toLocaleString()}
-               </p>
+         <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-emerald-100 dark:border-emerald-900/30 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
+            <div className="flex justify-between items-start mb-2">
+               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{language === 'ar' ? 'دخل الشهر' : 'Month Income'}</p>
+               <div className="w-8 h-8 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <TrendingUp size={16} strokeWidth={3} />
+               </div>
             </div>
-            <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-               <TrendingUp size={24} strokeWidth={3} />
+            <div>
+               <p className={`text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter ${privacyClass}`}>
+                 ${currentMonthIncome.toLocaleString()}
+               </p>
+               <p className={`text-[10px] font-bold mt-1 flex items-center gap-1 ${incomeChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                 {incomeChange >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                 {Math.abs(incomeChange).toFixed(1)}% {language === 'ar' ? 'عن الشهر الماضي' : 'vs last month'}
+               </p>
             </div>
          </div>
 
          {/* Expense Stat */}
-         <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-rose-100 dark:border-rose-900/30 shadow-sm flex items-center justify-between group hover:shadow-lg transition-all">
-            <div>
-               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'إجمالي المصاريف' : 'Total Expenses'}</p>
-               <p className={`text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tighter ${privacyClass}`}>
-                 ${totalExpenses.toLocaleString()}
-               </p>
+         <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-rose-100 dark:border-rose-900/30 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
+            <div className="flex justify-between items-start mb-2">
+               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{language === 'ar' ? 'مصاريف الشهر' : 'Month Expenses'}</p>
+               <div className="w-8 h-8 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <TrendingDown size={16} strokeWidth={3} />
+               </div>
             </div>
-            <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-               <TrendingDown size={24} strokeWidth={3} />
+            <div>
+               <p className={`text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tighter ${privacyClass}`}>
+                 ${currentMonthExpense.toLocaleString()}
+               </p>
+               <p className={`text-[10px] font-bold mt-1 flex items-center gap-1 ${expenseChange <= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                 {expenseChange <= 0 ? <TrendingDown size={10} /> : <TrendingUp size={10} />}
+                 {Math.abs(expenseChange).toFixed(1)}% {language === 'ar' ? 'عن الشهر الماضي' : 'vs last month'}
+               </p>
             </div>
          </div>
 
          {/* Savings Stat */}
-         <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-blue-100 dark:border-blue-900/30 shadow-sm flex items-center justify-between group hover:shadow-lg transition-all">
+         <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-blue-100 dark:border-blue-900/30 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
+            <div className="flex justify-between items-start mb-2">
+               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{language === 'ar' ? 'معدل الادخار' : 'Savings Rate'}</p>
+               <div className="w-8 h-8 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Target size={16} strokeWidth={3} />
+               </div>
+            </div>
             <div>
-               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'معدل الادخار' : 'Savings Rate'}</p>
                <p className="text-2xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">
                  {savingsRate.toFixed(1)}%
                </p>
-            </div>
-            <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-               <Target size={24} strokeWidth={3} />
+               <div className="mt-2 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                 <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(Math.max(savingsRate, 0), 100)}%` }} />
+               </div>
             </div>
          </div>
       </section>
@@ -188,33 +247,33 @@ const Dashboard: React.FC = () => {
       {/* 3. Group Accounts Slider/Grid */}
       <section className="space-y-4">
         <div className="flex items-center justify-between px-2">
-          <h3 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400">{language === 'ar' ? 'مجموعات الحسابات' : 'Group Portfolios'}</h3>
-          <button onClick={() => navigate('/groups')} className="text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-widest hover:underline flex items-center gap-1">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">{language === 'ar' ? 'مجموعات الحسابات' : 'Group Portfolios'}</h3>
+          <button onClick={() => navigate('/groups')} className="text-blue-600 dark:text-blue-400 text-xs font-bold uppercase tracking-wide hover:underline flex items-center gap-1">
             {language === 'ar' ? 'إدارة' : 'Manage'} <MoreHorizontal size={14} />
           </button>
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {accountCards.map(account => (
-            <div key={account.id} className={`${account.style.bg} ${account.style.shadow} p-6 rounded-[32px] text-white relative overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer`}>
+            <div key={account.id} className={`${account.style.bg} ${account.style.shadow} p-5 rounded-3xl text-white relative overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer`}>
                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:scale-125 transition-transform duration-700"></div>
                <div className="relative z-10">
-                 <div className="flex justify-between items-start mb-6">
-                    <span className="text-3xl">{account.icon || '📁'}</span>
-                    <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
-                      <Wallet size={16} />
+                 <div className="flex justify-between items-start mb-4">
+                    <span className="text-2xl">{account.icon || '📁'}</span>
+                    <div className="bg-white/20 p-1.5 rounded-lg backdrop-blur-md">
+                      <Wallet size={14} />
                     </div>
                  </div>
-                 <h4 className="text-xs font-black uppercase tracking-widest opacity-70 mb-1">{account.name}</h4>
-                 <p className={`text-2xl font-black tracking-tighter ${privacyClass}`}>${account.balance.toLocaleString()}</p>
+                 <h4 className="text-xs font-bold uppercase tracking-wide opacity-80 mb-1">{account.name}</h4>
+                 <p className={`text-xl font-black tracking-tighter ${privacyClass}`}>${account.balance.toLocaleString()}</p>
                  
                  {account.monthlyBudget > 0 && (
                    <div className="mt-3">
-                     <div className="flex justify-between text-[8px] font-black uppercase tracking-widest opacity-80 mb-1">
+                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-wide opacity-90 mb-1">
                        <span>{Math.min((account.expense / account.monthlyBudget) * 100).toFixed(0)}% Used</span>
                        <span>${account.monthlyBudget.toLocaleString()}</span>
                      </div>
-                     <div className="h-1.5 bg-black/20 rounded-full overflow-hidden">
+                     <div className="h-1 bg-black/20 rounded-full overflow-hidden">
                        <div 
                          className={`h-full ${account.expense > account.monthlyBudget ? 'bg-rose-400' : 'bg-white/90'}`} 
                          style={{ width: `${Math.min((account.expense / account.monthlyBudget) * 100, 100)}%` }}
@@ -223,12 +282,12 @@ const Dashboard: React.FC = () => {
                    </div>
                  )}
 
-                 <div className="mt-4 pt-4 border-t border-white/10 flex justify-between">
-                    <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-300">
-                      <ArrowUpLeft size={10} /> <span className={privacyClass}>${account.income.toLocaleString()}</span>
+                 <div className="mt-3 pt-3 border-t border-white/10 flex justify-between">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-300">
+                      <ArrowUpLeft size={12} /> <span className={privacyClass}>${account.income.toLocaleString()}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-[9px] font-bold text-rose-300">
-                      <ArrowDownLeft size={10} /> <span className={privacyClass}>${account.expense.toLocaleString()}</span>
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-rose-300">
+                      <ArrowDownLeft size={12} /> <span className={privacyClass}>${account.expense.toLocaleString()}</span>
                     </div>
                  </div>
                </div>
@@ -237,10 +296,86 @@ const Dashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* 4. Mini Insights Section */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
-          <h3 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-6">{language === 'ar' ? 'توزيع المصاريف' : 'Spending Mix'}</h3>
+      {/* 4. Recent & Upcoming Section */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Recent Transactions */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400">{language === 'ar' ? 'أحدث المعاملات' : 'Recent Transactions'}</h3>
+            <button onClick={() => navigate('/history')} className="text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-widest hover:underline flex items-center gap-1">
+              {language === 'ar' ? 'عرض الكل' : 'View All'} <ArrowRight size={12} className={language === 'ar' ? 'rotate-180' : ''} />
+            </button>
+          </div>
+          <div className="space-y-3">
+            {recentTransactions.length > 0 ? recentTransactions.map(t => {
+              const group = groups.find(g => g.id === t.groupId);
+              const isIncome = t.type === TransactionType.INCOME;
+              return (
+                <div key={t.id} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer" onClick={() => navigate('/history')}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${isIncome ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30'}`}>
+                      {group?.icon || '💰'}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">{t.title}</p>
+                      <p className="text-[10px] text-slate-500 font-medium">{t.date}</p>
+                    </div>
+                  </div>
+                  <p className={`text-sm font-black ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} ${privacyClass}`}>
+                    {isIncome ? '+' : '-'}${t.amount.toLocaleString()}
+                  </p>
+                </div>
+              );
+            }) : (
+              <div className="text-center py-6 text-slate-400 text-xs font-medium">
+                {language === 'ar' ? 'لا توجد معاملات بعد' : 'No transactions yet'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Upcoming Installments */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400">{language === 'ar' ? 'الالتزامات القادمة' : 'Upcoming Bills'}</h3>
+            <button onClick={() => navigate('/installments')} className="text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-widest hover:underline flex items-center gap-1">
+              {language === 'ar' ? 'إدارة' : 'Manage'} <ArrowRight size={12} className={language === 'ar' ? 'rotate-180' : ''} />
+            </button>
+          </div>
+          <div className="space-y-3">
+            {upcomingInstallments.length > 0 ? upcomingInstallments.map(inst => {
+              const progress = (inst.paidCount / inst.installmentCount) * 100;
+              return (
+                <div key={inst.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-amber-500" />
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">{inst.name}</span>
+                    </div>
+                    <span className={`text-xs font-black text-slate-900 dark:text-white ${privacyClass}`}>${inst.monthlyAmount.toLocaleString()}/mo</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-widest">
+                    <span>{inst.paidCount} of {inst.installmentCount} Paid</span>
+                    <span>{progress.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500 rounded-full" style={{ width: `${progress}%` }} />
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="text-center py-6 text-slate-400 text-xs font-medium">
+                {language === 'ar' ? 'لا توجد التزامات قادمة' : 'No upcoming bills'}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* 5. Mini Insights Section */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+          <h3 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">{language === 'ar' ? 'توزيع المصاريف' : 'Spending Mix'}</h3>
           {topExpenseCategory ? (
             <div className="flex items-center gap-8">
                <div className="w-32 h-32">
@@ -269,8 +404,8 @@ const Dashboard: React.FC = () => {
           )}
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
-           <h3 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-6">{language === 'ar' ? 'التدفق المالي' : 'Financial Velocity'}</h3>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+           <h3 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">{language === 'ar' ? 'التدفق المالي' : 'Financial Velocity'}</h3>
            <div className="h-32 w-full">
              <ResponsiveContainer width="100%" height="100%">
                <AreaChart data={trendData}>
