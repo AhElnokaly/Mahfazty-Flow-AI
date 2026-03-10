@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../store';
-import { TransactionType } from '../types';
-import { ArrowLeft, Save, TrendingUp, TrendingDown, Calendar, User, FileText, ChevronRight, Layers, Sparkles, Loader2, Camera, Scan } from 'lucide-react';
+import { TransactionType, TransactionItem } from '../types';
+import { ArrowLeft, Save, TrendingUp, TrendingDown, Calendar, User, FileText, ChevronRight, Layers, Sparkles, Loader2, Camera, Scan, Plus, Trash2, ShoppingCart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { suggestTransactionNote, sendChatMessage } from '../geminiService';
 
@@ -22,6 +22,8 @@ const AddFlow: React.FC = () => {
   const [note, setNote] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [items, setItems] = useState<TransactionItem[]>([]);
+  const [showItems, setShowItems] = useState(false);
   
   const [date, setDate] = useState(() => {
     const d = new Date();
@@ -39,11 +41,20 @@ const AddFlow: React.FC = () => {
     }
   }, [groupId]);
 
+  // Recalculate total amount when items change
+  useEffect(() => {
+    if (items.length > 0) {
+      const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      setAmount(total.toString());
+    }
+  }, [items]);
+
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
   };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (items.length > 0) return; // Prevent manual edit if items exist
     const rawValue = e.target.value.replace(/[^0-9.]/g, '');
     const parts = rawValue.split('.');
     if (parts.length > 2) return;
@@ -57,6 +68,27 @@ const AddFlow: React.FC = () => {
     return parts.join('.');
   };
 
+  const handleAddItem = () => {
+    setItems([...items, { id: Date.now().toString(), name: '', price: 0, quantity: 1 }]);
+  };
+
+  const handleUpdateItem = (id: string, field: keyof TransactionItem, value: string | number) => {
+    setItems(items.map(item => {
+      if (item.id === id) {
+        return { ...item, [field]: value };
+      }
+      return item;
+    }));
+  };
+
+  const handleRemoveItem = (id: string) => {
+    const newItems = items.filter(item => item.id !== id);
+    setItems(newItems);
+    if (newItems.length === 0) {
+      setShowItems(false);
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -68,7 +100,7 @@ const AddFlow: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const response = await sendChatMessage(state, dispatch, "Analyze this receipt. Extract ONLY a JSON: { 'amount': number, 'date': 'YYYY-MM-DD', 'note': 'string summary', 'type': 'EXPENSE'|'INCOME' }. If not a receipt, return empty JSON.", false, { data: base64, mimeType: file.type });
+        const response = await sendChatMessage(state, dispatch, "Analyze this receipt. Extract ONLY a JSON: { 'amount': number, 'date': 'YYYY-MM-DD', 'note': 'string summary', 'type': 'EXPENSE'|'INCOME', 'items': [{'name': 'string', 'price': number, 'quantity': number}] }. If not a receipt, return empty JSON.", false, { data: base64, mimeType: file.type });
         
         // Find JSON in response text
         const jsonMatch = response.text.match(/\{.*\}/s);
@@ -78,6 +110,15 @@ const AddFlow: React.FC = () => {
           if (data.date) setDate(data.date);
           if (data.note) setNote(data.note);
           if (data.type) setType(data.type === 'INCOME' ? TransactionType.INCOME : TransactionType.EXPENSE);
+          if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+            setItems(data.items.map((item: any) => ({
+              id: Date.now().toString() + Math.random().toString(),
+              name: item.name || 'Item',
+              price: Number(item.price) || 0,
+              quantity: Number(item.quantity) || 1
+            })));
+            setShowItems(true);
+          }
           dispatch.setNotification({ message: language === 'ar' ? 'تم استخراج البيانات بنجاح' : 'Receipt scanned successfully', type: 'success' });
         }
       };
@@ -99,6 +140,9 @@ const AddFlow: React.FC = () => {
       return;
     }
 
+    // Filter out empty items
+    const validItems = items.filter(item => item.name.trim() !== '' && item.price > 0);
+
     dispatch.addTransaction({
       amount: parseFloat(amount),
       currency,
@@ -107,6 +151,7 @@ const AddFlow: React.FC = () => {
       clientId,
       note,
       date,
+      items: validItems.length > 0 ? validItems : undefined
     });
     
     navigate('/');
@@ -213,6 +258,83 @@ const AddFlow: React.FC = () => {
                   <span className="text-[10px] uppercase tracking-widest">{language === 'ar' ? 'دخل' : 'Income'}</span>
                 </button>
               </div>
+            </div>
+
+            {/* Itemized Transaction Section */}
+            <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800/50">
+              <div className="flex items-center justify-between mb-4">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[4px] px-2 flex items-center gap-2">
+                  <ShoppingCart size={14} />
+                  {language === 'ar' ? 'تفاصيل السلع (اختياري)' : 'Itemized Details (Optional)'}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newShowItems = !showItems;
+                    setShowItems(newShowItems);
+                    if (newShowItems && items.length === 0) {
+                      handleAddItem();
+                    }
+                  }}
+                  className="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1 hover:underline"
+                >
+                  {showItems ? (language === 'ar' ? 'إخفاء' : 'Hide') : (language === 'ar' ? 'إضافة سلع' : 'Add Items')}
+                </button>
+              </div>
+
+              {showItems && (
+                <div className="space-y-4 animate-in slide-in-from-top-2">
+                  {items.map((item, index) => (
+                    <div key={item.id} className="flex flex-col sm:flex-row gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 relative group">
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
+                          placeholder={language === 'ar' ? 'اسم السلعة...' : 'Item name...'}
+                          className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="w-24">
+                          <input
+                            type="number"
+                            value={item.price || ''}
+                            onChange={(e) => handleUpdateItem(item.id, 'price', parseFloat(e.target.value) || 0)}
+                            placeholder={language === 'ar' ? 'السعر' : 'Price'}
+                            className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div className="w-20">
+                          <input
+                            type="number"
+                            value={item.quantity || ''}
+                            onChange={(e) => handleUpdateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
+                            placeholder={language === 'ar' ? 'الكمية' : 'Qty'}
+                            className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(item.id)}
+                        className="absolute -top-2 -right-2 sm:static sm:top-auto sm:right-auto w-8 h-8 sm:w-auto sm:h-auto bg-rose-100 sm:bg-transparent text-rose-500 rounded-full sm:rounded-none flex items-center justify-center hover:text-rose-600 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="w-full py-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-400 hover:text-blue-500 hover:border-blue-500 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus size={16} />
+                    {language === 'ar' ? 'إضافة سلعة أخرى' : 'Add another item'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

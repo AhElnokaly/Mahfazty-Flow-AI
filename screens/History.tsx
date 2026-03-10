@@ -26,6 +26,9 @@ const History: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedType, setSelectedType] = useState<'all' | TransactionType>('all');
 
   // Editing logic
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -81,15 +84,26 @@ const History: React.FC = () => {
     }
 
     const now = new Date();
-    if (viewMode === 'list' && timeRange !== 'all') {
-      result = result.filter(t => {
-        const tDate = new Date(t.date);
-        const diffDays = Math.ceil(Math.abs(now.getTime() - tDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (timeRange === 'weekly') return diffDays <= 7;
-        if (timeRange === 'monthly') return diffDays <= 30;
-        if (timeRange === 'yearly') return diffDays <= 365;
-        return true;
-      });
+    if (viewMode === 'list') {
+      if (startDate) {
+        result = result.filter(t => t.date >= startDate);
+      }
+      if (endDate) {
+        result = result.filter(t => t.date <= endDate);
+      }
+      if (selectedType !== 'all') {
+        result = result.filter(t => t.type === selectedType);
+      }
+      if (timeRange !== 'all' && !startDate && !endDate) {
+        result = result.filter(t => {
+          const tDate = new Date(t.date);
+          const diffDays = Math.ceil(Math.abs(now.getTime() - tDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (timeRange === 'weekly') return diffDays <= 7;
+          if (timeRange === 'monthly') return diffDays <= 30;
+          if (timeRange === 'yearly') return diffDays <= 365;
+          return true;
+        });
+      }
     }
 
     if (viewMode === 'calendar' && !selectedDate) {
@@ -108,7 +122,7 @@ const History: React.FC = () => {
     }
 
     return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactions, timeRange, searchQuery, clients, selectedGroupId, selectedClientId, viewMode, currentDate, selectedDate]);
+  }, [transactions, timeRange, searchQuery, clients, selectedGroupId, selectedClientId, viewMode, currentDate, selectedDate, startDate, endDate, selectedType]);
 
   const totals = useMemo(() => {
     return filteredTransactions.reduce((acc, t) => {
@@ -394,6 +408,36 @@ const History: React.FC = () => {
                 {filteredClients.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
               </select>
             </div>
+
+            <div className="relative">
+              <Filter size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <select 
+                value={selectedType} onChange={(e) => setSelectedType(e.target.value as any)} 
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-[11px] font-bold text-slate-900 dark:text-white appearance-none cursor-pointer"
+              >
+                <option value="all">{language === 'ar' ? 'كل الأنواع' : 'All Types'}</option>
+                <option value={TransactionType.INCOME}>{language === 'ar' ? 'دخل' : 'Income'}</option>
+                <option value={TransactionType.EXPENSE}>{language === 'ar' ? 'صرف' : 'Expense'}</option>
+              </select>
+            </div>
+
+            <div className="relative">
+              <CalendarIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setTimeRange('all'); }} 
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-[11px] font-bold text-slate-900 dark:text-white"
+                title={language === 'ar' ? 'تاريخ البداية' : 'Start Date'}
+              />
+            </div>
+
+            <div className="relative">
+              <CalendarIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setTimeRange('all'); }} 
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-[11px] font-bold text-slate-900 dark:text-white"
+                title={language === 'ar' ? 'تاريخ النهاية' : 'End Date'}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -471,6 +515,21 @@ const History: React.FC = () => {
                          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 max-w-[150px] truncate" title={t.note}>
                            {t.note || (language === 'ar' ? '-' : '-')}
                          </span>
+                         {t.items && t.items.length > 0 && (
+                           <div className="mt-2 w-full max-w-[200px] bg-slate-50 dark:bg-slate-900/50 rounded-xl p-2 border border-slate-100 dark:border-slate-800">
+                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">
+                               {language === 'ar' ? 'السلع' : 'Items'} ({t.items.length})
+                             </p>
+                             <div className="space-y-1 max-h-20 overflow-y-auto custom-scrollbar">
+                               {t.items.map(item => (
+                                 <div key={item.id} className="flex justify-between items-center text-[9px] font-bold">
+                                   <span className="text-slate-600 dark:text-slate-300 truncate max-w-[100px] text-left">{item.quantity}x {item.name}</span>
+                                   <span className="text-slate-500">{item.price.toLocaleString()}</span>
+                                 </div>
+                               ))}
+                             </div>
+                           </div>
+                         )}
                          {/* Secondary hover actions to keep app functional but clean */}
                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700">
                            <button onClick={() => { setEditingId(t.id); setEditAmount(t.amount.toString()); setEditDate(t.date); }} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit3 size={14}/></button>

@@ -68,6 +68,17 @@ const WIDGET_LIBRARY = [
     descEn: 'Daily cumulative balance simulation.',
     descAr: 'محاكاة لتطور الرصيد اليومي.',
     pro: true
+  },
+  {
+    id: 'item_price_tracker',
+    icon: BarChart3,
+    color: 'text-teal-500',
+    bgColor: 'bg-teal-50 dark:bg-teal-900/20',
+    titleEn: 'Item Price Tracker',
+    titleAr: 'متتبع أسعار السلع',
+    descEn: 'Track price changes of frequently bought items.',
+    descAr: 'تتبع تغير أسعار السلع المشتراة بشكل متكرر.',
+    pro: false
   }
 ];
 
@@ -279,6 +290,45 @@ const ChartWidget: React.FC<{
         });
         return data;
       }
+      case 'item_price_tracker': {
+        // Find items that appear multiple times to track their price
+        const itemHistory: Record<string, { date: string, price: number }[]> = {};
+        
+        filteredTransactions.forEach((t: Transaction) => {
+          if (t.type === TransactionType.EXPENSE && t.items && t.items.length > 0) {
+            t.items.forEach(item => {
+              const name = item.name.trim().toLowerCase();
+              if (!name) return;
+              if (!itemHistory[name]) itemHistory[name] = [];
+              itemHistory[name].push({
+                date: new Date(t.date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {month:'short', day:'numeric'}),
+                price: item.price
+              });
+            });
+          }
+        });
+
+        // Filter for items with at least 2 purchases to show a trend
+        const trackedItems = Object.entries(itemHistory)
+          .filter(([_, history]) => history.length >= 2)
+          .sort((a, b) => b[1].length - a[1].length) // Sort by most frequently bought
+          .slice(0, 3); // Take top 3 items to avoid cluttering the chart
+
+        if (trackedItems.length === 0) return [];
+
+        // Transform into Recharts format: { date: 'Jan 1', 'Milk': 2.5, 'Bread': 1.5 }
+        const chartDataMap: Record<string, any> = {};
+        trackedItems.forEach(([itemName, history]) => {
+          history.forEach(({ date, price }) => {
+            if (!chartDataMap[date]) chartDataMap[date] = { date };
+            // Capitalize first letter for display
+            const displayName = itemName.charAt(0).toUpperCase() + itemName.slice(1);
+            chartDataMap[date][displayName] = price;
+          });
+        });
+
+        return Object.values(chartDataMap).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      }
       default:
         return [];
     }
@@ -476,6 +526,47 @@ const ChartWidget: React.FC<{
                       <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={4} fill="url(#trendGrad)" />
                     </AreaChart>
                   );
+               }
+
+               // --- Item Price Tracker ---
+               if (widgetId === 'item_price_tracker') {
+                 if (chartData.length === 0) {
+                   return (
+                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                       <BarChart3 size={32} className="mb-2 opacity-50" />
+                       <p className="text-xs font-bold text-center px-4">
+                         {language === 'ar' 
+                           ? 'لا توجد بيانات كافية. قم بإضافة سلع متكررة في عملياتك لتتبع أسعارها.' 
+                           : 'Not enough data. Add recurring items to your transactions to track their prices.'}
+                       </p>
+                     </div>
+                   );
+                 }
+
+                 // Extract item names (keys other than 'date')
+                 const itemNames = Object.keys(chartData[0] || {}).filter(k => k !== 'date');
+                 const COLORS = ['#14b8a6', '#f59e0b', '#ec4899']; // Teal, Amber, Pink
+
+                 return (
+                   <ComposedChart data={chartData}>
+                     <CartesianGrid stroke="#f1f5f9" vertical={false} strokeDasharray="3 3" />
+                     <XAxis dataKey="date" tick={{fontSize: 10, fill: '#94a3b8', fontWeight: 'bold'}} axisLine={false} tickLine={false} dy={10} />
+                     <YAxis tick={{fontSize: 10, fill: '#94a3b8', fontWeight: 'bold'}} axisLine={false} tickLine={false} dx={-10} />
+                     <Tooltip content={<CustomTooltip />} />
+                     {itemNames.map((name, idx) => (
+                       <Line 
+                         key={name} 
+                         type="monotone" 
+                         dataKey={name} 
+                         name={name} 
+                         stroke={COLORS[idx % COLORS.length]} 
+                         strokeWidth={3} 
+                         dot={{r: 4, strokeWidth: 2, fill: '#fff'}} 
+                         activeDot={{r: 6, strokeWidth: 0}}
+                       />
+                     ))}
+                   </ComposedChart>
+                 );
                }
 
                // --- CUSTOM WIDGETS ---

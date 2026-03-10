@@ -37,7 +37,7 @@ const INITIAL_STATE: AppState = {
   syncProvider: 'local',
   chatHistory: [],
   proChatHistory: [],
-  activeWidgets: ['cash_flow', 'lifestyle_radar'],
+  activeWidgets: ['cash_flow', 'lifestyle_radar', 'item_price_tracker'],
   customWidgets: [], 
   security: {
     appLock: false,

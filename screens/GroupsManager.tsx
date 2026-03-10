@@ -19,6 +19,10 @@ const GroupsManager: React.FC = () => {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editGroupValue, setEditGroupValue] = useState({ name: '', icon: '', monthlyBudget: 0 });
 
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientIcon, setNewClientIcon] = useState('👤');
+
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
   };
@@ -31,6 +35,15 @@ const GroupsManager: React.FC = () => {
     setNewGroupName('');
     setNewGroupIcon('📁');
     setNewGroupBudget('');
+  };
+
+  const handleAddClient = (e: React.FormEvent, groupId: string) => {
+    e.preventDefault();
+    if (!newClientName.trim()) return;
+    vibrate();
+    dispatch.addClient(newClientName, groupId, newClientIcon);
+    setNewClientName('');
+    setNewClientIcon('👤');
   };
 
   const getGroupStats = (gid: string) => {
@@ -133,6 +146,13 @@ const GroupsManager: React.FC = () => {
                          </div>
                          <div className="flex flex-col gap-2">
                            <button 
+                             onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}
+                             className={`p-2 rounded-xl ${expandedGroupId === group.id ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-emerald-500'}`}
+                             title={language === 'ar' ? 'إضافة عميل' : 'Add Client'}
+                           >
+                             <Plus size={16} />
+                           </button>
+                           <button 
                              onClick={() => {
                                setEditingGroupId(group.id);
                                setEditGroupValue({ name: group.name, icon: group.icon || '📁', monthlyBudget: group.monthlyBudget || 0 });
@@ -165,6 +185,64 @@ const GroupsManager: React.FC = () => {
                       </div>
                    </div>
                  )}
+
+                 {/* Clients Section */}
+                 <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                   <div className="flex items-center justify-between mb-4">
+                     <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase flex items-center gap-2">
+                       <Briefcase size={14} className="text-blue-500" />
+                       {language === 'ar' ? 'العملاء / البنود' : 'Clients / Items'}
+                     </h4>
+                     <button 
+                       onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}
+                       className="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1 hover:underline"
+                     >
+                       {expandedGroupId === group.id ? (language === 'ar' ? 'إخفاء' : 'Hide') : (language === 'ar' ? 'إضافة عميل' : 'Add Client')}
+                       {expandedGroupId === group.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                     </button>
+                   </div>
+
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                     {clients.filter(c => c.groupId === group.id).map(client => (
+                       <div key={client.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                         <div className="flex items-center gap-3">
+                           <div className="w-8 h-8 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm text-sm">
+                             {client.icon || '👤'}
+                           </div>
+                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{client.name}</span>
+                         </div>
+                         <button 
+                           onClick={() => {
+                             if(confirm('Delete client?')) dispatch.deleteClient(client.id);
+                           }}
+                           className="text-slate-400 hover:text-rose-500 p-1"
+                         >
+                           <Trash2 size={14} />
+                         </button>
+                       </div>
+                     ))}
+                   </div>
+
+                   {expandedGroupId === group.id && (
+                     <form onSubmit={(e) => handleAddClient(e, group.id)} className="mt-4 flex gap-2 animate-in slide-in-from-top-2">
+                       <input 
+                         value={newClientName} 
+                         onChange={(e) => setNewClientName(e.target.value)} 
+                         placeholder={language === 'ar' ? 'اسم العميل...' : 'Client name...'} 
+                         className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500" 
+                       />
+                       <input 
+                         value={newClientIcon} 
+                         onChange={(e) => setNewClientIcon(e.target.value)} 
+                         placeholder="👤" 
+                         className="w-16 px-2 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-center text-xs outline-none focus:border-blue-500" 
+                       />
+                       <button type="submit" className="px-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+                         <Plus size={18} />
+                       </button>
+                     </form>
+                   )}
+                 </div>
               </div>
             </div>
           );

@@ -20,6 +20,13 @@ export interface Client {
   contact?: string;
 }
 
+export interface TransactionItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
 export interface Transaction {
   id: string;
   amount: number;
@@ -29,6 +36,7 @@ export interface Transaction {
   groupId: string;
   clientId: string;
   note?: string;
+  items?: TransactionItem[]; // New: Support for itemized transactions
 }
 
 export interface UserProfile {

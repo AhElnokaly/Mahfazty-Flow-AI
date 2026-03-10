@@ -21,6 +21,7 @@ const Settings: React.FC = () => {
   const [profileForm, setProfileForm] = useState(userProfile);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showCloudAuth, setShowCloudAuth] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleSaveProfile = () => {
     dispatch.updateProfile(profileForm);
@@ -286,7 +287,7 @@ const Settings: React.FC = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 md:col-span-2">
+            <div className="grid grid-cols-3 gap-3 md:col-span-2">
               <button onClick={handleExport} className="flex flex-col items-center justify-center gap-2 p-6 bg-blue-50 dark:bg-blue-900/10 rounded-3xl border border-blue-100 text-blue-600">
                 <Share2 size={24} />
                 <span className="text-[9px] font-black uppercase">Backup</span>
@@ -295,10 +296,53 @@ const Settings: React.FC = () => {
                 <Upload size={24} />
                 <span className="text-[9px] font-black uppercase">Restore</span>
               </button>
+              <button onClick={() => setShowDeleteConfirm(true)} className="flex flex-col items-center justify-center gap-2 p-6 bg-rose-50 dark:bg-rose-900/10 rounded-3xl border border-rose-100 text-rose-600">
+                <Trash2 size={24} />
+                <span className="text-[9px] font-black uppercase">{language === 'ar' ? 'مسح البيانات' : 'Delete Data'}</span>
+              </button>
               <input type="file" ref={importFileRef} className="hidden" />
             </div>
           </div>
         </section>
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-8 max-w-sm w-full shadow-2xl space-y-6">
+              <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={32} />
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                  {language === 'ar' ? 'هل أنت متأكد؟' : 'Are you sure?'}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {language === 'ar' 
+                    ? 'سيتم مسح جميع بياناتك، معاملاتك، والمجموعات بشكل نهائي. لا يمكن التراجع عن هذا الإجراء.' 
+                    : 'All your data, transactions, and groups will be permanently deleted. This action cannot be undone.'}
+                </p>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button 
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-3 rounded-xl font-bold text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                >
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button 
+                  onClick={() => {
+                    dispatch.resetData();
+                    setShowDeleteConfirm(false);
+                    dispatch.setNotification({ message: language === 'ar' ? 'تم مسح البيانات بنجاح' : 'Data deleted successfully', type: 'success' });
+                  }}
+                  className="flex-1 py-3 rounded-xl font-bold text-xs bg-rose-500 hover:bg-rose-600 text-white shadow-lg shadow-rose-500/30 transition-colors"
+                >
+                  {language === 'ar' ? 'نعم، امسح البيانات' : 'Yes, Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Feedback & Suggestions */}
         <section className="space-y-6 lg:col-span-2">
@@ -325,8 +369,12 @@ const Settings: React.FC = () => {
                 <button 
                   onClick={() => {
                     const el = document.getElementById('feedbackText') as HTMLTextAreaElement;
-                    if (el.value.trim()) {
-                      dispatch.setNotification({ message: language === 'ar' ? 'شكراً لك! تم إرسال اقتراحك بنجاح.' : 'Thank you! Feedback sent successfully.', type: 'success' });
+                    const feedback = el.value.trim();
+                    if (feedback) {
+                      const subject = encodeURIComponent('Mahfazty App Feedback');
+                      const body = encodeURIComponent(feedback);
+                      window.open(`mailto:Ah.Elnokaly@gmail.com?subject=${subject}&body=${body}`);
+                      dispatch.setNotification({ message: language === 'ar' ? 'شكراً لك! سيتم فتح تطبيق البريد الإلكتروني.' : 'Thank you! Opening email client.', type: 'success' });
                       el.value = '';
                     } else {
                       dispatch.setNotification({ message: language === 'ar' ? 'يرجى كتابة شيء أولاً.' : 'Please write something first.', type: 'error' });
