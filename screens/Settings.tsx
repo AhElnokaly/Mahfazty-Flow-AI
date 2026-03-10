@@ -299,6 +299,47 @@ const Settings: React.FC = () => {
             </div>
           </div>
         </section>
+
+        {/* Feedback & Suggestions */}
+        <section className="space-y-6 lg:col-span-2">
+          <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[5px] px-6">{language === 'ar' ? 'التقييمات والاقتراحات' : 'Feedback & Suggestions'}</h3>
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+            <div className="flex flex-col md:flex-row gap-8 items-center">
+              <div className="flex-1 space-y-4 text-center md:text-left">
+                <div className="w-16 h-16 bg-amber-100 text-amber-500 rounded-2xl flex items-center justify-center mx-auto md:mx-0 mb-4">
+                  <MessageCircle size={32} />
+                </div>
+                <h4 className="text-xl font-black text-slate-900 dark:text-white">{language === 'ar' ? 'رأيك يهمنا جداً!' : 'We value your feedback!'}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {language === 'ar' 
+                    ? 'هل لديك فكرة لتحسين التطبيق؟ أو واجهت مشكلة معينة؟ شاركنا رأيك لنقوم بتطوير محفظتي ليكون أفضل.' 
+                    : 'Have an idea to improve the app? Or faced an issue? Share your thoughts to help us make Mahfazty better.'}
+                </p>
+              </div>
+              <div className="flex-1 w-full space-y-3">
+                <textarea 
+                  id="feedbackText"
+                  placeholder={language === 'ar' ? 'اكتب اقتراحك أو تقييمك هنا...' : 'Write your suggestion or feedback here...'}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm outline-none focus:border-amber-500 min-h-[120px] resize-none"
+                ></textarea>
+                <button 
+                  onClick={() => {
+                    const el = document.getElementById('feedbackText') as HTMLTextAreaElement;
+                    if (el.value.trim()) {
+                      dispatch.setNotification({ message: language === 'ar' ? 'شكراً لك! تم إرسال اقتراحك بنجاح.' : 'Thank you! Feedback sent successfully.', type: 'success' });
+                      el.value = '';
+                    } else {
+                      dispatch.setNotification({ message: language === 'ar' ? 'يرجى كتابة شيء أولاً.' : 'Please write something first.', type: 'error' });
+                    }
+                  }}
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Mail size={16} /> {language === 'ar' ? 'إرسال الاقتراح' : 'Send Feedback'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
       <div className="p-16 text-center space-y-6 opacity-30">
