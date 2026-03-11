@@ -222,6 +222,10 @@ const AddFlow: React.FC = () => {
       items: validItems.length > 0 ? validItems : undefined
     });
     
+    if (transactions.length === 0) {
+      dispatch.unlockAchievement('first_transaction');
+    }
+    
     navigate('/');
   };
 

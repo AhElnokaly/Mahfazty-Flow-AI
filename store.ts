@@ -11,7 +11,8 @@ const INITIAL_STATE: AppState = {
     name: 'Guest User',
     email: '',
     avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Guest',
-    isAuthenticated: false
+    isAuthenticated: false,
+    achievements: []
   },
   apiKeys: [],
   activeApiKeyId: undefined,
@@ -25,6 +26,7 @@ const INITIAL_STATE: AppState = {
   ],
   transactions: [],
   installments: [], 
+  goals: [],
   language: 'ar',
   isDarkMode: false,
   isPro: false,
@@ -43,6 +45,7 @@ const INITIAL_STATE: AppState = {
     appLock: false,
     biometrics: false
   },
+  pushNotifications: false,
   aiSettings: {
     enabled: true,
     sensitivity: 'medium',
@@ -85,6 +88,9 @@ interface AppContextType {
     toggleLanguage: () => void;
     toggleDarkMode: () => void;
     togglePrivacyMode: () => void;
+    toggleBiometrics: () => void;
+    togglePushNotifications: () => void;
+    updateAvatar: (avatarUrl: string) => void;
     toggleAutoSync: () => void;
     deleteGroup: (id: string) => void;
     addClient: (name: string, groupId: string, icon?: string) => void;
@@ -92,6 +98,9 @@ interface AppContextType {
     deleteClient: (id: string) => void;
     updateInstallment: (id: string, update: Partial<Installment>) => void;
     deleteInstallment: (id: string) => void;
+    addGoal: (goal: Omit<import('./types').Goal, 'id'>) => void;
+    updateGoal: (id: string, update: Partial<import('./types').Goal>) => void;
+    deleteGoal: (id: string) => void;
     clearChat: (isProChat: boolean) => void;
     resetData: () => void;
     importState: (jsonData: string) => void;
@@ -101,6 +110,7 @@ interface AppContextType {
     disableCloudSync: () => void;
     syncWithCloud: () => Promise<void>;
     pullFromCloud: () => Promise<void>;
+    unlockAchievement: (achievementId: string) => void;
   };
 }
 
@@ -150,7 +160,14 @@ type Action =
   | { type: 'ENABLE_CLOUD_SYNC'; payload: string }
   | { type: 'DISABLE_CLOUD_SYNC' }
   | { type: 'SYNC_SUCCESS'; payload: string }
-  | { type: 'ADD_SYNC_LOG'; payload: SyncLogEntry };
+  | { type: 'ADD_SYNC_LOG'; payload: SyncLogEntry }
+  | { type: 'TOGGLE_BIOMETRICS' }
+  | { type: 'TOGGLE_PUSH_NOTIFICATIONS' }
+  | { type: 'UPDATE_AVATAR'; payload: string }
+  | { type: 'UNLOCK_ACHIEVEMENT'; payload: string }
+  | { type: 'ADD_GOAL'; payload: Omit<import('./types').Goal, 'id'> }
+  | { type: 'UPDATE_GOAL'; payload: { id: string; update: Partial<import('./types').Goal> } }
+  | { type: 'DELETE_GOAL'; payload: string };
 
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
@@ -288,6 +305,24 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, notificationHistory: [] };
     case 'TOGGLE_AUTO_SYNC':
       return { ...state, autoSync: !state.autoSync };
+    case 'TOGGLE_BIOMETRICS':
+      return { ...state, security: { ...state.security, biometrics: !state.security.biometrics } };
+    case 'TOGGLE_PUSH_NOTIFICATIONS':
+      return { ...state, pushNotifications: !state.pushNotifications };
+    case 'UPDATE_AVATAR':
+      return { ...state, userProfile: { ...state.userProfile, avatar: action.payload } };
+    case 'UNLOCK_ACHIEVEMENT': {
+      const currentAchievements = state.userProfile.achievements || [];
+      if (currentAchievements.includes(action.payload)) return state;
+      return {
+        ...state,
+        userProfile: {
+          ...state.userProfile,
+          achievements: [...currentAchievements, action.payload]
+        },
+        notification: { id: Date.now().toString(), message: `Achievement Unlocked!`, type: 'success', timestamp: new Date().toISOString(), read: false }
+      };
+    }
     case 'UPDATE_TRANSACTION':
       return { 
         ...state, 
@@ -307,6 +342,12 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, syncProvider: 'local', cloudToken: undefined };
     case 'SYNC_SUCCESS':
       return { ...state, lastSyncTimestamp: action.payload, isSyncing: false };
+    case 'ADD_GOAL':
+      return { ...state, goals: [...state.goals, { id: Date.now().toString(), ...action.payload }] };
+    case 'UPDATE_GOAL':
+      return { ...state, goals: state.goals.map(g => g.id === action.payload.id ? { ...g, ...action.payload.update } : g) };
+    case 'DELETE_GOAL':
+      return { ...state, goals: state.goals.filter(g => g.id !== action.payload) };
     case 'ADD_SYNC_LOG':
       return { ...state, syncHistory: [action.payload, ...state.syncHistory].slice(0, 50) }; // Keep last 50 logs
     default:
@@ -403,6 +444,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGroupBudget: (id: string, amount: number) => dispatch({ type: 'SET_GROUP_BUDGET', payload: { id, amount } }),
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => dispatch({ type: 'ADD_INSTALLMENT', payload: i }),
     payInstallment: (id: string, penalty?: number) => dispatch({ type: 'PAY_INSTALLMENT', payload: { id, penalty: penalty || 0 } }),
+    addGoal: (goal: Omit<import('./types').Goal, 'id'>) => dispatch({ type: 'ADD_GOAL', payload: goal }),
+    updateGoal: (id: string, update: Partial<import('./types').Goal>) => dispatch({ type: 'UPDATE_GOAL', payload: { id, update } }),
+    deleteGoal: (id: string) => dispatch({ type: 'DELETE_GOAL', payload: id }),
     setPro: (val: boolean) => dispatch({ type: 'SET_PRO', payload: val }),
     addChatMessage: (msg: ChatMessage, isProChat = false) => dispatch({ type: 'ADD_CHAT_MESSAGE', payload: { msg, isProChat } }),
     updateProfile: (profile: UserProfile) => dispatch({ type: 'UPDATE_PROFILE', payload: profile }),
@@ -413,7 +457,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     toggleLanguage: () => dispatch({ type: 'TOGGLE_LANGUAGE' }),
     toggleDarkMode: () => dispatch({ type: 'TOGGLE_DARK_MODE' }),
     togglePrivacyMode: () => dispatch({ type: 'TOGGLE_PRIVACY_MODE' }),
+    toggleBiometrics: () => dispatch({ type: 'TOGGLE_BIOMETRICS' }),
+    togglePushNotifications: () => dispatch({ type: 'TOGGLE_PUSH_NOTIFICATIONS' }),
+    updateAvatar: (avatarUrl: string) => dispatch({ type: 'UPDATE_AVATAR', payload: avatarUrl }),
     toggleAutoSync: () => dispatch({ type: 'TOGGLE_AUTO_SYNC' }),
+    unlockAchievement: (achievementId: string) => dispatch({ type: 'UNLOCK_ACHIEVEMENT', payload: achievementId }),
     deleteGroup: (id: string) => dispatch({ type: 'DELETE_GROUP', payload: id }),
     addClient: (name: string, groupId: string, icon?: string) => dispatch({ type: 'ADD_CLIENT', payload: { name, groupId, icon } }),
     updateClient: (id: string, update: Partial<Client>) => dispatch({ type: 'UPDATE_CLIENT', payload: { id, update } }),

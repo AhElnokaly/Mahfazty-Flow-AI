@@ -106,6 +106,16 @@ export interface SyncLogEntry {
   details?: string;
 }
 
+export interface Goal {
+  id: string;
+  title: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline: string;
+  icon: string;
+  color: string;
+}
+
 export interface AppState {
   walletBalance: number;
   baseCurrency: string;
@@ -115,6 +125,7 @@ export interface AppState {
   transactions: Transaction[];
   clients: Client[];
   installments: Installment[];
+  goals: Goal[];
   language: 'ar' | 'en';
   isDarkMode: boolean;
   isPro: boolean;
@@ -137,6 +148,7 @@ export interface AppState {
     appLock: boolean;
     biometrics: boolean;
   };
+  pushNotifications: boolean;
   aiSettings: {
     enabled: boolean;
     sensitivity: 'low' | 'medium' | 'high';

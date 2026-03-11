@@ -4,7 +4,7 @@ import { useApp } from '../store';
 import { 
   Plus, Trash2, Layers, UserPlus, TrendingUp, TrendingDown, 
   Briefcase, Edit3, Check, X, ChevronDown, ChevronUp, History, 
-  ArrowUpRight, ArrowDownRight, Calendar, Smile, AlertCircle, Target
+  ArrowUpRight, ArrowDownRight, Calendar, Smile, AlertCircle, Target, Info
 } from 'lucide-react';
 import { TransactionType } from '../types';
 import ConfirmModal from '../components/ConfirmModal';
@@ -78,12 +78,21 @@ const GroupsManager: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500 pb-20 px-2">
-      <div className="text-center py-6">
-        <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
-          {language === 'ar' ? 'هيكلة الميزانية' : 'Budget Architecture'}
-        </h2>
+      <div className="text-center py-6 flex flex-col items-center">
+        <div className="flex items-center gap-2">
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+            {language === 'ar' ? 'هيكلة الميزانية' : 'Budget Architecture'}
+          </h2>
+          <div className="group relative flex items-center">
+            <Info size={16} className="text-slate-400 cursor-help" />
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 dark:bg-slate-700 text-white text-xs font-medium rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-center pointer-events-none shadow-xl">
+              {language === 'ar' ? 'قم بإنشاء مجموعات (مثل: المحفظة، البنك) وحدد ميزانية شهرية لكل منها للتحكم في نفقاتك.' : 'Create portfolios (e.g., Wallet, Bank) and set a monthly budget for each to control your spending.'}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800 dark:border-t-slate-700"></div>
+            </div>
+          </div>
+        </div>
         <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-2">
-          Manage spending limits per portfolio
+          {language === 'ar' ? 'إدارة حدود الإنفاق لكل مجموعة' : 'Manage spending limits per portfolio'}
         </p>
       </div>
 
@@ -98,7 +107,19 @@ const GroupsManager: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {groups.map((group) => {
+        {groups.length === 0 ? (
+          <div className="bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 p-12 flex flex-col items-center justify-center text-center">
+            <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mb-6">
+              <Layers size={40} />
+            </div>
+            <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-wide mb-2">
+              {language === 'ar' ? 'لا توجد مجموعات حسابات' : 'No Portfolios Yet'}
+            </h3>
+            <p className="text-sm text-slate-500 font-medium max-w-sm mb-2">
+              {language === 'ar' ? 'قم بإنشاء مجموعة حسابات (مثل: المحفظة، البنك، مدخرات) لتنظيم أموالك وتحديد ميزانياتك.' : 'Create a portfolio (e.g., Wallet, Bank, Savings) to organize your money and set budgets.'}
+            </p>
+          </div>
+        ) : groups.map((group) => {
           const stats = getGroupStats(group.id);
           const isEditing = editingGroupId === group.id;
           const budget = group.monthlyBudget || 0;

@@ -158,6 +158,44 @@ const History: React.FC = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    if (filteredTransactions.length === 0) {
+      dispatch.setNotification({ message: language === 'ar' ? 'لا توجد بيانات للتصدير' : 'No data to export', type: 'error' });
+      return;
+    }
+
+    const headers = ['Date', 'Type', 'Amount', 'Client', 'Group', 'Note', 'Items'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredTransactions.map(t => {
+        const client = clients.find(c => c.id === t.clientId);
+        const group = groups.find(g => g.id === t.groupId);
+        const itemsStr = t.items ? t.items.map(i => `${i.quantity}x ${i.name} (${i.price})`).join('; ') : '';
+        return [
+          new Date(t.date).toLocaleDateString(),
+          t.type,
+          t.amount,
+          `"${client?.name || ''}"`,
+          `"${group?.name || ''}"`,
+          `"${t.note?.replace(/"/g, '""') || ''}"`,
+          `"${itemsStr.replace(/"/g, '""')}"`
+        ].join(',');
+      })
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `transactions_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    dispatch.setNotification({ message: language === 'ar' ? 'تم تصدير التقرير بنجاح' : 'Report exported successfully', type: 'success' });
+  };
+
   const filteredClients = useMemo(() => {
     if (selectedGroupId === 'all') return clients;
     return clients.filter(c => c.groupId === selectedGroupId);
@@ -381,12 +419,21 @@ const History: React.FC = () => {
       {/* --- LIST VIEW FILTERS (Only visible in List Mode) --- */}
       {viewMode === 'list' && (
         <div className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800 space-y-6">
-          <div className="flex flex-wrap gap-2 p-1.5 bg-slate-50 dark:bg-slate-900 rounded-2xl">
-            {(['weekly', 'monthly', 'yearly', 'all'] as const).map(range => (
-              <button key={range} onClick={() => setTimeRange(range)} className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide rounded-xl transition-all ${timeRange === range ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>
-                {language === 'ar' ? (range === 'weekly' ? 'أسبوع' : range === 'monthly' ? 'شهر' : range === 'yearly' ? 'سنة' : 'الكل') : range}
-              </button>
-            ))}
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="flex flex-wrap gap-2 p-1.5 bg-slate-50 dark:bg-slate-900 rounded-2xl w-full md:w-auto flex-1">
+              {(['weekly', 'monthly', 'yearly', 'all'] as const).map(range => (
+                <button key={range} onClick={() => setTimeRange(range)} className={`flex-1 py-2 px-4 text-xs font-bold uppercase tracking-wide rounded-xl transition-all ${timeRange === range ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>
+                  {language === 'ar' ? (range === 'weekly' ? 'أسبوع' : range === 'monthly' ? 'شهر' : range === 'yearly' ? 'سنة' : 'الكل') : range}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={handleExportCSV}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform w-full md:w-auto"
+            >
+              <Download size={16} />
+              {language === 'ar' ? 'تصدير CSV' : 'Export CSV'}
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -559,9 +606,16 @@ const History: React.FC = () => {
             </tbody>
           </table>
           {filteredTransactions.length === 0 && (
-            <div className="py-20 text-center flex flex-col items-center justify-center opacity-30 gap-4">
-              <X size={48} />
-              <p className="text-sm font-black uppercase tracking-[4px] text-black dark:text-white">{language === 'ar' ? 'لا توجد نتائج' : 'No Results Found'}</p>
+            <div className="py-20 flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-300 dark:text-slate-600 mb-6">
+                <Search size={40} />
+              </div>
+              <p className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-wide mb-2">
+                {language === 'ar' ? 'لا توجد نتائج' : 'No Results Found'}
+              </p>
+              <p className="text-sm text-slate-500 font-medium max-w-sm">
+                {language === 'ar' ? 'لم نتمكن من العثور على أي معاملات تطابق معايير البحث الخاصة بك.' : 'We couldn\'t find any transactions matching your search criteria.'}
+              </p>
             </div>
           )}
         </div>

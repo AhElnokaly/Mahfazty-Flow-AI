@@ -5,7 +5,7 @@ import { useApp } from '../store';
 import { cloudService } from '../services/cloud';
 import { AuthModal } from '../components/AuthModal';
 import { 
-  Trash2, Edit3, Globe, Zap, Share2, Upload, Server, Info, ToggleLeft, ToggleRight, Check, CreditCard, ExternalLink, Key, Plus, MessageCircle, Mail, AlertTriangle, X, LogOut, ShieldCheck, Eye, EyeOff, RefreshCcw, Cloud, CloudOff, RefreshCw
+  Trash2, Edit3, Globe, Zap, Share2, Upload, Server, Info, ToggleLeft, ToggleRight, Check, CreditCard, ExternalLink, Key, Plus, MessageCircle, Mail, AlertTriangle, X, LogOut, ShieldCheck, Eye, EyeOff, RefreshCcw, Cloud, CloudOff, RefreshCw, TrendingUp, Sparkles, Target
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -21,6 +21,7 @@ const Settings: React.FC = () => {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState(userProfile);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [showAddKey, setShowAddKey] = useState(false);
   const [showCloudAuth, setShowCloudAuth] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
@@ -99,12 +100,52 @@ const Settings: React.FC = () => {
         </div>
       </div>
 
+      {showAvatarPicker && isEditingProfile && (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 animate-in slide-in-from-top-4">
+          <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4 text-center">
+            {language === 'ar' ? 'اختر صورة شخصية' : 'Choose Avatar'}
+          </h3>
+          <div className="flex flex-wrap justify-center gap-4 mb-6">
+            {AVATARS.map((avatar, idx) => (
+              <button 
+                key={idx}
+                onClick={() => setProfileForm({ ...profileForm, avatar })}
+                className={`w-16 h-16 rounded-2xl overflow-hidden border-4 transition-all ${profileForm.avatar === avatar ? 'border-blue-500 scale-110 shadow-lg' : 'border-transparent hover:scale-105 opacity-70 hover:opacity-100'}`}
+              >
+                <img src={avatar} className="w-full h-full object-cover bg-slate-100 dark:bg-slate-700" />
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-center">
+            <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2">
+              <Upload size={16} />
+              {language === 'ar' ? 'رفع صورة' : 'Upload Picture'}
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      setProfileForm({ ...profileForm, avatar: reader.result as string });
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }} 
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* API Key Management */}
         <section className="space-y-6 lg:col-span-2">
           <div className="flex items-center justify-between px-6">
              <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[5px]">{language === 'ar' ? 'مفاتيح الذكاء الاصطناعي' : 'AI API Keys'}</h3>
-             <button onClick={() => setShowAvatarPicker(!showAvatarPicker)} className="text-blue-500 text-xs font-bold uppercase tracking-wider hover:underline">
+             <button onClick={() => setShowAddKey(!showAddKey)} className="text-blue-500 text-xs font-bold uppercase tracking-wider hover:underline">
                {language === 'ar' ? '+ إضافة مفتاح' : '+ Add Key'}
              </button>
           </div>
@@ -157,44 +198,50 @@ const Settings: React.FC = () => {
              )}
 
              {/* Add Key Form (Toggleable or always visible if empty) */}
-             <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
-               <div className="space-y-4">
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                   <input 
-                     placeholder={language === 'ar' ? 'اسم المفتاح (مثلاً: الشخصي)' : 'Key Name (e.g. Personal)'}
-                     className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-500"
-                     id="newKeyName"
-                   />
-                   <div className="md:col-span-2 flex gap-2">
+             {(showAddKey || state.apiKeys.length === 0) && (
+               <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
+                 <div className="space-y-4">
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                      <input 
-                       placeholder="AIzaSy..."
-                       className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-mono outline-none focus:border-blue-500"
-                       id="newKeyValue"
-                       type="password"
+                       placeholder={language === 'ar' ? 'اسم المفتاح (مثلاً: الشخصي)' : 'Key Name (e.g. Personal)'}
+                       className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-500"
+                       id="newKeyName"
                      />
-                     <button 
-                       onClick={() => {
-                         const nameInput = document.getElementById('newKeyName') as HTMLInputElement;
-                         const keyInput = document.getElementById('newKeyValue') as HTMLInputElement;
-                         if (nameInput.value && keyInput.value) {
-                           dispatch.addApiKey(nameInput.value, keyInput.value);
-                           nameInput.value = '';
-                           keyInput.value = '';
-                         }
-                       }}
-                       className="bg-blue-600 hover:bg-blue-500 text-white px-6 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95"
-                     >
-                       {language === 'ar' ? 'إضافة' : 'ADD'}
-                     </button>
+                     <div className="md:col-span-2 flex gap-2">
+                       <input 
+                         placeholder="AIzaSy..."
+                         className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-mono outline-none focus:border-blue-500"
+                         id="newKeyValue"
+                         type="password"
+                       />
+                       <button 
+                         onClick={() => {
+                           const nameInput = document.getElementById('newKeyName') as HTMLInputElement;
+                           const keyInput = document.getElementById('newKeyValue') as HTMLInputElement;
+                           if (nameInput.value && keyInput.value) {
+                             dispatch.addApiKey(nameInput.value, keyInput.value);
+                             if (state.apiKeys.length === 0) {
+                               dispatch.unlockAchievement('first_api_key');
+                             }
+                             nameInput.value = '';
+                             keyInput.value = '';
+                             setShowAddKey(false);
+                           }
+                         }}
+                         className="bg-blue-600 hover:bg-blue-500 text-white px-6 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95"
+                       >
+                         {language === 'ar' ? 'إضافة' : 'ADD'}
+                       </button>
+                     </div>
                    </div>
+                   <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide text-center">
+                     {language === 'ar' 
+                       ? 'يتم تخزين المفاتيح محلياً ومشفرة. سيقوم التطبيق بالتبديل تلقائياً إذا فشل أحد المفاتيح.' 
+                       : 'Keys are stored locally & encrypted. App auto-switches if a key fails.'}
+                   </p>
                  </div>
-                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide text-center">
-                   {language === 'ar' 
-                     ? 'يتم تخزين المفاتيح محلياً ومشفرة. سيقوم التطبيق بالتبديل تلقائياً إذا فشل أحد المفاتيح.' 
-                     : 'Keys are stored locally & encrypted. App auto-switches if a key fails.'}
-                 </p>
                </div>
-             </div>
+             )}
           </div>
         </section>
 
@@ -216,6 +263,38 @@ const Settings: React.FC = () => {
                </div>
                <button onClick={() => dispatch.togglePrivacyMode()} className="text-2xl">
                  {isPrivacyMode ? <ToggleRight size={32} className="text-indigo-600" /> : <ToggleLeft size={32} className="text-slate-300" />}
+               </button>
+            </div>
+
+            {/* Biometrics Toggle */}
+            <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl">
+               <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-xl ${state.security.biometrics ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'} flex items-center justify-center transition-colors`}>
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'البصمة البيومترية' : 'Biometrics'}</h4>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">{language === 'ar' ? 'تسجيل الدخول بالبصمة' : 'Login with Biometrics'}</p>
+                  </div>
+               </div>
+               <button onClick={() => dispatch.toggleBiometrics()} className="text-2xl">
+                 {state.security.biometrics ? <ToggleRight size={32} className="text-emerald-600" /> : <ToggleLeft size={32} className="text-slate-300" />}
+               </button>
+            </div>
+
+            {/* Push Notifications Toggle */}
+            <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl">
+               <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-xl ${state.pushNotifications ? 'bg-amber-500 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'} flex items-center justify-center transition-colors`}>
+                    <MessageCircle size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'إشعارات الدفع' : 'Push Notifications'}</h4>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">{language === 'ar' ? 'تلقي التنبيهات' : 'Receive Alerts'}</p>
+                  </div>
+               </div>
+               <button onClick={() => dispatch.togglePushNotifications()} className="text-2xl">
+                 {state.pushNotifications ? <ToggleRight size={32} className="text-amber-500" /> : <ToggleLeft size={32} className="text-slate-300" />}
                </button>
             </div>
 
@@ -356,6 +435,57 @@ const Settings: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Achievements Section */}
+        <section className="space-y-6 lg:col-span-2">
+          <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[5px] px-6">{language === 'ar' ? 'الإنجازات' : 'Achievements'}</h3>
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+            {(!userProfile.achievements || userProfile.achievements.length === 0) ? (
+              <div className="text-center py-8 opacity-50 space-y-2">
+                <Sparkles className="mx-auto text-slate-400" size={32} />
+                <p className="text-xs font-bold text-slate-500 uppercase">{language === 'ar' ? 'لا توجد إنجازات بعد' : 'No Achievements Yet'}</p>
+                <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
+                  {language === 'ar' ? 'استخدم التطبيق لفتح إنجازات جديدة.' : 'Use the app to unlock new achievements.'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {userProfile.achievements.includes('first_transaction') && (
+                  <div className="flex flex-col items-center justify-center p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 text-center gap-2">
+                    <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-full flex items-center justify-center">
+                      <TrendingUp size={24} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400">First Transaction</span>
+                  </div>
+                )}
+                {userProfile.achievements.includes('first_installment') && (
+                  <div className="flex flex-col items-center justify-center p-4 bg-amber-50 dark:bg-amber-900/10 rounded-2xl border border-amber-100 dark:border-amber-900/30 text-center gap-2">
+                    <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded-full flex items-center justify-center">
+                      <CreditCard size={24} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400">First Installment</span>
+                  </div>
+                )}
+                {userProfile.achievements.includes('first_api_key') && (
+                  <div className="flex flex-col items-center justify-center p-4 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/30 text-center gap-2">
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center">
+                      <Key size={24} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase text-blue-700 dark:text-blue-400">AI Empowered</span>
+                  </div>
+                )}
+                {userProfile.achievements.includes('first_goal') && (
+                  <div className="flex flex-col items-center justify-center p-4 bg-purple-50 dark:bg-purple-900/10 rounded-2xl border border-purple-100 dark:border-purple-900/30 text-center gap-2">
+                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-full flex items-center justify-center">
+                      <Target size={24} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase text-purple-700 dark:text-purple-400">Goal Setter</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* Feedback & Suggestions */}
         <section className="space-y-6 lg:col-span-2">

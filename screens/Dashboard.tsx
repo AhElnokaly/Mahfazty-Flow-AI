@@ -5,7 +5,7 @@ import { useApp } from '../store';
 import { 
   Plus, MoreHorizontal, ArrowUpRight, Sparkles, Zap, ShieldCheck,
   ArrowDownLeft, ArrowUpLeft, Wallet, ArrowDownRight, TrendingUp, TrendingDown,
-  Target, ChevronRight, PieChart as PieIcon, Calendar, Clock, ArrowRight
+  Target, ChevronRight, PieChart as PieIcon, Calendar, Clock, ArrowRight, Info
 } from 'lucide-react';
 import { 
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Tooltip 
@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 const Dashboard: React.FC = () => {
   const { state } = useApp();
   const navigate = useNavigate();
-  const { language, walletBalance, transactions, groups, installments, isPro, baseCurrency, isPrivacyMode } = state;
+  const { language, walletBalance, transactions, groups, installments, goals, isPro, baseCurrency, isPrivacyMode } = state;
 
   // --- Calculations ---
   const currentMonthStr = new Date().toISOString().slice(0, 7);
@@ -151,7 +151,16 @@ const Dashboard: React.FC = () => {
                 <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
                   <Sparkles size={16} className="text-amber-300 animate-pulse" />
                 </div>
-                <h3 className="text-sm font-bold uppercase tracking-wide">{language === 'ar' ? 'فحص مالي ذكي' : 'AI Financial Audit'}</h3>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-sm font-bold uppercase tracking-wide">{language === 'ar' ? 'فحص مالي ذكي' : 'AI Financial Audit'}</h3>
+                  <div className="group/ai relative flex items-center">
+                    <Info size={12} className="text-white/50 cursor-help" />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-white text-slate-900 text-[10px] font-bold rounded-xl opacity-0 invisible group-hover/ai:opacity-100 group-hover/ai:visible transition-all z-50 text-center pointer-events-none shadow-xl">
+                      {language === 'ar' ? 'يقوم الذكاء الاصطناعي بتحليل مصاريفك وتقديم نصائح مخصصة لتقليل النفقات وزيادة المدخرات.' : 'AI analyzes your spending and provides personalized tips to reduce expenses and increase savings.'}
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border border-white/20 ${isPro ? 'bg-amber-400 text-amber-950' : 'bg-white/10 text-white/60'}`}>
                 {isPro ? <Zap size={10} fill="currentColor" /> : <ShieldCheck size={10} />}
@@ -173,7 +182,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         <button 
-          onClick={() => navigate('/history')}
+          onClick={() => navigate('/add')}
           className="md:w-32 bg-emerald-500 hover:bg-emerald-600 text-white rounded-3xl p-5 md:p-6 flex flex-col items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
         >
           <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
@@ -228,7 +237,16 @@ const Dashboard: React.FC = () => {
          {/* Savings Stat */}
          <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-blue-100 dark:border-blue-900/30 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
             <div className="flex justify-between items-start mb-2">
-               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{language === 'ar' ? 'معدل الادخار' : 'Savings Rate'}</p>
+               <div className="flex items-center gap-1.5">
+                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{language === 'ar' ? 'معدل الادخار' : 'Savings Rate'}</p>
+                 <div className="group relative flex items-center">
+                   <Info size={12} className="text-slate-300 dark:text-slate-600 cursor-help" />
+                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 dark:bg-slate-700 text-white text-[10px] font-medium rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-center pointer-events-none shadow-xl">
+                     {language === 'ar' ? 'نسبة ما تدخره من إجمالي دخلك الشهري بعد خصم المصاريف.' : 'Percentage of income saved this month after deducting expenses.'}
+                     <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800 dark:border-t-slate-700"></div>
+                   </div>
+                 </div>
+               </div>
                <div className="w-8 h-8 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Target size={16} strokeWidth={3} />
                </div>
@@ -247,14 +265,23 @@ const Dashboard: React.FC = () => {
       {/* 3. Group Accounts Slider/Grid */}
       <section className="space-y-4">
         <div className="flex items-center justify-between px-2">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">{language === 'ar' ? 'مجموعات الحسابات' : 'Group Portfolios'}</h3>
-          <button onClick={() => navigate('/groups')} className="text-blue-600 dark:text-blue-400 text-xs font-bold uppercase tracking-wide hover:underline flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">{language === 'ar' ? 'مجموعات الحسابات' : 'Group Portfolios'}</h3>
+            <div className="group relative flex items-center">
+              <Info size={12} className="text-slate-300 dark:text-slate-600 cursor-help" />
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-800 dark:bg-slate-700 text-white text-[10px] font-medium rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-center pointer-events-none shadow-xl">
+                {language === 'ar' ? 'المجموعات تساعدك في تقسيم أموالك (مثل: حساب البنك، الكاش، المدخرات) وتحديد ميزانية لكل منها.' : 'Portfolios help you divide your money (e.g., Bank, Cash, Savings) and set budgets for each.'}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800 dark:border-t-slate-700"></div>
+              </div>
+            </div>
+          </div>
+          <button onClick={() => navigate('/installments')} className="text-blue-600 dark:text-blue-400 text-xs font-bold uppercase tracking-wide hover:underline flex items-center gap-1">
             {language === 'ar' ? 'إدارة' : 'Manage'} <MoreHorizontal size={14} />
           </button>
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {accountCards.map(account => (
+          {accountCards.length > 0 ? accountCards.map(account => (
             <div key={account.id} className={`${account.style.bg} ${account.style.shadow} p-5 rounded-3xl text-white relative overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer`}>
                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:scale-125 transition-transform duration-700"></div>
                <div className="relative z-10">
@@ -292,7 +319,22 @@ const Dashboard: React.FC = () => {
                  </div>
                </div>
             </div>
-          ))}
+          )) : (
+            <div className="col-span-full bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 rounded-3xl p-8 flex flex-col items-center justify-center text-center group hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => navigate('/installments')}>
+              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Wallet size={32} />
+              </div>
+              <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide mb-2">
+                {language === 'ar' ? 'لا توجد مجموعات حسابات' : 'No Portfolios Yet'}
+              </h4>
+              <p className="text-xs text-slate-500 font-medium max-w-xs mb-6">
+                {language === 'ar' ? 'قم بإنشاء مجموعة حسابات (مثل: المحفظة، البنك، مدخرات) لتنظيم أموالك.' : 'Create a portfolio (e.g., Wallet, Bank, Savings) to organize your money.'}
+              </p>
+              <button className="px-6 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform">
+                {language === 'ar' ? 'إنشاء مجموعة' : 'Create Portfolio'}
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -327,8 +369,19 @@ const Dashboard: React.FC = () => {
                 </div>
               );
             }) : (
-              <div className="text-center py-6 text-slate-400 text-xs font-medium">
-                {language === 'ar' ? 'لا توجد معاملات بعد' : 'No transactions yet'}
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-400 mb-3">
+                  <ArrowRight size={20} />
+                </div>
+                <p className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wide mb-1">
+                  {language === 'ar' ? 'لا توجد معاملات بعد' : 'No transactions yet'}
+                </p>
+                <p className="text-[10px] text-slate-500 font-medium mb-4">
+                  {language === 'ar' ? 'أضف أول دخل أو مصروف لك.' : 'Add your first income or expense.'}
+                </p>
+                <button onClick={() => navigate('/add')} className="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
+                  {language === 'ar' ? 'إضافة معاملة' : 'Add Transaction'}
+                </button>
               </div>
             )}
           </div>
@@ -364,11 +417,68 @@ const Dashboard: React.FC = () => {
                 </div>
               );
             }) : (
-              <div className="text-center py-6 text-slate-400 text-xs font-medium">
-                {language === 'ar' ? 'لا توجد التزامات قادمة' : 'No upcoming bills'}
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center text-amber-500 mb-3">
+                  <Clock size={20} />
+                </div>
+                <p className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wide mb-1">
+                  {language === 'ar' ? 'لا توجد التزامات قادمة' : 'No upcoming bills'}
+                </p>
+                <p className="text-[10px] text-slate-500 font-medium mb-4">
+                  {language === 'ar' ? 'أضف أقساطك أو ديونك لتتبعها هنا.' : 'Add your installments or debts to track them here.'}
+                </p>
+                <button onClick={() => navigate('/installments')} className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-4 py-2 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
+                  {language === 'ar' ? 'إضافة التزام' : 'Add Liability'}
+                </button>
               </div>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Saving Goals Section */}
+      <section className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400">{language === 'ar' ? 'أهداف الادخار' : 'Saving Goals'}</h3>
+          <button onClick={() => navigate('/goals')} className="text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-widest hover:underline flex items-center gap-1">
+            {language === 'ar' ? 'إدارة' : 'Manage'} <ArrowRight size={12} className={language === 'ar' ? 'rotate-180' : ''} />
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {goals.slice(0, 3).map(goal => {
+            const progress = Math.min((goal.currentAmount / goal.targetAmount) * 100, 100);
+            return (
+              <div key={goal.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors" onClick={() => navigate('/goals')}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${goal.color} bg-opacity-10 dark:bg-opacity-20`}>
+                    {goal.icon}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">{goal.title}</h4>
+                    <p className={`text-[10px] font-bold text-slate-500 ${privacyClass}`}>
+                      {baseCurrency} {goal.currentAmount.toLocaleString()} / {goal.targetAmount.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div className={`h-full ${goal.color} rounded-full`} style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            );
+          })}
+          {goals.length === 0 && (
+            <div className="col-span-full flex flex-col items-center justify-center py-6 text-center">
+              <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center text-blue-500 mb-3">
+                <Target size={20} />
+              </div>
+              <p className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wide mb-1">
+                {language === 'ar' ? 'لا توجد أهداف' : 'No Goals'}
+              </p>
+              <button onClick={() => navigate('/goals')} className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">
+                {language === 'ar' ? 'إضافة هدف' : 'Add Goal'}
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -397,9 +507,11 @@ const Dashboard: React.FC = () => {
                </div>
             </div>
           ) : (
-            <div className="h-32 flex flex-col items-center justify-center text-slate-300">
-               <PieIcon size={40} className="mb-2 opacity-20" />
-               <p className="text-[10px] font-black uppercase">{language === 'ar' ? 'لا توجد بيانات' : 'No Data'}</p>
+            <div className="h-32 flex flex-col items-center justify-center text-center">
+               <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-300 dark:text-slate-600 mb-2">
+                 <PieIcon size={20} />
+               </div>
+               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{language === 'ar' ? 'لا توجد بيانات كافية' : 'Not enough data'}</p>
             </div>
           )}
         </div>

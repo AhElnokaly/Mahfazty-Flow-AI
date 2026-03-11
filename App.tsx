@@ -5,15 +5,14 @@ import { HashRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } f
 import { AppProvider, useApp } from './store';
 import Dashboard from './screens/Dashboard';
 import AddFlow from './screens/AddFlow';
-import GroupsManager from './screens/GroupsManager';
 import History from './screens/History';
 import Analytics from './screens/Analytics';
 import AIInsights from './screens/AIInsights';
 import Settings from './screens/Settings';
 import ProUpgrade from './screens/ProUpgrade';
-import ClientsManager from './screens/ClientsManager';
 import Installments from './screens/Installments';
 import Onboarding from './screens/Onboarding';
+import Goals from './screens/Goals';
 import { 
   LayoutDashboard, BarChart3, Layers, User, 
   Bell, Plus, History as HistoryIcon,
@@ -36,6 +35,27 @@ const decodeJwt = (token: string) => {
 };
 
 // --- New Welcome Screen Component ---
+const NotificationToast = ({ notification, onClose }: { notification: any, onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [notification, onClose]);
+
+  return (
+    <div className="absolute top-0 left-0 right-0 z-[60] flex justify-center px-4 pointer-events-none">
+      <div className={`mt-2 px-6 py-4 rounded-3xl shadow-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 w-full max-w-md border border-white/10 backdrop-blur-xl pointer-events-auto transform hover:scale-[1.02] transition-transform ${notification.type === 'success' ? 'bg-emerald-500/90 text-white' : 'bg-rose-500/90 text-white'}`}>
+        <div className="flex items-center gap-3">
+           {notification.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+           <span className="text-sm font-black tracking-wide">{notification.message}</span>
+        </div>
+        <button onClick={onClose} className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"><X size={14}/></button>
+      </div>
+    </div>
+  );
+};
+
 const WelcomeScreen = () => {
   const { state, dispatch } = useApp();
   const [view, setView] = useState<'landing' | 'login' | 'signup'>('landing');
@@ -308,6 +328,49 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [showFabMenu, setShowFabMenu] = useState(false);
+
+  // Shake to toggle privacy mode
+  useEffect(() => {
+    let lastX = 0, lastY = 0, lastZ = 0;
+    let lastUpdate = 0;
+    let lastShake = 0;
+    const SHAKE_THRESHOLD = 800; // Increased threshold to prevent accidental triggers
+
+    const handleDeviceMotion = (event: DeviceMotionEvent) => {
+      const current = event.accelerationIncludingGravity;
+      if (!current || current.x === null || current.y === null || current.z === null) return;
+
+      const currentTime = new Date().getTime();
+      if ((currentTime - lastUpdate) > 100) {
+        const diffTime = (currentTime - lastUpdate);
+        lastUpdate = currentTime;
+
+        const deltaX = current.x - lastX;
+        const deltaY = current.y - lastY;
+        const deltaZ = current.z - lastZ;
+        
+        // Calculate speed using absolute differences for each axis
+        const speed = (Math.abs(deltaX) + Math.abs(deltaY) + Math.abs(deltaZ)) / diffTime * 10000;
+
+        if (speed > SHAKE_THRESHOLD) {
+          if (currentTime - lastShake > 2000) { // 2 seconds debounce
+            if (navigator.vibrate) navigator.vibrate(50);
+            dispatch.togglePrivacyMode();
+            lastShake = currentTime;
+          }
+        }
+
+        lastX = current.x;
+        lastY = current.y;
+        lastZ = current.z;
+      }
+    };
+
+    window.addEventListener('devicemotion', handleDeviceMotion);
+    return () => window.removeEventListener('devicemotion', handleDeviceMotion);
+  }, [dispatch]);
+
   if (!state.hasSeenOnboarding) {
     return <Onboarding />;
   }
@@ -337,18 +400,43 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         {/* +++ تم تعديل المسافات السفلية (mb-28) لضمان عدم تغطية المحتوى بناءً على طلبك +++ */}
         <main className={`flex-1 w-full max-w-screen-xl mx-auto px-4 py-6 md:px-8 mb-28 relative ${state.language === 'ar' ? 'text-right' : 'text-left'}`}>
         {state.notification && (
-          <div className="absolute top-0 left-0 right-0 z-[60] flex justify-center px-4 pointer-events-none">
-            <div className={`mt-2 px-6 py-4 rounded-3xl shadow-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 w-full max-w-md border border-white/10 backdrop-blur-xl pointer-events-auto transform hover:scale-[1.02] transition-transform ${state.notification.type === 'success' ? 'bg-emerald-500/90 text-white' : 'bg-rose-500/90 text-white'}`}>
-              <div className="flex items-center gap-3">
-                 {state.notification.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-                 <span className="text-sm font-black tracking-wide">{state.notification.message}</span>
-              </div>
-              <button onClick={() => dispatch.setNotification(null)} className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"><X size={14}/></button>
-            </div>
-          </div>
+          <NotificationToast notification={state.notification} onClose={() => dispatch.setNotification(null)} />
         )}
         {children}
       </main>
+
+      {/* Floating Action Button (FAB) */}
+      <div className="fixed bottom-24 right-4 sm:right-8 z-50 flex flex-col items-end gap-3">
+        {showFabMenu && (
+          <div className="flex flex-col gap-3 mb-2 animate-in slide-in-from-bottom-4 fade-in duration-200">
+            <button 
+              onClick={() => { setShowFabMenu(false); navigate('/add', { state: { type: 'income' } }); }}
+              className="flex items-center gap-3 bg-emerald-500 text-white px-4 py-3 rounded-full shadow-lg hover:bg-emerald-600 transition-colors"
+            >
+              <span className="text-xs font-bold uppercase tracking-wide">{state.language === 'ar' ? 'دخل جديد' : 'Add Income'}</span>
+              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                <Plus size={16} />
+              </div>
+            </button>
+            <button 
+              onClick={() => { setShowFabMenu(false); navigate('/add', { state: { type: 'expense' } }); }}
+              className="flex items-center gap-3 bg-rose-500 text-white px-4 py-3 rounded-full shadow-lg hover:bg-rose-600 transition-colors"
+            >
+              <span className="text-xs font-bold uppercase tracking-wide">{state.language === 'ar' ? 'مصروف جديد' : 'Add Expense'}</span>
+              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                <Plus size={16} />
+              </div>
+            </button>
+          </div>
+        )}
+        <button 
+          onClick={() => setShowFabMenu(!showFabMenu)}
+          className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl shadow-blue-500/30 transition-transform duration-300 ${showFabMenu ? 'bg-slate-800 rotate-45' : 'bg-blue-600 hover:scale-110'}`}
+        >
+          <Plus size={24} />
+        </button>
+      </div>
+
       <div className="fixed bottom-0 sm:bottom-6 left-0 right-0 flex justify-center z-40 sm:px-4">
         {/* +++ تم تعديل شريط التنقل ليكون بعرض الشاشة على الموبايل مع تحسين الخطوط بناءً على طلبك +++ */}
         <nav className="h-16 md:h-18 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t sm:border border-slate-200 dark:border-slate-800 flex items-center justify-around px-2 sm:px-4 sm:rounded-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.05)] sm:shadow-[0_20px_40px_rgba(0,0,0,0.1)] w-full sm:w-[480px]">
@@ -360,9 +448,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           ))}
         </nav>
       </div>
-      <Link to="/add" className="fixed bottom-20 sm:bottom-24 right-6 sm:right-[calc(50%-230px)] w-14 h-14 bg-blue-600 text-white rounded-[22px] shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white dark:border-slate-800">
-        <Plus size={28} />
-      </Link>
     </div>
   );
 };
@@ -377,12 +462,11 @@ const App: React.FC = () => {
             <Route path="/add" element={<AddFlow />} />
             <Route path="/history" element={<History />} />
             <Route path="/analytics" element={<Analytics />} />
-            <Route path="/groups" element={<GroupsManager />} />
-            <Route path="/clients" element={<ClientsManager />} />
             <Route path="/installments" element={<Installments />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/ai" element={<AIInsights />} />
             <Route path="/upgrade" element={<ProUpgrade />} />
+            <Route path="/goals" element={<Goals />} />
           </Routes>
         </Layout>
       </HashRouter>

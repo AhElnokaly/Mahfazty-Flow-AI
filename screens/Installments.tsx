@@ -4,15 +4,17 @@ import { useApp } from '../store';
 import { 
   CreditCard, Plus, Calendar, Percent, AlertCircle, 
   CheckCircle2, Trash2, ArrowRight, DollarSign, Wallet, Layers,
-  TrendingDown, TrendingUp, PieChart as PieIcon, Activity, Edit3, X
+  TrendingDown, TrendingUp, PieChart as PieIcon, Activity, Edit3, X, Users, Info
 } from 'lucide-react';
 import { Installment } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import ConfirmModal from '../components/ConfirmModal';
+import GroupsManager from './GroupsManager';
 
 const Installments: React.FC = () => {
   const { state, dispatch } = useApp();
   const { language, installments, baseCurrency, groups } = state;
+  const [activeTab, setActiveTab] = useState<'installments' | 'groups'>('installments');
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -92,6 +94,9 @@ const Installments: React.FC = () => {
          penalty: 0,
          linkedGroupId: formData.linkedGroupId || undefined
        });
+       if (installments.length === 0) {
+         dispatch.unlockAchievement('first_installment');
+       }
        dispatch.setNotification({ message: language === 'ar' ? 'تمت إضافة خطة القسط' : 'Installment plan added', type: 'success' });
     }
     
@@ -157,31 +162,68 @@ const Installments: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
-            <CreditCard className="text-rose-500" />
-            {language === 'ar' ? 'الأقساط والديون' : 'Debts & Installments'}
+            <Layers className="text-blue-500" />
+            {language === 'ar' ? 'الإدارة المالية' : 'Financial Management'}
           </h2>
           <p className="text-slate-600 dark:text-slate-400 mt-2 font-bold uppercase tracking-wider text-xs">
-            {language === 'ar' ? 'لوحة التحكم بالالتزامات المالية' : 'Financial Liabilities Dashboard'}
+            {language === 'ar' ? 'إدارة الأقساط، المجموعات، والعملاء' : 'Manage Installments, Groups & Clients'}
           </p>
         </div>
-        <button 
-          onClick={() => { setShowAdd(!showAdd); setEditingId(null); setFormData({ title: '', totalAmount: 0, interestRate: 0, installmentCount: 12, type: 'purchase', startDate: new Date().toISOString().split('T')[0], linkedGroupId: '' }); }}
-          className="px-6 py-3 bg-rose-600 text-white rounded-2xl font-black shadow-lg shadow-rose-500/20 flex items-center justify-center gap-2 hover:scale-105 transition-transform"
+        {activeTab === 'installments' && (
+          <button 
+            onClick={() => { setShowAdd(!showAdd); setEditingId(null); setFormData({ title: '', totalAmount: 0, interestRate: 0, installmentCount: 12, type: 'purchase', startDate: new Date().toISOString().split('T')[0], linkedGroupId: '' }); }}
+            className="px-6 py-3 bg-rose-600 text-white rounded-2xl font-black shadow-lg shadow-rose-500/20 flex items-center justify-center gap-2 hover:scale-105 transition-transform"
+          >
+            {showAdd ? <X size={20} /> : <Plus size={20} />}
+            {showAdd ? (language === 'ar' ? 'إلغاء' : 'Cancel') : (language === 'ar' ? 'خطة جديدة' : 'New Plan')}
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-2xl">
+        <button
+          onClick={() => setActiveTab('installments')}
+          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'installments' ? 'bg-white dark:bg-slate-700 text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
         >
-          {showAdd ? <X size={20} /> : <Plus size={20} />}
-          {showAdd ? (language === 'ar' ? 'إلغاء' : 'Cancel') : (language === 'ar' ? 'خطة جديدة' : 'New Plan')}
+          <CreditCard size={16} />
+          {language === 'ar' ? 'الأقساط والديون' : 'Installments & Debts'}
+        </button>
+        <button
+          onClick={() => setActiveTab('groups')}
+          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'groups' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <Users size={16} />
+          {language === 'ar' ? 'المجموعات والعملاء' : 'Groups & Clients'}
         </button>
       </div>
 
-      {/* 2. STATS DASHBOARD & GRAPH */}
-      {!showAdd && activeInstallments.length > 0 && (
+      {activeTab === 'groups' ? (
+        <GroupsManager />
+      ) : (
+        <>
+          {/* 2. STATS DASHBOARD & GRAPH */}
+          {!showAdd && activeInstallments.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
            {/* Stats Cards */}
            <div className="lg:col-span-2 grid grid-cols-2 gap-4">
               <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col justify-between relative overflow-hidden">
                  <div className="absolute top-0 right-0 p-4 opacity-10"><Calendar size={64} /></div>
                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'الالتزام الشهري' : 'Monthly Commitment'}</p>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{language === 'ar' ? 'الالتزام الشهري' : 'Monthly Commitment'}</p>
+                      <div className="group relative flex items-center">
+                        <Info size={12} className="text-slate-500 cursor-help" />
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] font-medium rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-center pointer-events-none shadow-xl">
+                          {language === 'ar' ? 'إجمالي المبالغ التي يجب دفعها شهرياً لجميع الأقساط النشطة.' : 'Total amount to be paid monthly for all active installments.'}
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                        </div>
+                      </div>
+                    </div>
                     <p className="text-2xl font-black text-white">${stats.totalMonthlyCommitment.toLocaleString()}</p>
                  </div>
                  <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-400">
@@ -192,7 +234,16 @@ const Installments: React.FC = () => {
 
               <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{language === 'ar' ? 'إجمالي الدين المتبقي' : 'Total Remaining Debt'}</p>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{language === 'ar' ? 'إجمالي الدين المتبقي' : 'Total Remaining Debt'}</p>
+                      <div className="group relative flex items-center">
+                        <Info size={12} className="text-slate-300 dark:text-slate-600 cursor-help" />
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 dark:bg-slate-700 text-white text-[10px] font-medium rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-center pointer-events-none shadow-xl">
+                          {language === 'ar' ? 'المبلغ المتبقي سداده شاملاً الفوائد (إن وجدت).' : 'The remaining amount to be paid including interest (if any).'}
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800 dark:border-t-slate-700"></div>
+                        </div>
+                      </div>
+                    </div>
                     <p className="text-2xl font-black text-rose-600 dark:text-rose-400">${stats.totalRemainingAmount.toLocaleString()}</p>
                  </div>
                  <div className="mt-4 flex items-center gap-2">
@@ -452,6 +503,8 @@ const Installments: React.FC = () => {
         confirmText={language === 'ar' ? 'مسح' : 'Delete'}
         cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
       />
+      </>
+      )}
     </div>
   );
 };
