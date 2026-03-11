@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../store';
-import { sendChatMessage, editFinancialImage } from '../geminiService';
+import { sendChatMessage, editFinancialImage, generateVideo } from '../geminiService';
 import { 
   Sparkles, Send, Bot, Loader2, 
   Zap, MessageSquare, ShieldCheck,
@@ -68,6 +68,17 @@ const AI_FEATURES = [
     color: 'bg-purple-600',
     mode: 'studio',
     prompt: 'Clean up this receipt and extract the total amount spent.'
+  },
+  {
+    id: 'video',
+    titleEn: 'Cosmic Journey',
+    titleAr: 'رحلة كونية',
+    descEn: 'Generate a cinematic cosmic journey video using Veo.',
+    descAr: 'إنشاء فيديو سينمائي لرحلة كونية باستخدام Veo.',
+    icon: Sparkles,
+    color: 'bg-indigo-600',
+    mode: 'video',
+    prompt: 'A first-person cosmic journey starting inside the infinite glowing singularity at t=0, ultra-dense white-blue plasma point exploding into rapid cosmic inflation, spacetime stretching like a balloon in hyper-speed, colors shifting from blinding white to fiery plasma soup of quarks and gluons swirling violently, then cooling into glowing orange-red cosmic microwave background fog with tiny fluctuations, finally dark void pierced by the sudden ignition of the very first ancient stars bursting into brilliant golden-blue light everywhere, cinematic, epic scale, intense dynamic camera rush forward through expanding universe, 6 seconds smooth fast motion, ultra high detail, 8k, dramatic lighting, awe-inspiring, scientific visualization style --ar 16:9 --v 6 --stylize 750 --chaos 20'
   }
 ];
 
@@ -184,13 +195,14 @@ const AIInsights: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { language, chatHistory, proChatHistory, isPro, userProfile } = state;
-  const [activeTab, setActiveTab] = useState<'assistant' | 'architect' | 'studio'>('assistant');
+  const [activeTab, setActiveTab] = useState<'assistant' | 'architect' | 'studio' | 'video'>('assistant');
   const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const [showFeatureLibrary, setShowFeatureLibrary] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const [selectedImage, setSelectedImage] = useState<{file: File, preview: string, base64: string} | null>(null);
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // State to hold pending proposal
@@ -245,6 +257,11 @@ const AIInsights: React.FC = () => {
     if (activeTab === 'studio') {
       if (!selectedImage) return;
       handleImageEdit(messageToSend);
+      return;
+    }
+
+    if (activeTab === 'video') {
+      handleGenerateVideo(messageToSend);
       return;
     }
 
@@ -314,6 +331,24 @@ const AIInsights: React.FC = () => {
     setIsChatting(false);
   };
 
+  const handleGenerateVideo = async (msg: string) => {
+    if (!msg.trim()) return;
+    setIsChatting(true);
+    setGeneratedVideoUrl(null);
+    dispatch.addChatMessage({ role: 'user', text: `${language === 'ar' ? 'إنشاء فيديو:' : 'Generate Video:'} ${msg}`, timestamp: new Date().toISOString() }, false);
+    
+    const videoUrl = await generateVideo(state, dispatch, msg);
+    
+    if (videoUrl) {
+      setGeneratedVideoUrl(videoUrl);
+      dispatch.addChatMessage({ role: 'model', text: `[Video Generated Successfully]`, timestamp: new Date().toISOString() }, false);
+      setChatInput('');
+    } else {
+      dispatch.setNotification({ message: language === 'ar' ? 'فشل إنشاء الفيديو' : 'Video generation failed', type: 'error' });
+    }
+    setIsChatting(false);
+  };
+
   const initiateFeature = (feature: typeof AI_FEATURES[0]) => {
     vibrate();
     setActiveTab(feature.mode as any);
@@ -351,25 +386,31 @@ const AIInsights: React.FC = () => {
       </div>
 
       {/* Tabs Switcher */}
-      <div className="flex gap-2 p-1.5 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-100 dark:border-slate-700">
+      <div className="flex gap-2 p-1.5 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 overflow-x-auto custom-scrollbar">
         <button 
           onClick={() => setActiveTab('assistant')}
-          className={`flex-1 py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-blue-500'}`}
+          className={`flex-1 min-w-[100px] py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-blue-500'}`}
         >
           <MessageSquare size={16} /> {language === 'ar' ? 'المساعد' : 'Assistant'}
         </button>
         <button 
           onClick={() => setActiveTab('architect')}
-          className={`flex-1 py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'architect' ? 'bg-[#101827] text-amber-400 shadow-lg border border-amber-400/20' : 'text-slate-400 hover:text-amber-500'}`}
+          className={`flex-1 min-w-[100px] py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'architect' ? 'bg-[#101827] text-amber-400 shadow-lg border border-amber-400/20' : 'text-slate-400 hover:text-amber-500'}`}
         >
           <Terminal size={16} /> {language === 'ar' ? 'المهندس' : 'Architect'}
           {!isPro && <ShieldCheck size={12} className="opacity-50" />}
         </button>
         <button 
           onClick={() => setActiveTab('studio')}
-          className={`flex-1 py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'studio' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-purple-500'}`}
+          className={`flex-1 min-w-[100px] py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'studio' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-purple-500'}`}
         >
           <Wand2 size={16} /> {language === 'ar' ? 'الاستوديو' : 'Studio'}
+        </button>
+        <button 
+          onClick={() => setActiveTab('video')}
+          className={`flex-1 min-w-[100px] py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-indigo-500'}`}
+        >
+          <Sparkles size={16} /> {language === 'ar' ? 'فيديو' : 'Video'}
         </button>
       </div>
 
@@ -406,6 +447,22 @@ const AIInsights: React.FC = () => {
                   <div className="relative group w-full max-w-sm">
                     <img src={selectedImage.preview} className="w-full rounded-3xl shadow-2xl border-4 border-purple-500/20" />
                     <button onClick={() => setSelectedImage(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg"><X size={16}/></button>
+                  </div>
+                )}
+             </div>
+          ) : activeTab === 'video' ? (
+             <div className="h-full flex flex-col items-center justify-center py-12 gap-6">
+                {!generatedVideoUrl ? (
+                  <div className="w-full max-w-sm aspect-video border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl flex flex-col items-center justify-center gap-3 text-slate-400 bg-slate-50 dark:bg-slate-800/50">
+                    <Sparkles size={32} className="text-indigo-500" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-center px-4">
+                      {isChatting ? (language === 'ar' ? 'جاري إنشاء الفيديو...' : 'Generating Video...') : (language === 'ar' ? 'أدخل وصف الفيديو بالأسفل' : 'Enter video prompt below')}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="relative group w-full max-w-sm">
+                    <video src={generatedVideoUrl} controls className="w-full rounded-3xl shadow-2xl border-4 border-indigo-500/20" />
+                    <button onClick={() => setGeneratedVideoUrl(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg"><X size={16}/></button>
                   </div>
                 )}
              </div>
@@ -503,7 +560,7 @@ const AIInsights: React.FC = () => {
               <LayoutGrid size={20} />
             </button>
 
-            {activeTab !== 'studio' && (
+            {activeTab !== 'studio' && activeTab !== 'video' && (
               <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-blue-600 transition-all flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-800">
                 <ImageIcon size={20} />
               </button>
@@ -515,7 +572,7 @@ const AIInsights: React.FC = () => {
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                placeholder={activeTab === 'studio' ? (language === 'ar' ? 'صف التعديل...' : 'Describe edit...') : (language === 'ar' ? 'اسأل أي شيء مالي...' : 'Ask anything financial...')}
+                placeholder={activeTab === 'studio' ? (language === 'ar' ? 'صف التعديل...' : 'Describe edit...') : activeTab === 'video' ? (language === 'ar' ? 'أدخل وصف الفيديو...' : 'Describe video...') : (language === 'ar' ? 'اسأل أي شيء مالي...' : 'Ask anything financial...')}
                 className="w-full py-4 pl-5 pr-5 bg-slate-50 dark:bg-slate-900 border border-transparent rounded-full text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
               />
             </div>
@@ -523,7 +580,7 @@ const AIInsights: React.FC = () => {
             <button 
               onClick={() => handleSendMessage()}
               disabled={(!chatInput.trim() && !selectedImage) || isChatting}
-              className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl transition-all active:scale-95 disabled:opacity-20 ${activeTab === 'architect' ? 'bg-[#101827] text-amber-400 border border-amber-400/30' : 'bg-blue-600 text-white shadow-blue-500/20'}`}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl transition-all active:scale-95 disabled:opacity-20 ${activeTab === 'architect' ? 'bg-[#101827] text-amber-400 border border-amber-400/30' : activeTab === 'video' ? 'bg-indigo-600 text-white shadow-indigo-500/20' : 'bg-blue-600 text-white shadow-blue-500/20'}`}
             >
               <Send size={20} />
             </button>

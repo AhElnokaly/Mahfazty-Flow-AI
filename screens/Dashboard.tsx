@@ -136,6 +136,15 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-700 pb-20 px-2 max-w-5xl mx-auto">
       
+      {/* Total Balance Section */}
+      <section className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+        <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">{language === 'ar' ? 'إجمالي الرصيد' : 'Total Balance'}</p>
+        <h2 className={`text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tighter ${privacyClass}`}>
+          {baseCurrency} {walletBalance.toLocaleString()}
+        </h2>
+      </section>
+
       {/* Quick Actions & AI Card */}
       {/* +++ تم تعديل حواف البطاقات والمسافات الداخلية بناءً على طلبك +++ */}
       <section className="flex flex-col md:flex-row gap-4">
@@ -282,7 +291,11 @@ const Dashboard: React.FC = () => {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {accountCards.length > 0 ? accountCards.map(account => (
-            <div key={account.id} className={`${account.style.bg} ${account.style.shadow} p-5 rounded-3xl text-white relative overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer`}>
+            <div 
+              key={account.id} 
+              onClick={() => navigate('/history', { state: { filterGroup: account.id } })}
+              className={`${account.style.bg} ${account.style.shadow} p-5 rounded-3xl text-white relative overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer`}
+            >
                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:scale-125 transition-transform duration-700"></div>
                <div className="relative z-10">
                  <div className="flex justify-between items-start mb-4">
@@ -348,9 +361,10 @@ const Dashboard: React.FC = () => {
               {language === 'ar' ? 'عرض الكل' : 'View All'} <ArrowRight size={12} className={language === 'ar' ? 'rotate-180' : ''} />
             </button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
             {recentTransactions.length > 0 ? recentTransactions.map(t => {
               const group = groups.find(g => g.id === t.groupId);
+              const client = state.clients.find(c => c.id === t.clientId);
               const isIncome = t.type === TransactionType.INCOME;
               return (
                 <div key={t.id} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer" onClick={() => navigate('/history')}>
@@ -359,12 +373,16 @@ const Dashboard: React.FC = () => {
                       {group?.icon || '💰'}
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">{t.title}</p>
-                      <p className="text-[10px] text-slate-500 font-medium">{t.date}</p>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">{client?.name || t.note || 'Transaction'}</p>
+                      <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                        <span>{t.date}</span>
+                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                        <span>{group?.name}</span>
+                      </p>
                     </div>
                   </div>
                   <p className={`text-sm font-black ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} ${privacyClass}`}>
-                    {isIncome ? '+' : '-'}${t.amount.toLocaleString()}
+                    {isIncome ? '+' : '-'}{baseCurrency} {t.amount.toLocaleString()}
                   </p>
                 </div>
               );

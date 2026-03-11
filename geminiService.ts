@@ -271,6 +271,65 @@ export const editFinancialImage = async (state: AppState, dispatch: any, prompt:
   return null;
 };
 
+export const generateVideo = async (state: AppState, dispatch: any, prompt: string) => {
+  let excludedIds: string[] = [];
+  let attempt = 0;
+  const maxAttempts = state.apiKeys.length > 0 ? state.apiKeys.length : 1;
+
+  while (attempt < maxAttempts) {
+    const activeKeyConfig = getActiveApiKey(state, excludedIds);
+    if (!activeKeyConfig) return null;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: activeKeyConfig.key });
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-fast-generate-preview',
+        prompt: prompt,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: '16:9'
+        }
+      });
+
+      // Poll for completion
+      while (!operation.done) {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        operation = await ai.operations.getVideosOperation({operation: operation});
+      }
+
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+      if (downloadLink) {
+        if (dispatch) dispatch.incrementApiKeyUsage(activeKeyConfig.id);
+        
+        // Fetch the video using the API key in the header
+        const response = await fetch(downloadLink, {
+          method: 'GET',
+          headers: {
+            'x-goog-api-key': activeKeyConfig.key,
+          },
+        });
+        
+        if (response.ok) {
+          const blob = await response.blob();
+          return URL.createObjectURL(blob);
+        }
+      }
+      return null;
+    } catch (error: any) {
+      console.error(`Video Generation Error (Key: ${activeKeyConfig.name}):`, error);
+      if (error.message?.includes('429') || error.message?.includes('403') || error.message?.includes('key') || error.message?.includes('quota')) {
+         if (dispatch) dispatch.blockApiKey(activeKeyConfig.id);
+         excludedIds.push(activeKeyConfig.id);
+         attempt++;
+         continue;
+      }
+      return null;
+    }
+  }
+  return null;
+};
+
 export const suggestTransactionNote = async (state: AppState, dispatch: any, data: { type: string, amount: string, currency: string, groupName: string, clientName: string, date: string }) => {
   let excludedIds: string[] = [];
   let attempt = 0;

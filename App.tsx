@@ -330,47 +330,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const [showFabMenu, setShowFabMenu] = useState(false);
 
-  // Shake to toggle privacy mode
-  useEffect(() => {
-    let lastX = 0, lastY = 0, lastZ = 0;
-    let lastUpdate = 0;
-    let lastShake = 0;
-    const SHAKE_THRESHOLD = 800; // Increased threshold to prevent accidental triggers
-
-    const handleDeviceMotion = (event: DeviceMotionEvent) => {
-      const current = event.accelerationIncludingGravity;
-      if (!current || current.x === null || current.y === null || current.z === null) return;
-
-      const currentTime = new Date().getTime();
-      if ((currentTime - lastUpdate) > 100) {
-        const diffTime = (currentTime - lastUpdate);
-        lastUpdate = currentTime;
-
-        const deltaX = current.x - lastX;
-        const deltaY = current.y - lastY;
-        const deltaZ = current.z - lastZ;
-        
-        // Calculate speed using absolute differences for each axis
-        const speed = (Math.abs(deltaX) + Math.abs(deltaY) + Math.abs(deltaZ)) / diffTime * 10000;
-
-        if (speed > SHAKE_THRESHOLD) {
-          if (currentTime - lastShake > 2000) { // 2 seconds debounce
-            if (navigator.vibrate) navigator.vibrate(50);
-            dispatch.togglePrivacyMode();
-            lastShake = currentTime;
-          }
-        }
-
-        lastX = current.x;
-        lastY = current.y;
-        lastZ = current.z;
-      }
-    };
-
-    window.addEventListener('devicemotion', handleDeviceMotion);
-    return () => window.removeEventListener('devicemotion', handleDeviceMotion);
-  }, [dispatch]);
-
   if (!state.hasSeenOnboarding) {
     return <Onboarding />;
   }
@@ -409,6 +368,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <div className="fixed bottom-24 right-4 sm:right-8 z-50 flex flex-col items-end gap-3">
         {showFabMenu && (
           <div className="flex flex-col gap-3 mb-2 animate-in slide-in-from-bottom-4 fade-in duration-200">
+            <button 
+              onClick={() => { setShowFabMenu(false); navigate('/ai'); }}
+              className="flex items-center gap-3 bg-indigo-500 text-white px-4 py-3 rounded-full shadow-lg hover:bg-indigo-600 transition-colors"
+            >
+              <span className="text-xs font-bold uppercase tracking-wide">{state.language === 'ar' ? 'الذكاء الاصطناعي' : 'AI Insights'}</span>
+              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                <Sparkles size={16} />
+              </div>
+            </button>
             <button 
               onClick={() => { setShowFabMenu(false); navigate('/add', { state: { type: 'income' } }); }}
               className="flex items-center gap-3 bg-emerald-500 text-white px-4 py-3 rounded-full shadow-lg hover:bg-emerald-600 transition-colors"
