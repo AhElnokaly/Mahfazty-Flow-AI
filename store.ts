@@ -61,7 +61,7 @@ interface AppContextType {
   state: AppState;
   dispatch: {
     login: (username: string, password?: string) => void;
-    signup: (username: string, password?: string) => void;
+    signup: (username: string, password?: string, email?: string) => void;
     guestLogin: () => void;
     logout: () => void;
     completeOnboarding: () => void;
@@ -118,7 +118,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 type Action = 
   | { type: 'LOGIN'; payload: { username: string } }
-  | { type: 'SIGNUP'; payload: { username: string } }
+  | { type: 'SIGNUP'; payload: { username: string; email?: string; password?: string } }
   | { type: 'GUEST_LOGIN' }
   | { type: 'LOGOUT' }
   | { type: 'ADD_API_KEY'; payload: { name: string; key: string } }
@@ -172,6 +172,20 @@ type Action =
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
     case 'LOGIN': {
+      const updateMessage = state.language === 'ar' 
+        ? 'تم تفعيل ميزة استعادة كلمة المرور وربط الحساب بالبريد الإلكتروني لزيادة الأمان.' 
+        : 'Password reset and email linking have been enabled for enhanced security.';
+      
+      const hasSeenUpdate = state.notificationHistory.some(n => n.message === updateMessage);
+      const updateNotification = {
+        id: Date.now().toString(),
+        title: state.language === 'ar' ? '✨ تحديث جديد' : '✨ New Update',
+        message: updateMessage,
+        type: 'update' as const,
+        timestamp: new Date().toISOString(),
+        read: false
+      };
+
       return { 
         ...state, 
         userProfile: { 
@@ -180,19 +194,30 @@ const appReducer = (state: AppState, action: Action): AppState => {
           username: action.payload.username,
           isAuthenticated: true 
         },
-        notification: { message: `Welcome back, ${action.payload.username}!`, type: 'success' }
+        notification: hasSeenUpdate ? { message: state.language === 'ar' ? `مرحباً بعودتك، ${action.payload.username}!` : `Welcome back, ${action.payload.username}!`, type: 'success' } : updateNotification,
+        notificationHistory: hasSeenUpdate ? state.notificationHistory : [updateNotification, ...state.notificationHistory]
       };
     }
     case 'SIGNUP': {
+      const welcomeMessage = state.language === 'ar' 
+        ? `مرحباً ${action.payload.username}! تم إنشاء حسابك بنجاح.` 
+        : `Welcome, ${action.payload.username}! Your account is ready.`;
+        
       return { 
         ...state, 
         userProfile: { 
           ...state.userProfile, 
           name: action.payload.username,
           username: action.payload.username,
+          email: action.payload.email || state.userProfile.email,
+          password: action.payload.password,
           isAuthenticated: true 
         },
-        notification: { message: `Welcome, ${action.payload.username}! Your account is ready.`, type: 'success' }
+        notification: { 
+          title: state.language === 'ar' ? '🎉 أهلاً بك في محفظتي' : '🎉 Welcome to Mahfazty',
+          message: welcomeMessage, 
+          type: 'success' 
+        }
       };
     }
     case 'GUEST_LOGIN': {
@@ -205,11 +230,23 @@ const appReducer = (state: AppState, action: Action): AppState => {
           isAuthenticated: true,
           avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Guest'
         },
-        notification: { message: 'Welcome Guest! Data is stored locally.', type: 'info' }
+        notification: { 
+          title: state.language === 'ar' ? 'وضع الضيف' : 'Guest Mode',
+          message: state.language === 'ar' ? 'مرحباً بك! يتم حفظ البيانات محلياً.' : 'Welcome Guest! Data is stored locally.', 
+          type: 'info' 
+        }
       };
     }
     case 'LOGOUT':
-      return { ...state, userProfile: INITIAL_STATE.userProfile, notification: { message: 'Logged out successfully', type: 'info' } };
+      return { 
+        ...state, 
+        userProfile: INITIAL_STATE.userProfile, 
+        notification: { 
+          title: state.language === 'ar' ? 'إلى اللقاء' : 'Goodbye',
+          message: state.language === 'ar' ? 'تم تسجيل الخروج بنجاح' : 'Logged out successfully', 
+          type: 'info' 
+        } 
+      };
     case 'ADD_API_KEY': {
       const newKey = {
         id: Date.now().toString(),
@@ -400,20 +437,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (savedData) {
         try {
           const parsed = JSON.parse(savedData);
+          if (parsed.userProfile?.password && parsed.userProfile.password !== password) {
+            dispatch({ type: 'SET_NOTIFICATION', payload: { title: 'خطأ / Error', message: 'كلمة المرور غير صحيحة / Invalid password', type: 'error' } });
+            return;
+          }
           dispatch({ type: 'IMPORT_STATE', payload: { ...parsed, userProfile: { ...parsed.userProfile, isAuthenticated: true } } });
         } catch (e) {
           dispatch({ type: 'LOGIN', payload: { username } });
         }
       } else {
-        dispatch({ type: 'LOGIN', payload: { username } });
+        dispatch({ type: 'SET_NOTIFICATION', payload: { title: 'خطأ / Error', message: 'المستخدم غير موجود / User not found', type: 'error' } });
       }
     },
-    signup: (username: string, password?: string) => {
+    signup: (username: string, password?: string, email?: string) => {
       if (localStorage.getItem(`mahfazty_user_${username}`)) {
-        dispatch({ type: 'SET_NOTIFICATION', payload: { message: 'User already exists. Please login.', type: 'error' } });
+        dispatch({ type: 'SET_NOTIFICATION', payload: { title: 'تنبيه / Alert', message: 'المستخدم موجود بالفعل / User already exists', type: 'error' } });
         return;
       }
-      dispatch({ type: 'SIGNUP', payload: { username } });
+      dispatch({ type: 'SIGNUP', payload: { username, email, password } });
     },
     guestLogin: () => {
       // Check for existing guest data

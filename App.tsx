@@ -17,7 +17,7 @@ import {
   LayoutDashboard, BarChart3, Layers, User, 
   Bell, Plus, History as HistoryIcon,
   CheckCircle2, AlertCircle, Sun, Moon,
-  RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn, Eye, EyeOff, Key, ShieldCheck
+  RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn, Eye, EyeOff, Key, ShieldCheck, Mail
 } from 'lucide-react';
 
 // Helper to decode JWT without external library
@@ -39,18 +39,41 @@ const NotificationToast = ({ notification, onClose }: { notification: any, onClo
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
-    }, 3000);
+    }, notification.type === 'update' ? 6000 : 3000);
     return () => clearTimeout(timer);
   }, [notification, onClose]);
 
+  const getStyle = () => {
+    switch (notification.type) {
+      case 'success': return 'bg-emerald-500/90 text-white border-emerald-400/20';
+      case 'error': return 'bg-rose-500/90 text-white border-rose-400/20';
+      case 'info': return 'bg-blue-600/90 text-white border-blue-400/20';
+      case 'update': return 'bg-gradient-to-r from-indigo-600/95 to-purple-600/95 text-white border-indigo-400/30 shadow-indigo-500/20';
+      default: return 'bg-slate-800/90 text-white border-slate-700/50';
+    }
+  };
+
+  const getIcon = () => {
+    switch (notification.type) {
+      case 'success': return <CheckCircle2 size={24} className="shrink-0" />;
+      case 'error': return <AlertCircle size={24} className="shrink-0" />;
+      case 'info': return <Zap size={24} className="shrink-0" />;
+      case 'update': return <Sparkles size={24} className="shrink-0 text-yellow-300 animate-pulse" />;
+      default: return <Bell size={24} className="shrink-0" />;
+    }
+  };
+
   return (
     <div className="absolute top-0 left-0 right-0 z-[60] flex justify-center px-4 pointer-events-none">
-      <div className={`mt-2 px-6 py-4 rounded-3xl shadow-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 w-full max-w-md border border-white/10 backdrop-blur-xl pointer-events-auto transform hover:scale-[1.02] transition-transform ${notification.type === 'success' ? 'bg-emerald-500/90 text-white' : 'bg-rose-500/90 text-white'}`}>
-        <div className="flex items-center gap-3">
-           {notification.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-           <span className="text-sm font-black tracking-wide">{notification.message}</span>
+      <div className={`mt-4 px-6 py-4 rounded-2xl shadow-2xl flex items-start justify-between gap-4 animate-in fade-in slide-in-from-top-4 w-full max-w-md border backdrop-blur-xl pointer-events-auto transform hover:scale-[1.02] transition-transform ${getStyle()}`}>
+        <div className="flex items-start gap-3 mt-0.5">
+           {getIcon()}
+           <div className="flex flex-col gap-1">
+             {notification.title && <span className="text-sm font-black tracking-wide">{notification.title}</span>}
+             <span className={`text-sm ${notification.title ? 'font-medium opacity-90' : 'font-black tracking-wide'} leading-relaxed`}>{notification.message}</span>
+           </div>
         </div>
-        <button onClick={onClose} className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"><X size={14}/></button>
+        <button onClick={onClose} className="w-6 h-6 shrink-0 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors mt-0.5"><X size={14}/></button>
       </div>
     </div>
   );
@@ -58,19 +81,59 @@ const NotificationToast = ({ notification, onClose }: { notification: any, onClo
 
 const WelcomeScreen = () => {
   const { state, dispatch } = useApp();
-  const [view, setView] = useState<'landing' | 'login' | 'signup'>('landing');
+  const [view, setView] = useState<'landing' | 'login' | 'signup' | 'forgot-password'>('landing');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (view === 'forgot-password') {
+      if (!email) return;
+      setLoading(true);
+      setTimeout(() => {
+        // Find user by email in local storage
+        let foundUser = false;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('mahfazty_user_') && key !== 'mahfazty_user_guest') {
+            try {
+              const data = JSON.parse(localStorage.getItem(key) || '{}');
+              if (data.userProfile?.email === email) {
+                foundUser = true;
+                break;
+              }
+            } catch (e) {}
+          }
+        }
+        
+        if (foundUser) {
+          dispatch.setNotification({ 
+            title: state.language === 'ar' ? 'تم الإرسال' : 'Sent',
+            message: state.language === 'ar' ? `تم إرسال رابط إعادة تعيين كلمة المرور إلى ${email}` : `Password reset link sent to ${email}`, 
+            type: 'success' 
+          });
+          setView('login');
+        } else {
+          dispatch.setNotification({ 
+            title: state.language === 'ar' ? 'خطأ' : 'Error',
+            message: state.language === 'ar' ? 'البريد الإلكتروني غير مسجل' : 'Email not found', 
+            type: 'error' 
+          });
+        }
+        setLoading(false);
+      }, 800);
+      return;
+    }
+
     if (!username || !password) return;
+    if (view === 'signup' && !email) return;
     
     setLoading(true);
     setTimeout(() => {
       if (view === 'signup') {
-        dispatch.signup(username, password);
+        dispatch.signup(username, password, email);
       } else {
         dispatch.login(username, password);
       }
@@ -164,47 +227,83 @@ const WelcomeScreen = () => {
             <h2 className="text-3xl font-black text-white uppercase tracking-tight">
               {view === 'login' 
                 ? (state.language === 'ar' ? 'مرحباً بعودتك' : 'Welcome Back') 
+                : view === 'forgot-password'
+                ? (state.language === 'ar' ? 'استعادة كلمة المرور' : 'Reset Password')
                 : (state.language === 'ar' ? 'انضم إلينا' : 'Join Us')}
             </h2>
             <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">
-              {view === 'login' ? 'Enter your credentials' : 'Start your journey'}
+              {view === 'login' ? 'Enter your credentials' : view === 'forgot-password' ? 'Enter your email' : 'Start your journey'}
             </p>
           </div>
 
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[2.5rem] space-y-6 shadow-2xl">
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
-                  {state.language === 'ar' ? 'اسم المستخدم' : 'Username'}
-                </label>
-                <div className="relative group">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
-                  <input 
-                    type="text" 
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
-                    placeholder="username"
-                    autoFocus
-                  />
+              {view !== 'forgot-password' && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                    {state.language === 'ar' ? 'اسم المستخدم' : 'Username'}
+                  </label>
+                  <div className="relative group">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
+                    <input 
+                      type="text" 
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
+                      placeholder="username"
+                      autoFocus={view !== 'forgot-password'}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
-                  {state.language === 'ar' ? 'كلمة المرور' : 'Password'}
-                </label>
-                <div className="relative group">
-                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
-                  <input 
-                    type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
-                    placeholder="••••••••"
-                  />
+              {(view === 'signup' || view === 'forgot-password') && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                    {state.language === 'ar' ? 'البريد الإلكتروني' : 'Email'}
+                  </label>
+                  <div className="relative group">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
+                    <input 
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
+                      placeholder="email@example.com"
+                      autoFocus={view === 'forgot-password'}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {view !== 'forgot-password' && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                    {state.language === 'ar' ? 'كلمة المرور' : 'Password'}
+                  </label>
+                  <div className="relative group">
+                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
+                    <input 
+                      type="password" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  {view === 'login' && (
+                    <div className="flex justify-end mt-2">
+                      <button 
+                        type="button"
+                        onClick={() => setView('forgot-password')}
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium"
+                      >
+                        {state.language === 'ar' ? 'نسيت كلمة المرور؟' : 'Forgot Password?'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <button 
                 type="submit"
@@ -212,12 +311,16 @@ const WelcomeScreen = () => {
                 className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all mt-4 ${
                   view === 'signup' 
                     ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950' 
+                    : view === 'forgot-password'
+                    ? 'bg-amber-500 hover:bg-amber-400 text-amber-950'
                     : 'bg-blue-600 hover:bg-blue-500 text-white'
                 } shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
               >
                 {loading && <RefreshCw className="animate-spin" size={16} />}
                 {view === 'signup' 
                   ? (state.language === 'ar' ? 'إنشاء حساب' : 'Create Account') 
+                  : view === 'forgot-password'
+                  ? (state.language === 'ar' ? 'إرسال الرابط' : 'Send Link')
                   : (state.language === 'ar' ? 'تسجيل الدخول' : 'Sign In')}
               </button>
             </form>

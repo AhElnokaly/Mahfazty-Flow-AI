@@ -43,10 +43,13 @@ export interface Transaction {
 
 export interface UserProfile {
   name: string;
+  username?: string;
+  password?: string;
   email: string;
   avatar: string;
   isAuthenticated: boolean;
   preferredApiKeyId?: string; 
+  achievements?: string[];
 }
 
 export interface Installment {
@@ -73,8 +76,9 @@ export interface ChatMessage {
 
 export interface AppNotification {
   id: string;
+  title?: string;
   message: string;
-  type: 'info' | 'success' | 'error';
+  type: 'info' | 'success' | 'error' | 'update';
   timestamp: string;
   read: boolean;
 }
@@ -156,8 +160,9 @@ export interface AppState {
     lastAnalysisDate?: string;
   };
   notification: {
+    title?: string;
     message: string;
-    type: 'info' | 'success' | 'error';
+    type: 'info' | 'success' | 'error' | 'update';
   } | null;
   notificationHistory: AppNotification[];
   hasSeenOnboarding: boolean;

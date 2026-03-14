@@ -6,9 +6,11 @@ import {
   Search, Download, History as HistoryIcon,
   Filter, Check, Trash2, Edit3, X, Layers, Users,
   ArrowUpRight, ArrowDownRight, Calendar as CalendarIcon, 
-  List, ChevronLeft, ChevronRight, Calculator, PieChart, LayoutList, Tag
+  List, ChevronLeft, ChevronRight, Calculator, PieChart, LayoutList, Tag, FileText
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 type TimeRange = 'weekly' | 'monthly' | 'yearly' | 'all';
 type ViewMode = 'list' | 'calendar';
@@ -195,6 +197,47 @@ const History: React.FC = () => {
     
     dispatch.setNotification({ message: language === 'ar' ? 'تم تصدير التقرير بنجاح' : 'Report exported successfully', type: 'success' });
   };
+
+  // +++ أضيف بناءً على طلبك +++
+  const handleExportPDF = () => {
+    if (filteredTransactions.length === 0) {
+      dispatch.setNotification({ message: language === 'ar' ? 'لا توجد بيانات للتصدير' : 'No data to export', type: 'error' });
+      return;
+    }
+
+    const doc = new jsPDF();
+    const title = language === 'ar' ? 'تقرير المعاملات' : 'Transactions Report';
+    
+    doc.setFontSize(18);
+    doc.text(title, 14, 22);
+    
+    const headers = [['Date', 'Type', 'Amount', 'Client', 'Group', 'Note']];
+    const data = filteredTransactions.map(t => {
+      const client = clients.find(c => c.id === t.clientId);
+      const group = groups.find(g => g.id === t.groupId);
+      return [
+        new Date(t.date).toLocaleDateString(),
+        t.type === TransactionType.INCOME ? '+' : '-',
+        `${t.amount} ${baseCurrency}`,
+        client?.name || '-',
+        group?.name || '-',
+        t.note || '-'
+      ];
+    });
+
+    (doc as any).autoTable({
+      startY: 30,
+      head: headers,
+      body: data,
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 10 },
+      headStyles: { fillColor: [59, 130, 246] }
+    });
+
+    doc.save(`transactions_${new Date().toISOString().split('T')[0]}.pdf`);
+    dispatch.setNotification({ message: language === 'ar' ? 'تم تصدير التقرير بنجاح' : 'Report exported successfully', type: 'success' });
+  };
+  // ++++++++++++++++++++++++++++
 
   const filteredClients = useMemo(() => {
     if (selectedGroupId === 'all') return clients;
@@ -427,13 +470,24 @@ const History: React.FC = () => {
                 </button>
               ))}
             </div>
-            <button 
-              onClick={handleExportCSV}
-              className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform w-full md:w-auto"
-            >
-              <Download size={16} />
-              {language === 'ar' ? 'تصدير CSV' : 'Export CSV'}
-            </button>
+            <div className="flex gap-2 w-full md:w-auto">
+              <button 
+                onClick={handleExportCSV}
+                className="flex flex-1 items-center justify-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform"
+              >
+                <Download size={16} />
+                {language === 'ar' ? 'تصدير CSV' : 'Export CSV'}
+              </button>
+              {/* +++ أضيف بناءً على طلبك +++ */}
+              <button 
+                onClick={handleExportPDF}
+                className="flex flex-1 items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform"
+              >
+                <FileText size={16} />
+                {language === 'ar' ? 'تصدير PDF' : 'Export PDF'}
+              </button>
+              {/* ++++++++++++++++++++++++++++ */}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
