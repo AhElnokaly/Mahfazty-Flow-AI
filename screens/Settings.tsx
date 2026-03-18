@@ -4,8 +4,9 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../store';
 import { cloudService } from '../services/cloud';
 import { AuthModal } from '../components/AuthModal';
+import { Link } from 'react-router-dom';
 import { 
-  Trash2, Edit3, Globe, Zap, Share2, Upload, Server, Info, ToggleLeft, ToggleRight, Check, CreditCard, ExternalLink, Key, Plus, MessageCircle, Mail, AlertTriangle, X, LogOut, ShieldCheck, Eye, EyeOff, RefreshCcw, Cloud, CloudOff, RefreshCw, TrendingUp, Sparkles, Target
+  Trash2, Edit3, Globe, Zap, Share2, Upload, Server, Info, ToggleLeft, ToggleRight, Check, CreditCard, ExternalLink, Key, Plus, MessageCircle, Mail, AlertTriangle, X, LogOut, ShieldCheck, Eye, EyeOff, RefreshCcw, Cloud, CloudOff, RefreshCw, TrendingUp, Sparkles, Target, Archive
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -295,6 +296,42 @@ const Settings: React.FC = () => {
                </div>
                <button onClick={() => dispatch.togglePushNotifications()} className="text-2xl">
                  {state.pushNotifications ? <ToggleRight size={32} className="text-amber-500" /> : <ToggleLeft size={32} className="text-slate-300" />}
+               </button>
+            </div>
+
+            {/* Archive Link */}
+            <Link to="/archive" className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+               <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center transition-colors">
+                    <Archive size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'الأرشيف' : 'Archive'}</h4>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">{language === 'ar' ? 'البيانات المحذوفة' : 'Deleted Data'}</p>
+                  </div>
+               </div>
+               <ExternalLink size={16} className="text-slate-400" />
+            </Link>
+
+            {/* Pro Version Activation */}
+            <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl">
+               <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-xl ${isPro ? 'bg-amber-400 text-amber-900' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'} flex items-center justify-center transition-colors`}>
+                    <Zap size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'النسخة الاحترافية' : 'Pro Version'}</h4>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">{language === 'ar' ? 'تفعيل الميزات المتقدمة' : 'Activate Advanced Features'}</p>
+                  </div>
+               </div>
+               <button onClick={() => {
+                 dispatch.setPro(!isPro);
+                 dispatch.setNotification({
+                   message: !isPro ? (language === 'ar' ? 'تم تفعيل النسخة الاحترافية' : 'Pro Version Activated') : (language === 'ar' ? 'تم إلغاء تفعيل النسخة الاحترافية' : 'Pro Version Deactivated'),
+                   type: 'success'
+                 });
+               }} className="text-2xl">
+                 {isPro ? <ToggleRight size={32} className="text-amber-400" /> : <ToggleLeft size={32} className="text-slate-300" />}
                </button>
             </div>
 

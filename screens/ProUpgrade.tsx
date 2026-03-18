@@ -8,6 +8,7 @@ const ProUpgrade: React.FC = () => {
   const { language } = state;
 
   const features = [
+    { title: language === 'ar' ? 'إدارة المحفظة الاستثمارية' : 'Investment Portfolio', icon: BarChart2 },
     { title: language === 'ar' ? 'تحليلات ذكاء اصطناعي متقدمة' : 'Advanced AI Insights', icon: Cpu },
     { title: language === 'ar' ? 'مزامنة سحابية فورية' : 'Real-time Cloud Sync', icon: Cloud },
     { title: language === 'ar' ? 'تقارير مالية عميقة' : 'Deep Financial Reports', icon: BarChart2 },

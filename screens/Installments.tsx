@@ -13,7 +13,8 @@ import GroupsManager from './GroupsManager';
 
 const Installments: React.FC = () => {
   const { state, dispatch } = useApp();
-  const { language, installments, baseCurrency, groups } = state;
+  const { language, installments, baseCurrency } = state;
+  const groups = useMemo(() => state.groups.filter(g => !g.isArchived), [state.groups]);
   const [activeTab, setActiveTab] = useState<'installments' | 'groups'>('installments');
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

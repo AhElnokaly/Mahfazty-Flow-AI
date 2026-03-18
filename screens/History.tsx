@@ -17,7 +17,16 @@ type ViewMode = 'list' | 'calendar';
 
 const History: React.FC = () => {
   const { state, dispatch } = useApp();
-  const { language, transactions, clients, groups, baseCurrency } = state;
+  const { language, baseCurrency } = state;
+  const groups = useMemo(() => state.groups.filter(g => !g.isArchived), [state.groups]);
+  const clients = useMemo(() => state.clients.filter(c => !c.isArchived), [state.clients]);
+  const transactions = useMemo(() => {
+    return state.transactions.filter(t => {
+      const g = state.groups.find(g => g.id === t.groupId);
+      const c = state.clients.find(c => c.id === t.clientId);
+      return (!g || !g.isArchived) && (!c || !c.isArchived);
+    });
+  }, [state.transactions, state.groups, state.clients]);
 
   // View State
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -647,6 +656,30 @@ const History: React.FC = () => {
                              </div>
                            </div>
                          )}
+                         {/* +++ أضيف بناءً على طلبك: تفاصيل الأسهم والودائع في السجل +++ */}
+                         {(t.shares || t.pricePerShare) && (
+                           <div className="mt-2 w-full max-w-[200px] bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-2 border border-indigo-100 dark:border-indigo-800/30 text-left">
+                             <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide mb-1">
+                               {language === 'ar' ? 'تفاصيل السهم' : 'Stock Details'}
+                             </p>
+                             <div className="flex justify-between items-center text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                               <span>{t.shares} {language === 'ar' ? 'سهم' : 'Shares'}</span>
+                               <span>× ${t.pricePerShare}</span>
+                             </div>
+                           </div>
+                         )}
+                         {(t.interestRate || t.duration) && (
+                           <div className="mt-2 w-full max-w-[200px] bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-2 border border-emerald-100 dark:border-emerald-800/30 text-left">
+                             <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide mb-1">
+                               {language === 'ar' ? 'تفاصيل الوديعة' : 'Deposit Details'}
+                             </p>
+                             <div className="flex justify-between items-center text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                               <span>{t.interestRate}%</span>
+                               <span>{t.duration} {language === 'ar' ? 'شهر' : 'Mo'}</span>
+                             </div>
+                           </div>
+                         )}
+                         {/* ++++++++++++++++++++++++++++ */}
                          {/* Secondary hover actions to keep app functional but clean */}
                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700">
                            <button onClick={() => { setEditingId(t.id); setEditAmount(t.amount.toString()); setEditDate(t.date); }} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit3 size={14}/></button>

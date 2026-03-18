@@ -10,6 +10,7 @@ export interface Group {
   name: string;
   icon?: string; 
   monthlyBudget?: number; // New: Budgeting support
+  isArchived?: boolean;
 }
 
 export interface Client {
@@ -18,6 +19,7 @@ export interface Client {
   groupId: string;
   icon?: string; 
   contact?: string;
+  isArchived?: boolean;
 }
 
 export interface TransactionItem {

@@ -10,6 +10,7 @@ import Analytics from './screens/Analytics';
 import AIInsights from './screens/AIInsights';
 import Settings from './screens/Settings';
 import ProUpgrade from './screens/ProUpgrade';
+import Archive from './screens/Archive';
 import Installments from './screens/Installments';
 import Onboarding from './screens/Onboarding';
 import Goals from './screens/Goals';
@@ -17,7 +18,7 @@ import {
   LayoutDashboard, BarChart3, Layers, User, 
   Bell, Plus, History as HistoryIcon,
   CheckCircle2, AlertCircle, Sun, Moon,
-  RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn, Eye, EyeOff, Key, ShieldCheck, Mail
+  RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn, Eye, EyeOff, Key, ShieldCheck, Mail, Gift
 } from 'lucide-react';
 
 // Helper to decode JWT without external library
@@ -37,9 +38,10 @@ const decodeJwt = (token: string) => {
 // --- New Welcome Screen Component ---
 const NotificationToast = ({ notification, onClose }: { notification: any, onClose: () => void }) => {
   useEffect(() => {
+    if (notification.type === 'update') return; // Persistent notification
     const timer = setTimeout(() => {
       onClose();
-    }, notification.type === 'update' ? 6000 : 3000);
+    }, 3000);
     return () => clearTimeout(timer);
   }, [notification, onClose]);
 
@@ -432,6 +434,39 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
 
   const [showFabMenu, setShowFabMenu] = useState(false);
+  const [showEidGreeting, setShowEidGreeting] = useState(false);
+
+  useEffect(() => {
+    // Check for Eid greeting (Pro only, once per year during Eid al-Fitr)
+    // Assuming Eid al-Fitr 2026 is around March 19-22
+    if (state.isPro) {
+      const today = new Date();
+      const isEidTime = today.getMonth() === 2 && today.getDate() >= 19 && today.getDate() <= 22; // March is 2
+      const hasSeenGreeting = localStorage.getItem(`eid_greeting_${today.getFullYear()}`);
+      
+      if (isEidTime && !hasSeenGreeting) {
+        setShowEidGreeting(true);
+        localStorage.setItem(`eid_greeting_${today.getFullYear()}`, 'true');
+      }
+    }
+  }, [state.isPro]);
+
+  useEffect(() => {
+    if (state.userProfile.isAuthenticated) {
+      const updateMessage = state.language === 'ar' 
+        ? 'تم إضافة ميزات جديدة: دمج ونقل العملاء، إضافة مجموعات وعملاء أثناء تسجيل المعاملات، وتفعيل النسخة الاحترافية!' 
+        : 'New features added: Merge/Move clients, inline group/client creation, and Pro Version activation!';
+      
+      const hasSeenUpdate = state.notificationHistory.some(n => n.message === updateMessage);
+      if (!hasSeenUpdate) {
+        dispatch.setNotification({
+          title: state.language === 'ar' ? '✨ تحديث جديد' : '✨ New Update',
+          message: updateMessage,
+          type: 'update'
+        });
+      }
+    }
+  }, [state.userProfile.isAuthenticated, state.language]);
 
   if (!state.hasSeenOnboarding) {
     return <Onboarding />;
@@ -519,6 +554,37 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           ))}
         </nav>
       </div>
+
+      {/* Eid Greeting Modal */}
+      {showEidGreeting && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-500">
+          <div className="bg-white dark:bg-slate-900 rounded-[3rem] p-8 max-w-sm w-full shadow-2xl relative overflow-hidden text-center animate-in zoom-in-95 duration-500">
+            <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-br from-amber-400 to-orange-500 opacity-20"></div>
+            <button onClick={() => setShowEidGreeting(false)} className="absolute top-6 right-6 w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors z-10">
+              <X size={16} />
+            </button>
+            <div className="relative z-10 flex flex-col items-center mt-4">
+              <div className="w-24 h-24 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center text-white shadow-xl shadow-amber-500/30 mb-6">
+                <Gift size={48} />
+              </div>
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">
+                {state.language === 'ar' ? 'عيد سعيد!' : 'Happy Eid!'}
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
+                {state.language === 'ar' 
+                  ? 'كل عام وأنتم بخير بمناسبة عيد الفطر المبارك. نتمنى لكم أوقاتاً سعيدة!' 
+                  : 'Wishing you a blessed Eid al-Fitr. May your days be filled with joy!'}
+              </p>
+              <button 
+                onClick={() => setShowEidGreeting(false)}
+                className="w-full py-4 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:scale-95"
+              >
+                {state.language === 'ar' ? 'شكراً' : 'Thank You'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -535,6 +601,7 @@ const App: React.FC = () => {
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/installments" element={<Installments />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/archive" element={<Archive />} />
             <Route path="/ai" element={<AIInsights />} />
             <Route path="/upgrade" element={<ProUpgrade />} />
             <Route path="/goals" element={<Goals />} />

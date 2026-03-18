@@ -73,7 +73,7 @@ interface AppContextType {
     addTransaction: (t: Omit<Transaction, 'id'>) => void;
     updateTransaction: (id: string, t: Partial<Transaction>) => void;
     deleteTransaction: (id: string) => void;
-    addGroup: (name: string, icon?: string, budget?: number) => void;
+    addGroup: (name: string, icon?: string, budget?: number, id?: string) => void;
     updateGroup: (id: string, update: Partial<Group>) => void;
     setGroupBudget: (id: string, amount: number) => void;
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => void;
@@ -93,9 +93,15 @@ interface AppContextType {
     updateAvatar: (avatarUrl: string) => void;
     toggleAutoSync: () => void;
     deleteGroup: (id: string) => void;
-    addClient: (name: string, groupId: string, icon?: string) => void;
+    restoreGroup: (id: string) => void;
+    permanentDeleteGroup: (id: string) => void;
+    addClient: (name: string, groupId: string, icon?: string, id?: string) => void;
     updateClient: (id: string, update: Partial<Client>) => void;
     deleteClient: (id: string) => void;
+    restoreClient: (id: string) => void;
+    permanentDeleteClient: (id: string) => void;
+    moveClient: (clientId: string, newGroupId: string) => void;
+    mergeClient: (sourceClientId: string, targetClientId: string) => void;
     updateInstallment: (id: string, update: Partial<Installment>) => void;
     deleteInstallment: (id: string) => void;
     addGoal: (goal: Omit<import('./types').Goal, 'id'>) => void;
@@ -129,7 +135,7 @@ type Action =
   | { type: 'ADD_TRANSACTION'; payload: Omit<Transaction, 'id'> }
   | { type: 'UPDATE_TRANSACTION'; payload: { id: string; update: Partial<Transaction> } }
   | { type: 'DELETE_TRANSACTION'; payload: string }
-  | { type: 'ADD_GROUP'; payload: { name: string; icon?: string; budget?: number } }
+  | { type: 'ADD_GROUP'; payload: { name: string; icon?: string; budget?: number; id?: string } }
   | { type: 'UPDATE_GROUP'; payload: { id: string; update: Partial<Group> } }
   | { type: 'SET_GROUP_BUDGET'; payload: { id: string; amount: number } }
   | { type: 'ADD_INSTALLMENT'; payload: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'> }
@@ -145,9 +151,15 @@ type Action =
   | { type: 'ADD_ANALYTICS_WIDGET'; payload: string }
   | { type: 'REMOVE_ANALYTICS_WIDGET'; payload: string }
   | { type: 'DELETE_GROUP'; payload: string }
-  | { type: 'ADD_CLIENT'; payload: { name: string; groupId: string; icon?: string } }
+  | { type: 'RESTORE_GROUP'; payload: string }
+  | { type: 'PERMANENT_DELETE_GROUP'; payload: string }
+  | { type: 'ADD_CLIENT'; payload: { name: string; groupId: string; icon?: string; id?: string } }
   | { type: 'UPDATE_CLIENT'; payload: { id: string; update: Partial<Client> } }
   | { type: 'DELETE_CLIENT'; payload: string }
+  | { type: 'RESTORE_CLIENT'; payload: string }
+  | { type: 'PERMANENT_DELETE_CLIENT'; payload: string }
+  | { type: 'MOVE_CLIENT'; payload: { clientId: string; newGroupId: string } }
+  | { type: 'MERGE_CLIENT'; payload: { sourceClientId: string; targetClientId: string } }
   | { type: 'UPDATE_INSTALLMENT'; payload: { id: string; update: Partial<Installment> } }
   | { type: 'DELETE_INSTALLMENT'; payload: string }
   | { type: 'CLEAR_CHAT'; payload: boolean }
@@ -173,8 +185,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
     case 'LOGIN': {
       const updateMessage = state.language === 'ar' 
-        ? 'تم تفعيل ميزة استعادة كلمة المرور وربط الحساب بالبريد الإلكتروني لزيادة الأمان.' 
-        : 'Password reset and email linking have been enabled for enhanced security.';
+        ? 'تم إضافة ميزات جديدة: دمج ونقل العملاء، إضافة مجموعات وعملاء أثناء تسجيل المعاملات، وتفعيل النسخة الاحترافية!' 
+        : 'New features added: Merge/Move clients, inline group/client creation, and Pro Version activation!';
       
       const hasSeenUpdate = state.notificationHistory.some(n => n.message === updateMessage);
       const updateNotification = {
@@ -221,6 +233,20 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
     }
     case 'GUEST_LOGIN': {
+      const updateMessage = state.language === 'ar' 
+        ? 'تم إضافة ميزات جديدة: دمج ونقل العملاء، إضافة مجموعات وعملاء أثناء تسجيل المعاملات، وتفعيل النسخة الاحترافية!' 
+        : 'New features added: Merge/Move clients, inline group/client creation, and Pro Version activation!';
+      
+      const hasSeenUpdate = state.notificationHistory.some(n => n.message === updateMessage);
+      const updateNotification = {
+        id: Date.now().toString(),
+        title: state.language === 'ar' ? '✨ تحديث جديد' : '✨ New Update',
+        message: updateMessage,
+        type: 'update' as const,
+        timestamp: new Date().toISOString(),
+        read: false
+      };
+
       return {
         ...state,
         userProfile: {
@@ -230,11 +256,12 @@ const appReducer = (state: AppState, action: Action): AppState => {
           isAuthenticated: true,
           avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Guest'
         },
-        notification: { 
+        notification: hasSeenUpdate ? { 
           title: state.language === 'ar' ? 'وضع الضيف' : 'Guest Mode',
           message: state.language === 'ar' ? 'مرحباً بك! يتم حفظ البيانات محلياً.' : 'Welcome Guest! Data is stored locally.', 
           type: 'info' 
-        }
+        } : updateNotification,
+        notificationHistory: hasSeenUpdate ? state.notificationHistory : [updateNotification, ...state.notificationHistory]
       };
     }
     case 'LOGOUT':
@@ -288,15 +315,31 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, transactions: [newTransaction, ...state.transactions], walletBalance: newBalance };
     }
     case 'ADD_GROUP':
-      return { ...state, groups: [...state.groups, { id: Date.now().toString(), name: action.payload.name, icon: action.payload.icon, monthlyBudget: action.payload.budget }] };
+      return { ...state, groups: [...state.groups, { id: action.payload.id || Date.now().toString(), name: action.payload.name, icon: action.payload.icon, monthlyBudget: action.payload.budget }] };
     case 'TOGGLE_LANGUAGE':
       return { ...state, language: state.language === 'ar' ? 'en' : 'ar' };
     case 'TOGGLE_DARK_MODE':
       return { ...state, isDarkMode: !state.isDarkMode };
     case 'TOGGLE_PRIVACY_MODE':
       return { ...state, isPrivacyMode: !state.isPrivacyMode };
-    case 'SET_NOTIFICATION':
+    case 'SET_NOTIFICATION': {
+      if (action.payload && action.payload.type === 'update') {
+        const newNotification = {
+          id: Date.now().toString(),
+          title: action.payload.title || '',
+          message: action.payload.message,
+          type: 'update' as const,
+          timestamp: new Date().toISOString(),
+          read: false
+        };
+        return { 
+          ...state, 
+          notification: newNotification,
+          notificationHistory: [newNotification, ...state.notificationHistory]
+        };
+      }
       return { ...state, notification: action.payload };
+    }
     case 'UPDATE_PROFILE':
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
     case 'RESET_DATA':
@@ -322,14 +365,63 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, activeWidgets: [...state.activeWidgets, action.payload] };
     case 'REMOVE_ANALYTICS_WIDGET':
       return { ...state, activeWidgets: state.activeWidgets.filter(id => id !== action.payload) };
-    case 'DELETE_GROUP':
-      return { ...state, groups: state.groups.filter(g => g.id !== action.payload) };
+    case 'DELETE_GROUP': {
+      return { 
+        ...state, 
+        groups: state.groups.map(g => g.id === action.payload ? { ...g, isArchived: true } : g),
+        clients: state.clients.map(c => c.groupId === action.payload ? { ...c, isArchived: true } : c),
+      };
+    }
+    case 'RESTORE_GROUP': {
+      return { 
+        ...state, 
+        groups: state.groups.map(g => g.id === action.payload ? { ...g, isArchived: false } : g),
+        clients: state.clients.map(c => c.groupId === action.payload ? { ...c, isArchived: false } : c),
+      };
+    }
+    case 'PERMANENT_DELETE_GROUP': {
+      const clientsToDelete = state.clients.filter(c => c.groupId === action.payload).map(c => c.id);
+      return { 
+        ...state, 
+        groups: state.groups.filter(g => g.id !== action.payload),
+        clients: state.clients.filter(c => c.groupId !== action.payload),
+        transactions: state.transactions.filter(t => t.groupId !== action.payload && !clientsToDelete.includes(t.clientId))
+      };
+    }
     case 'ADD_CLIENT':
-      return { ...state, clients: [...state.clients, { id: Date.now().toString(), ...action.payload }] };
+      return { ...state, clients: [...state.clients, { id: action.payload.id || Date.now().toString(), ...action.payload }] };
     case 'UPDATE_CLIENT':
       return { ...state, clients: state.clients.map(c => c.id === action.payload.id ? { ...c, ...action.payload.update } : c) };
     case 'DELETE_CLIENT':
-      return { ...state, clients: state.clients.filter(c => c.id !== action.payload) };
+      return { 
+        ...state, 
+        clients: state.clients.map(c => c.id === action.payload ? { ...c, isArchived: true } : c),
+      };
+    case 'RESTORE_CLIENT':
+      return { 
+        ...state, 
+        clients: state.clients.map(c => c.id === action.payload ? { ...c, isArchived: false } : c),
+      };
+    case 'PERMANENT_DELETE_CLIENT':
+      return { 
+        ...state, 
+        clients: state.clients.filter(c => c.id !== action.payload),
+        transactions: state.transactions.filter(t => t.clientId !== action.payload)
+      };
+    case 'MOVE_CLIENT':
+      return {
+        ...state,
+        clients: state.clients.map(c => c.id === action.payload.clientId ? { ...c, groupId: action.payload.newGroupId } : c),
+        transactions: state.transactions.map(t => t.clientId === action.payload.clientId ? { ...t, groupId: action.payload.newGroupId } : t)
+      };
+    case 'MERGE_CLIENT': {
+      const { sourceClientId, targetClientId } = action.payload;
+      return {
+        ...state,
+        clients: state.clients.filter(c => c.id !== sourceClientId),
+        transactions: state.transactions.map(t => t.clientId === sourceClientId ? { ...t, clientId: targetClientId } : t)
+      };
+    }
     case 'UPDATE_INSTALLMENT':
       return { ...state, installments: state.installments.map(i => i.id === action.payload.id ? { ...i, ...action.payload.update } : i) };
     case 'DELETE_INSTALLMENT':
@@ -480,7 +572,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addTransaction: (t: Omit<Transaction, 'id'>) => dispatch({ type: 'ADD_TRANSACTION', payload: t }),
     updateTransaction: (id: string, t: Partial<Transaction>) => dispatch({ type: 'UPDATE_TRANSACTION', payload: { id, update: t } }),
     deleteTransaction: (id: string) => dispatch({ type: 'DELETE_TRANSACTION', payload: id }),
-    addGroup: (name: string, icon?: string, budget?: number) => dispatch({ type: 'ADD_GROUP', payload: { name, icon, budget } }),
+    addGroup: (name: string, icon?: string, budget?: number, id?: string) => dispatch({ type: 'ADD_GROUP', payload: { name, icon, budget, id } }),
     updateGroup: (id: string, update: Partial<Group>) => dispatch({ type: 'UPDATE_GROUP', payload: { id, update } }),
     setGroupBudget: (id: string, amount: number) => dispatch({ type: 'SET_GROUP_BUDGET', payload: { id, amount } }),
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => dispatch({ type: 'ADD_INSTALLMENT', payload: i }),
@@ -504,9 +596,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     toggleAutoSync: () => dispatch({ type: 'TOGGLE_AUTO_SYNC' }),
     unlockAchievement: (achievementId: string) => dispatch({ type: 'UNLOCK_ACHIEVEMENT', payload: achievementId }),
     deleteGroup: (id: string) => dispatch({ type: 'DELETE_GROUP', payload: id }),
-    addClient: (name: string, groupId: string, icon?: string) => dispatch({ type: 'ADD_CLIENT', payload: { name, groupId, icon } }),
+    restoreGroup: (id: string) => dispatch({ type: 'RESTORE_GROUP', payload: id }),
+    permanentDeleteGroup: (id: string) => dispatch({ type: 'PERMANENT_DELETE_GROUP', payload: id }),
+    addClient: (name: string, groupId: string, icon?: string, id?: string) => dispatch({ type: 'ADD_CLIENT', payload: { name, groupId, icon, id } }),
     updateClient: (id: string, update: Partial<Client>) => dispatch({ type: 'UPDATE_CLIENT', payload: { id, update } }),
     deleteClient: (id: string) => dispatch({ type: 'DELETE_CLIENT', payload: id }),
+    restoreClient: (id: string) => dispatch({ type: 'RESTORE_CLIENT', payload: id }),
+    permanentDeleteClient: (id: string) => dispatch({ type: 'PERMANENT_DELETE_CLIENT', payload: id }),
+    moveClient: (clientId: string, newGroupId: string) => dispatch({ type: 'MOVE_CLIENT', payload: { clientId, newGroupId } }),
+    mergeClient: (sourceClientId: string, targetClientId: string) => dispatch({ type: 'MERGE_CLIENT', payload: { sourceClientId, targetClientId } }),
     updateInstallment: (id: string, update: Partial<Installment>) => dispatch({ type: 'UPDATE_INSTALLMENT', payload: { id, update } }),
     deleteInstallment: (id: string) => dispatch({ type: 'DELETE_INSTALLMENT', payload: id }),
     clearChat: (isProChat = false) => dispatch({ type: 'CLEAR_CHAT', payload: isProChat }),

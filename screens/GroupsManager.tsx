@@ -11,7 +11,16 @@ import ConfirmModal from '../components/ConfirmModal';
 
 const GroupsManager: React.FC = () => {
   const { state, dispatch } = useApp();
-  const { language, groups, clients, transactions } = state;
+  const { language } = state;
+  const groups = useMemo(() => state.groups.filter(g => !g.isArchived), [state.groups]);
+  const clients = useMemo(() => state.clients.filter(c => !c.isArchived), [state.clients]);
+  const transactions = useMemo(() => {
+    return state.transactions.filter(t => {
+      const g = state.groups.find(g => g.id === t.groupId);
+      const c = state.clients.find(c => c.id === t.clientId);
+      return (!g || !g.isArchived) && (!c || !c.isArchived);
+    });
+  }, [state.transactions, state.groups, state.clients]);
 
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupIcon, setNewGroupIcon] = useState('📁');

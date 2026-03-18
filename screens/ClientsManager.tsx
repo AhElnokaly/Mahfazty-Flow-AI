@@ -1,21 +1,27 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../store';
-import { Users, UserPlus, Search, Phone, Mail, ChevronRight, Layers, Edit2, Trash2, Save, X } from 'lucide-react';
+import { Users, UserPlus, Search, Phone, Mail, ChevronRight, Layers, Edit2, Trash2, Save, X, GitMerge } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
 const ClientsManager: React.FC = () => {
   const { state, dispatch } = useApp();
+  const { language } = state;
+  const groups = useMemo(() => state.groups.filter(g => !g.isArchived), [state.groups]);
+  const clients = useMemo(() => state.clients.filter(c => !c.isArchived), [state.clients]);
+
   const [name, setName] = useState('');
-  const [groupId, setGroupId] = useState(state.groups[0]?.id || '');
+  const [groupId, setGroupId] = useState(groups[0]?.id || '');
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editGroupId, setEditGroupId] = useState('');
   
   // Delete confirmation state
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
-  
-  const { language, clients, groups } = state;
+
+  // Merge state
+  const [clientToMerge, setClientToMerge] = useState<string | null>(null);
+  const [targetMergeClientId, setTargetMergeClientId] = useState<string>('');
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +42,17 @@ const ClientsManager: React.FC = () => {
 
   const handleSaveEdit = (id: string) => {
     if (!editName.trim() || !editGroupId) return;
-    dispatch.updateClient(id, { name: editName, groupId: editGroupId });
+    
+    const client = clients.find(c => c.id === id);
+    if (client && client.groupId !== editGroupId) {
+      dispatch.moveClient(id, editGroupId);
+      if (client.name !== editName) {
+        dispatch.updateClient(id, { name: editName });
+      }
+    } else {
+      dispatch.updateClient(id, { name: editName, groupId: editGroupId });
+    }
+    
     setEditingClientId(null);
     dispatch.setNotification({
       message: language === 'ar' ? 'تم التعديل بنجاح' : 'Updated successfully',
@@ -56,6 +72,22 @@ const ClientsManager: React.FC = () => {
         type: 'success'
       });
       setClientToDelete(null);
+    }
+  };
+
+  const handleMerge = (sourceId: string) => {
+    setClientToMerge(sourceId);
+    setTargetMergeClientId('');
+  };
+
+  const confirmMerge = () => {
+    if (clientToMerge && targetMergeClientId) {
+      dispatch.mergeClient(clientToMerge, targetMergeClientId);
+      dispatch.setNotification({
+        message: language === 'ar' ? 'تم الدمج بنجاح' : 'Merged successfully',
+        type: 'success'
+      });
+      setClientToMerge(null);
     }
   };
 
@@ -167,11 +199,14 @@ const ClientsManager: React.FC = () => {
                       </span>
                     </div>
                     <h4 className="text-2xl font-black text-slate-900 dark:text-white mb-6 leading-tight">{client.name}</h4>
-                    <div className="flex gap-3">
-                      <button onClick={() => startEditing(client)} className="flex-1 flex items-center justify-center py-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl text-slate-400 hover:text-blue-500 transition-all">
+                    <div className="flex gap-3 mt-4">
+                      <button onClick={() => startEditing(client)} className="flex-1 flex items-center justify-center py-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl text-slate-400 hover:text-blue-500 transition-all" title={language === 'ar' ? 'تعديل / نقل' : 'Edit / Move'}>
                         <Edit2 size={20} />
                       </button>
-                      <button onClick={() => handleDelete(client.id)} className="flex-1 flex items-center justify-center py-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl text-slate-400 hover:text-rose-500 transition-all">
+                      <button onClick={() => handleMerge(client.id)} className="flex-1 flex items-center justify-center py-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl text-slate-400 hover:text-purple-500 transition-all" title={language === 'ar' ? 'دمج' : 'Merge'}>
+                        <GitMerge size={20} />
+                      </button>
+                      <button onClick={() => handleDelete(client.id)} className="flex-1 flex items-center justify-center py-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl text-slate-400 hover:text-rose-500 transition-all" title={language === 'ar' ? 'مسح' : 'Delete'}>
                         <Trash2 size={20} />
                       </button>
                     </div>
@@ -188,10 +223,50 @@ const ClientsManager: React.FC = () => {
         onClose={() => setClientToDelete(null)}
         onConfirm={confirmDelete}
         title={language === 'ar' ? 'تأكيد المسح' : 'Confirm Delete'}
-        message={language === 'ar' ? 'هل أنت متأكد من مسح هذه الجهة؟ لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this entity? This action cannot be undone.'}
+        message={language === 'ar' ? 'هل أنت متأكد من مسح هذه الجهة؟ سيتم مسح جميع المعاملات المرتبطة بها. لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this entity? All related transactions will be deleted. This action cannot be undone.'}
         confirmText={language === 'ar' ? 'مسح' : 'Delete'}
         cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
       />
+
+      {clientToMerge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-black mb-4 dark:text-white">
+              {language === 'ar' ? 'دمج عميل' : 'Merge Client'}
+            </h3>
+            <p className="text-sm text-slate-500 mb-6">
+              {language === 'ar' ? 'اختر العميل الذي تريد دمج هذا العميل معه. سيتم نقل جميع المعاملات إلى العميل المختار.' : 'Select the client to merge into. All transactions will be moved to the selected client.'}
+            </p>
+            <select
+              value={targetMergeClientId}
+              onChange={(e) => setTargetMergeClientId(e.target.value)}
+              className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl mb-6 dark:text-white"
+            >
+              <option value="" disabled>{language === 'ar' ? 'اختر عميل...' : 'Select client...'}</option>
+              {clients
+                .filter(c => c.id !== clientToMerge && c.groupId === clients.find(cl => cl.id === clientToMerge)?.groupId)
+                .map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+            </select>
+            <div className="flex gap-3">
+              <button 
+                onClick={confirmMerge}
+                disabled={!targetMergeClientId}
+                className="flex-1 py-4 bg-purple-600 text-white rounded-2xl font-bold disabled:opacity-50"
+              >
+                {language === 'ar' ? 'تأكيد الدمج' : 'Confirm Merge'}
+              </button>
+              <button 
+                onClick={() => setClientToMerge(null)}
+                className="flex-1 py-4 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white rounded-2xl font-bold"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

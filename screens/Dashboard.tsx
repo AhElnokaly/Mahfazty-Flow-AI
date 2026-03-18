@@ -17,7 +17,18 @@ import { useNavigate } from 'react-router-dom';
 const Dashboard: React.FC = () => {
   const { state } = useApp();
   const navigate = useNavigate();
-  const { language, walletBalance, transactions, groups, installments, goals, isPro, baseCurrency, isPrivacyMode } = state;
+  const { language, walletBalance, installments, goals, isPro, baseCurrency, isPrivacyMode } = state;
+  
+  const groups = useMemo(() => state.groups.filter(g => !g.isArchived), [state.groups]);
+  const clients = useMemo(() => state.clients.filter(c => !c.isArchived), [state.clients]);
+  
+  const transactions = useMemo(() => {
+    return state.transactions.filter(t => {
+      const g = state.groups.find(g => g.id === t.groupId);
+      const c = state.clients.find(c => c.id === t.clientId);
+      return (!g || !g.isArchived) && (!c || !c.isArchived);
+    });
+  }, [state.transactions, state.groups, state.clients]);
 
   // --- Calculations ---
   const currentMonthStr = new Date().toISOString().slice(0, 7);
@@ -90,7 +101,8 @@ const Dashboard: React.FC = () => {
         expense,
         icon: group.icon,
         monthlyBudget: group.monthlyBudget || 0,
-        style: cardStyles[index % cardStyles.length]
+        style: cardStyles[index % cardStyles.length],
+        isVirtual: false
       };
     });
   }, [groups, transactions]);
@@ -293,7 +305,7 @@ const Dashboard: React.FC = () => {
           {accountCards.length > 0 ? accountCards.map(account => (
             <div 
               key={account.id} 
-              onClick={() => navigate('/history', { state: { filterGroup: account.id } })}
+              onClick={() => account.isVirtual ? navigate('/assets') : navigate('/history', { state: { filterGroup: account.id } })}
               className={`${account.style.bg} ${account.style.shadow} p-5 rounded-3xl text-white relative overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer`}
             >
                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:scale-125 transition-transform duration-700"></div>
@@ -364,7 +376,7 @@ const Dashboard: React.FC = () => {
           <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
             {recentTransactions.length > 0 ? recentTransactions.map(t => {
               const group = groups.find(g => g.id === t.groupId);
-              const client = state.clients.find(c => c.id === t.clientId);
+              const client = clients.find(c => c.id === t.clientId);
               const isIncome = t.type === TransactionType.INCOME;
               return (
                 <div key={t.id} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer" onClick={() => navigate('/history')}>

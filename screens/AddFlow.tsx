@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../store';
 import { TransactionType, TransactionItem } from '../types';
 import { ArrowLeft, Save, TrendingUp, TrendingDown, Calendar, User, FileText, ChevronRight, Layers, Sparkles, Loader2, Camera, Scan, Plus, Trash2, ShoppingCart, Tag, Barcode } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { suggestTransactionNote, sendChatMessage } from '../geminiService';
 
 const CURRENCIES = ['EGP', 'USD', 'EUR', 'GBP', 'SAR', 'AED'];
@@ -12,11 +12,23 @@ const ITEM_CATEGORIES = ['Groceries', 'Electronics', 'Clothing', 'Home', 'Health
 const AddFlow: React.FC = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
-  const { language, groups, clients, baseCurrency, transactions } = state;
+  const location = useLocation();
+  const { language, baseCurrency } = state;
+  const groups = useMemo(() => state.groups.filter(g => !g.isArchived), [state.groups]);
+  const clients = useMemo(() => state.clients.filter(c => !c.isArchived), [state.clients]);
+  const transactions = useMemo(() => {
+    return state.transactions.filter(t => {
+      const g = state.groups.find(g => g.id === t.groupId);
+      const c = state.clients.find(c => c.id === t.clientId);
+      return (!g || !g.isArchived) && (!c || !c.isArchived);
+    });
+  }, [state.transactions, state.groups, state.clients]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
+  const [type, setType] = useState<TransactionType>(
+    location.state?.type === 'income' ? TransactionType.INCOME : TransactionType.EXPENSE
+  );
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState(baseCurrency);
   const [groupId, setGroupId] = useState(groups[0]?.id || '');
@@ -29,6 +41,11 @@ const AddFlow: React.FC = () => {
   const [showItems, setShowItems] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  
+  const [isAddingGroup, setIsAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [isAddingClient, setIsAddingClient] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
   
   const [date, setDate] = useState(() => {
     const d = new Date();
@@ -199,6 +216,24 @@ const AddFlow: React.FC = () => {
     }
   };
 
+  const handleAddGroup = () => {
+    if (!newGroupName.trim()) return;
+    const newId = Date.now().toString();
+    dispatch.addGroup(newGroupName, undefined, undefined, newId);
+    setGroupId(newId);
+    setNewGroupName('');
+    setIsAddingGroup(false);
+  };
+
+  const handleAddClient = () => {
+    if (!newClientName.trim() || !groupId) return;
+    const newId = Date.now().toString();
+    dispatch.addClient(newClientName, groupId, undefined, newId);
+    setClientId(newId);
+    setNewClientName('');
+    setIsAddingClient(false);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     vibrate();
@@ -287,29 +322,89 @@ const AddFlow: React.FC = () => {
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-2">
                   <Layers className="inline-block mr-2" size={14} /> {language === 'ar' ? 'المجموعة' : 'Group'}
                 </label>
-                <div className="relative">
-                  <select
-                    value={groupId} onChange={(e) => setGroupId(e.target.value)}
-                    className="w-full p-4 md:p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white appearance-none cursor-pointer"
-                  >
-                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select>
-                  <ChevronRight size={20} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
-                </div>
+                {isAddingGroup ? (
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newGroupName} 
+                      onChange={(e) => setNewGroupName(e.target.value)} 
+                      placeholder={language === 'ar' ? 'اسم المجموعة...' : 'Group name...'}
+                      className="flex-1 p-4 md:p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white outline-none"
+                      autoFocus
+                    />
+                    <button type="button" onClick={handleAddGroup} className="px-4 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-500">
+                      {language === 'ar' ? 'حفظ' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setIsAddingGroup(false)} className="px-4 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-bold text-sm hover:bg-slate-300">
+                      {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={groupId} onChange={(e) => {
+                        if (e.target.value === 'ADD_NEW') {
+                          setIsAddingGroup(true);
+                        } else {
+                          setGroupId(e.target.value);
+                        }
+                      }}
+                      className="w-full p-4 md:p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white appearance-none cursor-pointer"
+                    >
+                      {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                      <option value="ADD_NEW" className="font-bold text-blue-500">
+                        + {language === 'ar' ? 'إضافة مجموعة جديدة' : 'Add New Group'}
+                      </option>
+                    </select>
+                    <ChevronRight size={20} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-4">
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-2">
                   <User className="inline-block mr-2" size={14} /> {language === 'ar' ? 'جهة التعامل' : 'Entity'}
                 </label>
-                <div className="relative">
-                  <select
-                    value={clientId} onChange={(e) => setClientId(e.target.value)}
-                    className="w-full p-4 md:p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white appearance-none cursor-pointer disabled:opacity-30"
-                  >
-                    {filteredClients.length === 0 ? <option value="">-</option> : filteredClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
+                {isAddingClient ? (
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newClientName} 
+                      onChange={(e) => setNewClientName(e.target.value)} 
+                      placeholder={language === 'ar' ? 'اسم العميل...' : 'Client name...'}
+                      className="flex-1 p-4 md:p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white outline-none"
+                      autoFocus
+                    />
+                    <button type="button" onClick={handleAddClient} className="px-4 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-500">
+                      {language === 'ar' ? 'حفظ' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setIsAddingClient(false)} className="px-4 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-bold text-sm hover:bg-slate-300">
+                      {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={clientId} onChange={(e) => {
+                        if (e.target.value === 'ADD_NEW') {
+                          setIsAddingClient(true);
+                        } else {
+                          setClientId(e.target.value);
+                        }
+                      }}
+                      className="w-full p-4 md:p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white appearance-none cursor-pointer disabled:opacity-30"
+                      disabled={!groupId}
+                    >
+                      {filteredClients.length === 0 ? <option value="" disabled>-</option> : filteredClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      {groupId && (
+                        <option value="ADD_NEW" className="font-bold text-blue-500">
+                          + {language === 'ar' ? 'إضافة عميل جديد' : 'Add New Client'}
+                        </option>
+                      )}
+                    </select>
+                    <ChevronRight size={20} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
+                  </div>
+                )}
               </div>
             </div>
 

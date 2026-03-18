@@ -156,7 +156,16 @@ const ChartWidget: React.FC<{
   globalState, 
   dispatch 
 }) => {
-  const { language, transactions, groups, clients, isPro, customWidgets } = globalState;
+  const { language, isPro, customWidgets } = globalState;
+  const groups = useMemo(() => globalState.groups.filter(g => !g.isArchived), [globalState.groups]);
+  const clients = useMemo(() => globalState.clients.filter(c => !c.isArchived), [globalState.clients]);
+  const transactions = useMemo(() => {
+    return globalState.transactions.filter(t => {
+      const g = globalState.groups.find(g => g.id === t.groupId);
+      const c = globalState.clients.find(c => c.id === t.clientId);
+      return (!g || !g.isArchived) && (!c || !c.isArchived);
+    });
+  }, [globalState.transactions, globalState.groups, globalState.clients]);
   
   // Local Filtering State
   const [timeRange, setTimeRange] = useState<'1W' | '1M' | '1Y' | 'ALL'>('1M');
@@ -789,7 +798,7 @@ const ChartWidget: React.FC<{
                          </thead>
                          <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
                            {itemTransactions.map((t: any, idx: number) => {
-                             const client = globalState.clients.find((c: any) => c.id === t.clientId);
+                             const client = clients.find((c: any) => c.id === t.clientId);
                              return (
                                <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                                  <td className="px-6 py-4 text-xs font-bold text-slate-600 dark:text-slate-300">
