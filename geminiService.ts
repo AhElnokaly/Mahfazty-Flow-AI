@@ -170,7 +170,7 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
 
       if (response.functionCalls && response.functionCalls.length > 0) {
          for (const call of response.functionCalls) {
-           if (call.name === 'create_chart') {
+           if (call.name === 'create_chart' && call.args) {
              generatedWidget = {
                id: `custom-${Date.now()}`,
                title: call.args.title as string,
@@ -183,7 +183,7 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
              outputText += `\n\n[System: Generated Chart "${call.args.title}"]`;
            }
            
-           if (call.name === 'add_installment_plan') {
+           if (call.name === 'add_installment_plan' && call.args) {
              toolCallData = {
                name: 'add_installment_plan',
                args: call.args

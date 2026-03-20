@@ -288,7 +288,7 @@ const Installments: React.FC = () => {
                        >
                          {emptyChart 
                            ? <Cell fill="#f1f5f9" />
-                           : chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} cornerRadius={4} />)
+                           : chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)
                          }
                        </Pie>
                        <RechartsTooltip 

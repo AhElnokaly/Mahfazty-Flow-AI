@@ -157,12 +157,12 @@ const ChartWidget: React.FC<{
   dispatch 
 }) => {
   const { language, isPro, customWidgets } = globalState;
-  const groups = useMemo(() => globalState.groups.filter(g => !g.isArchived), [globalState.groups]);
-  const clients = useMemo(() => globalState.clients.filter(c => !c.isArchived), [globalState.clients]);
+  const groups = useMemo(() => globalState.groups.filter((g: any) => !g.isArchived), [globalState.groups]);
+  const clients = useMemo(() => globalState.clients.filter((c: any) => !c.isArchived), [globalState.clients]);
   const transactions = useMemo(() => {
-    return globalState.transactions.filter(t => {
-      const g = globalState.groups.find(g => g.id === t.groupId);
-      const c = globalState.clients.find(c => c.id === t.clientId);
+    return globalState.transactions.filter((t: any) => {
+      const g = globalState.groups.find((g: any) => g.id === t.groupId);
+      const c = globalState.clients.find((c: any) => c.id === t.clientId);
       return (!g || !g.isArchived) && (!c || !c.isArchived);
     });
   }, [globalState.transactions, globalState.groups, globalState.clients]);
@@ -318,7 +318,7 @@ const ChartWidget: React.FC<{
         filteredTransactions.forEach((t: Transaction) => {
           if (t.type === TransactionType.EXPENSE && t.items && t.items.length > 0) {
             t.items.forEach(item => {
-              const name = item.name.trim().toLowerCase();
+              const name = (item.name || '').trim().toLowerCase();
               if (!name) return;
               if (!itemHistory[name]) itemHistory[name] = [];
               itemHistory[name].push({
@@ -356,9 +356,9 @@ const ChartWidget: React.FC<{
         
         filteredTransactions.forEach((t: Transaction) => {
           if (t.type === TransactionType.EXPENSE && t.items && t.items.length > 0 && t.clientId) {
-            const clientName = clients.find(c => c.id === t.clientId)?.name || 'Unknown';
+            const clientName = clients.find((c: any) => c.id === t.clientId)?.name || 'Unknown';
             t.items.forEach(item => {
-              const name = item.name.trim().toLowerCase();
+              const name = (item.name || '').trim().toLowerCase();
               if (!name) return;
               if (!itemStorePrices[name]) itemStorePrices[name] = {};
               if (!itemStorePrices[name][clientName]) itemStorePrices[name][clientName] = [];
@@ -486,6 +486,12 @@ const ChartWidget: React.FC<{
        </div>
        
        <div className="h-[280px] w-full relative">
+          {widgetId === 'expense_distribution' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{language === 'ar' ? 'الإجمالي' : 'Total'}</span>
+              <span className="text-xl font-black text-slate-800 dark:text-white">{totalFilteredExpense.toLocaleString()}</span>
+            </div>
+          )}
           <ResponsiveContainer width="100%" height="100%">
              {(() => {
                // Render based on widget type or custom config
@@ -530,19 +536,13 @@ const ChartWidget: React.FC<{
                // --- Expense Distribution ---
                if (widgetId === 'expense_distribution') {
                   return (
-                    <>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{language === 'ar' ? 'الإجمالي' : 'Total'}</span>
-                        <span className="text-xl font-black text-slate-800 dark:text-white">{totalFilteredExpense.toLocaleString()}</span>
-                      </div>
                       <RePieChart>
                         <Pie 
                           data={chartData} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value" labelLine={true} label={renderCustomizedLabel}
                         >
-                          {chartData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.fill} strokeWidth={0} cornerRadius={6} />)}
+                          {chartData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.fill} strokeWidth={0} />)}
                         </Pie>
                       </RePieChart>
-                    </>
                   );
                }
 
@@ -711,7 +711,7 @@ const ChartWidget: React.FC<{
                  }
                }
 
-               return null;
+               return <ComposedChart data={[]} />;
              })()}
           </ResponsiveContainer>
        </div>

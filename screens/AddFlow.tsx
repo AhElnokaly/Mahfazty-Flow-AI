@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../store';
 import { TransactionType, TransactionItem } from '../types';
 import { ArrowLeft, Save, TrendingUp, TrendingDown, Calendar, User, FileText, ChevronRight, Layers, Sparkles, Loader2, Camera, Scan, Plus, Trash2, ShoppingCart, Tag, Barcode } from 'lucide-react';
@@ -108,7 +108,7 @@ const AddFlow: React.FC = () => {
     
     // Auto-complete logic
     if (value.length > 1) {
-      const allItemNames = transactions.flatMap(t => t.items?.map(i => i.name) || []);
+      const allItemNames = transactions.flatMap(t => t.items?.map(i => i.name) || []).filter(Boolean) as string[];
       const uniqueNames = Array.from(new Set(allItemNames));
       const matches = uniqueNames.filter(name => name.toLowerCase().includes(value.toLowerCase())).slice(0, 5);
       setSuggestions(matches);

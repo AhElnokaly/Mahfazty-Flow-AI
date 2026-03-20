@@ -182,7 +182,6 @@ const Archive: React.FC = () => {
         message={language === 'ar' ? 'هل أنت متأكد من استعادة هذه المجموعة؟ ستعود للظهور في الإحصائيات.' : 'Are you sure you want to restore this group? It will reappear in statistics.'}
         confirmText={language === 'ar' ? 'استعادة' : 'Restore'}
         cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
-        icon={<RefreshCw className="text-emerald-500" size={24} />}
       />
 
       <ConfirmModal
@@ -193,7 +192,7 @@ const Archive: React.FC = () => {
         message={language === 'ar' ? 'تحذير: هذا الإجراء لا يمكن التراجع عنه! سيتم حذف المجموعة وجميع عملائها ومعاملاتها نهائياً.' : 'Warning: This action cannot be undone! The group, all its clients, and transactions will be permanently deleted.'}
         confirmText={language === 'ar' ? 'حذف نهائي' : 'Permanent Delete'}
         cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
-        icon={<ShieldAlert className="text-rose-500" size={24} />}
+        isDestructive={true}
       />
 
       <ConfirmModal
@@ -204,7 +203,6 @@ const Archive: React.FC = () => {
         message={language === 'ar' ? 'هل أنت متأكد من استعادة هذا العميل؟ سيعود للظهور في الإحصائيات.' : 'Are you sure you want to restore this client? It will reappear in statistics.'}
         confirmText={language === 'ar' ? 'استعادة' : 'Restore'}
         cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
-        icon={<RefreshCw className="text-emerald-500" size={24} />}
       />
 
       <ConfirmModal
@@ -215,7 +213,7 @@ const Archive: React.FC = () => {
         message={language === 'ar' ? 'تحذير: هذا الإجراء لا يمكن التراجع عنه! سيتم حذف العميل وجميع معاملاته نهائياً.' : 'Warning: This action cannot be undone! The client and all its transactions will be permanently deleted.'}
         confirmText={language === 'ar' ? 'حذف نهائي' : 'Permanent Delete'}
         cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
-        icon={<ShieldAlert className="text-rose-500" size={24} />}
+        isDestructive={true}
       />
     </div>
   );

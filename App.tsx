@@ -14,6 +14,7 @@ import Archive from './screens/Archive';
 import Installments from './screens/Installments';
 import Onboarding from './screens/Onboarding';
 import Goals from './screens/Goals';
+import { SmartNotifications } from './components/SmartNotifications';
 import { 
   LayoutDashboard, BarChart3, Layers, User, 
   Bell, Plus, History as HistoryIcon,
@@ -89,6 +90,8 @@ const WelcomeScreen = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const navigate = useNavigate();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (view === 'forgot-password') {
@@ -140,6 +143,7 @@ const WelcomeScreen = () => {
         dispatch.login(username, password);
       }
       setLoading(false);
+      navigate('/');
     }, 800);
   };
 
@@ -148,6 +152,7 @@ const WelcomeScreen = () => {
     setTimeout(() => {
       dispatch.guestLogin();
       setLoading(false);
+      navigate('/');
     }, 500);
   };
 
@@ -253,7 +258,7 @@ const WelcomeScreen = () => {
                       onChange={(e) => setUsername(e.target.value)}
                       className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
                       placeholder="username"
-                      autoFocus={view !== 'forgot-password'}
+                      autoFocus={true}
                     />
                   </div>
                 </div>
@@ -419,9 +424,21 @@ const HeaderActions = () => {
             </button>
           </div>
           
-          <Link to="/settings" className="w-8 h-8 sm:w-10 sm:h-10 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-700 shadow-lg hover:scale-105 transition-transform">
-            <img src={state.userProfile.avatar} alt="Profile" className="w-full h-full object-cover" />
-          </Link>
+          {state.userProfile.username === 'guest' ? (
+            <button 
+              onClick={() => navigate('/auth')}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg shadow-blue-500/30"
+            >
+              <LogIn size={14} />
+              <span className="text-[9px] font-black uppercase tracking-tighter hidden sm:block">
+                {state.language === 'ar' ? 'تسجيل الدخول' : 'Sign In'}
+              </span>
+            </button>
+          ) : (
+            <Link to="/settings" className="w-8 h-8 sm:w-10 sm:h-10 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-700 shadow-lg hover:scale-105 transition-transform">
+              <img src={state.userProfile.avatar} alt="Profile" className="w-full h-full object-cover" />
+            </Link>
+          )}
         </div>
       </div>
     </header>
@@ -470,10 +487,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   if (!state.hasSeenOnboarding) {
     return <Onboarding />;
-  }
-
-  if (!state.userProfile.isAuthenticated) {
-     return <WelcomeScreen />;
   }
 
   const navItems = [
@@ -592,10 +605,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const App: React.FC = () => {
   return (
     <AppProvider>
+      <SmartNotifications />
       <HashRouter>
         <Layout>
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/auth" element={<WelcomeScreen />} />
             <Route path="/add" element={<AddFlow />} />
             <Route path="/history" element={<History />} />
             <Route path="/analytics" element={<Analytics />} />

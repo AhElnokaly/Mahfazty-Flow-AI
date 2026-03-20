@@ -94,8 +94,8 @@ const History: React.FC = () => {
     if (searchQuery) {
       result = result.filter(t => {
         const client = clients.find(c => c.id === t.clientId);
-        return t.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-               client?.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return (t.note || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+               (client?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
       });
     }
 

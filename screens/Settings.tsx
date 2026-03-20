@@ -74,18 +74,30 @@ const Settings: React.FC = () => {
           </div>
           <div className="text-center md:text-right flex-1 space-y-3">
               {isEditingProfile ? (
-                 <input 
-                   value={profileForm.name} 
-                   onChange={(e) => setProfileForm({...profileForm, name: e.target.value})}
-                   className="text-3xl md:text-5xl font-black bg-white/20 rounded-2xl px-4 py-2 text-white outline-none w-full text-center md:text-right" 
-                 />
+                 <div className="space-y-4">
+                   <input 
+                     value={profileForm.name} 
+                     onChange={(e) => setProfileForm({...profileForm, name: e.target.value})}
+                     className="text-3xl md:text-5xl font-black bg-white/20 rounded-2xl px-4 py-2 text-white outline-none w-full text-center md:text-right" 
+                     placeholder={language === 'ar' ? 'الاسم' : 'Name'}
+                   />
+                   <input 
+                     type="email"
+                     value={profileForm.email || ''} 
+                     onChange={(e) => setProfileForm({...profileForm, email: e.target.value})}
+                     className="text-lg font-bold bg-white/20 rounded-2xl px-4 py-2 text-white outline-none w-full text-center md:text-right" 
+                     placeholder={language === 'ar' ? 'البريد الإلكتروني (لاستعادة كلمة المرور)' : 'Email (for password reset)'}
+                   />
+                 </div>
               ) : (
                  <h2 className="text-3xl md:text-5xl font-black tracking-tight">{userProfile.name}</h2>
               )}
               
-              <div className="flex items-center justify-center md:justify-end gap-2 opacity-70">
-                 <p className="text-blue-100 text-sm">{userProfile.email}</p>
-              </div>
+              {!isEditingProfile && (
+                <div className="flex items-center justify-center md:justify-end gap-2 opacity-70">
+                   <p className="text-blue-100 text-sm">{userProfile.email || (language === 'ar' ? 'لم يتم تسجيل بريد إلكتروني' : 'No email registered')}</p>
+                </div>
+              )}
 
               <div className="flex items-center justify-center md:justify-end gap-3 mt-4">
                 <button onClick={handleLogout} className="px-4 py-2 bg-white/10 hover:bg-rose-500/20 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border border-white/10 transition-colors">
@@ -546,24 +558,43 @@ const Settings: React.FC = () => {
                   placeholder={language === 'ar' ? 'اكتب اقتراحك أو تقييمك هنا...' : 'Write your suggestion or feedback here...'}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm outline-none focus:border-amber-500 min-h-[120px] resize-none"
                 ></textarea>
-                <button 
-                  onClick={() => {
-                    const el = document.getElementById('feedbackText') as HTMLTextAreaElement;
-                    const feedback = el.value.trim();
-                    if (feedback) {
-                      const subject = encodeURIComponent('Mahfazty App Feedback');
-                      const body = encodeURIComponent(feedback);
-                      window.open(`mailto:Ah.Elnokaly@gmail.com?subject=${subject}&body=${body}`);
-                      dispatch.setNotification({ message: language === 'ar' ? 'شكراً لك! سيتم فتح تطبيق البريد الإلكتروني.' : 'Thank you! Opening email client.', type: 'success' });
-                      el.value = '';
-                    } else {
-                      dispatch.setNotification({ message: language === 'ar' ? 'يرجى كتابة شيء أولاً.' : 'Please write something first.', type: 'error' });
-                    }
-                  }}
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <Mail size={16} /> {language === 'ar' ? 'إرسال الاقتراح' : 'Send Feedback'}
-                </button>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => {
+                      const el = document.getElementById('feedbackText') as HTMLTextAreaElement;
+                      const feedback = el.value.trim();
+                      if (feedback) {
+                        const subject = encodeURIComponent('Mahfazty App Feedback');
+                        const body = encodeURIComponent(feedback);
+                        window.open(`mailto:Ah.Elnokaly@gmail.com?subject=${subject}&body=${body}`);
+                        dispatch.setNotification({ message: language === 'ar' ? 'شكراً لك! سيتم فتح تطبيق البريد الإلكتروني.' : 'Thank you! Opening email client.', type: 'success' });
+                        el.value = '';
+                      } else {
+                        dispatch.setNotification({ message: language === 'ar' ? 'يرجى كتابة شيء أولاً.' : 'Please write something first.', type: 'error' });
+                      }
+                    }}
+                    className="flex-1 bg-amber-500 hover:bg-amber-400 text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Mail size={16} /> {language === 'ar' ? 'إرسال إيميل' : 'Send Email'}
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const el = document.getElementById('feedbackText') as HTMLTextAreaElement;
+                      const feedback = el.value.trim();
+                      if (feedback) {
+                        const text = encodeURIComponent(`مرحباً، لدي استفسار/اقتراح بخصوص تطبيق محفظتي:\n\n${feedback}`);
+                        window.open(`https://wa.me/201009969653?text=${text}`);
+                        dispatch.setNotification({ message: language === 'ar' ? 'شكراً لك! سيتم فتح الواتساب.' : 'Thank you! Opening WhatsApp.', type: 'success' });
+                        el.value = '';
+                      } else {
+                        dispatch.setNotification({ message: language === 'ar' ? 'يرجى كتابة شيء أولاً.' : 'Please write something first.', type: 'error' });
+                      }
+                    }}
+                    className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <MessageCircle size={16} /> {language === 'ar' ? 'واتساب' : 'WhatsApp'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

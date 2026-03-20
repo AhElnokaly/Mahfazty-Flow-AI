@@ -9,9 +9,10 @@ const INITIAL_STATE: AppState = {
   baseCurrency: 'EGP',
   userProfile: {
     name: 'Guest User',
+    username: 'guest',
     email: '',
     avatar: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Guest',
-    isAuthenticated: false,
+    isAuthenticated: true,
     achievements: []
   },
   apiKeys: [],
@@ -82,6 +83,7 @@ interface AppContextType {
     addChatMessage: (msg: ChatMessage, isProChat?: boolean) => void;
     updateProfile: (profile: UserProfile) => void;
     setNotification: (notif: AppState['notification']) => void;
+    addNotificationToHistory: (notif: AppNotification) => void;
     addCustomWidget: (widget: CustomWidget) => void;
     addAnalyticsWidget: (id: string) => void;
     removeAnalyticsWidget: (id: string) => void;
@@ -179,7 +181,8 @@ type Action =
   | { type: 'UNLOCK_ACHIEVEMENT'; payload: string }
   | { type: 'ADD_GOAL'; payload: Omit<import('./types').Goal, 'id'> }
   | { type: 'UPDATE_GOAL'; payload: { id: string; update: Partial<import('./types').Goal> } }
-  | { type: 'DELETE_GOAL'; payload: string };
+  | { type: 'DELETE_GOAL'; payload: string }
+  | { type: 'ADD_NOTIFICATION_TO_HISTORY'; payload: AppNotification };
 
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
@@ -432,6 +435,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, notificationHistory: state.notificationHistory.map(n => ({ ...n, read: true })) };
     case 'CLEAR_NOTIFICATIONS':
       return { ...state, notificationHistory: [] };
+    case 'ADD_NOTIFICATION_TO_HISTORY':
+      return { ...state, notificationHistory: [action.payload, ...state.notificationHistory] };
     case 'TOGGLE_AUTO_SYNC':
       return { ...state, autoSync: !state.autoSync };
     case 'TOGGLE_BIOMETRICS':
@@ -449,7 +454,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
           ...state.userProfile,
           achievements: [...currentAchievements, action.payload]
         },
-        notification: { id: Date.now().toString(), message: `Achievement Unlocked!`, type: 'success', timestamp: new Date().toISOString(), read: false }
+        notification: { message: `Achievement Unlocked!`, type: 'success' }
       };
     }
     case 'UPDATE_TRANSACTION':
@@ -494,7 +499,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...initial,
           ...parsed,
-          userProfile: { ...initial.userProfile, ...parsed.userProfile },
+          userProfile: { 
+            ...initial.userProfile, 
+            ...(parsed.userProfile || {}),
+            achievements: parsed.userProfile?.achievements || initial.userProfile.achievements 
+          },
           // Ensure arrays are at least empty arrays if missing
           apiKeys: parsed.apiKeys || initial.apiKeys,
           groups: parsed.groups || initial.groups,
@@ -506,7 +515,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           customWidgets: parsed.customWidgets || initial.customWidgets,
           activeWidgets: parsed.activeWidgets || initial.activeWidgets,
           notificationHistory: parsed.notificationHistory || initial.notificationHistory,
-          hasSeenOnboarding: parsed.hasSeenOnboarding ?? initial.hasSeenOnboarding
+          hasSeenOnboarding: parsed.hasSeenOnboarding ?? initial.hasSeenOnboarding,
+          goals: parsed.goals || initial.goals,
+          syncHistory: parsed.syncHistory || initial.syncHistory,
+          language: parsed.language || initial.language,
+          isDarkMode: parsed.isDarkMode ?? initial.isDarkMode,
+          isPro: parsed.isPro ?? initial.isPro,
+          isPrivacyMode: parsed.isPrivacyMode ?? initial.isPrivacyMode,
+          walletBalance: parsed.walletBalance ?? initial.walletBalance,
+          baseCurrency: parsed.baseCurrency || initial.baseCurrency,
+          activeApiKeyId: parsed.activeApiKeyId || initial.activeApiKeyId,
+          security: parsed.security || initial.security,
+          aiSettings: parsed.aiSettings || initial.aiSettings,
+          notification: parsed.notification || initial.notification,
+          autoSync: parsed.autoSync ?? initial.autoSync,
+          isSyncing: parsed.isSyncing ?? initial.isSyncing,
+          isOnline: parsed.isOnline ?? initial.isOnline,
+          lastSyncTimestamp: parsed.lastSyncTimestamp || initial.lastSyncTimestamp,
+          syncLocationSet: parsed.syncLocationSet ?? initial.syncLocationSet,
+          syncProvider: parsed.syncProvider || initial.syncProvider,
+          pushNotifications: parsed.pushNotifications ?? initial.pushNotifications
         };
       }
       return initial;
@@ -584,6 +612,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addChatMessage: (msg: ChatMessage, isProChat = false) => dispatch({ type: 'ADD_CHAT_MESSAGE', payload: { msg, isProChat } }),
     updateProfile: (profile: UserProfile) => dispatch({ type: 'UPDATE_PROFILE', payload: profile }),
     setNotification: (notif: AppState['notification']) => dispatch({ type: 'SET_NOTIFICATION', payload: notif }),
+    addNotificationToHistory: (notif: AppNotification) => dispatch({ type: 'ADD_NOTIFICATION_TO_HISTORY', payload: notif }),
     addCustomWidget: (widget: CustomWidget) => dispatch({ type: 'ADD_CUSTOM_WIDGET', payload: widget }),
     addAnalyticsWidget: (id: string) => dispatch({ type: 'ADD_ANALYTICS_WIDGET', payload: id }),
     removeAnalyticsWidget: (id: string) => dispatch({ type: 'REMOVE_ANALYTICS_WIDGET', payload: id }),

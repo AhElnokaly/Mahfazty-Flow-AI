@@ -41,6 +41,10 @@ export interface Transaction {
   clientId: string;
   note?: string;
   items?: TransactionItem[]; // New: Support for itemized transactions
+  shares?: number;
+  pricePerShare?: number;
+  interestRate?: number;
+  duration?: number;
 }
 
 export interface UserProfile {
@@ -67,6 +71,7 @@ export interface Installment {
   type: 'loan' | 'purchase' | 'jamiyah';
   lastPaymentDate?: string;
   linkedGroupId?: string;
+  penalty?: number;
 }
 
 export interface ChatMessage {

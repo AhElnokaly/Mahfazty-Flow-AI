@@ -37,18 +37,18 @@ const Dashboard: React.FC = () => {
   const lastMonthStr = lastMonthDate.toISOString().slice(0, 7);
 
   const currentMonthIncome = transactions
-    .filter(t => t.type === TransactionType.INCOME && t.date.startsWith(currentMonthStr))
+    .filter(t => t.type === TransactionType.INCOME && t.date && t.date.startsWith(currentMonthStr))
     .reduce((s, t) => s + t.amount, 0);
   const lastMonthIncome = transactions
-    .filter(t => t.type === TransactionType.INCOME && t.date.startsWith(lastMonthStr))
+    .filter(t => t.type === TransactionType.INCOME && t.date && t.date.startsWith(lastMonthStr))
     .reduce((s, t) => s + t.amount, 0);
   const incomeChange = lastMonthIncome === 0 ? 0 : ((currentMonthIncome - lastMonthIncome) / lastMonthIncome) * 100;
 
   const currentMonthExpense = transactions
-    .filter(t => t.type === TransactionType.EXPENSE && t.date.startsWith(currentMonthStr))
+    .filter(t => t.type === TransactionType.EXPENSE && t.date && t.date.startsWith(currentMonthStr))
     .reduce((s, t) => s + t.amount, 0);
   const lastMonthExpense = transactions
-    .filter(t => t.type === TransactionType.EXPENSE && t.date.startsWith(lastMonthStr))
+    .filter(t => t.type === TransactionType.EXPENSE && t.date && t.date.startsWith(lastMonthStr))
     .reduce((s, t) => s + t.amount, 0);
   const expenseChange = lastMonthExpense === 0 ? 0 : ((currentMonthExpense - lastMonthExpense) / lastMonthExpense) * 100;
 
@@ -63,7 +63,7 @@ const Dashboard: React.FC = () => {
   const savingsRate = currentMonthIncome > 0 ? ((currentMonthIncome - currentMonthExpense) / currentMonthIncome) * 100 : 0;
 
   const recentTransactions = useMemo(() => {
-    return [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
+    return [...transactions].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()).slice(0, 5);
   }, [transactions]);
 
   const upcomingInstallments = useMemo(() => {
@@ -135,7 +135,7 @@ const Dashboard: React.FC = () => {
       d.setDate(d.getDate() - i);
       const dayStr = d.toISOString().split('T')[0];
       const dailyNet = transactions
-        .filter(t => t.date === dayStr)
+        .filter(t => t.date && t.date === dayStr)
         .reduce((s, t) => t.type === TransactionType.INCOME ? s + t.amount : s - t.amount, 0);
       data.push({ name: i, value: Math.abs(dailyNet + (Math.random() * 50)) });
     }
@@ -433,13 +433,13 @@ const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <Clock size={14} className="text-amber-500" />
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">{inst.name}</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">{inst.title || 'Installment'}</span>
                     </div>
-                    <span className={`text-xs font-black text-slate-900 dark:text-white ${privacyClass}`}>${inst.monthlyAmount.toLocaleString()}/mo</span>
+                    <span className={`text-xs font-black text-slate-900 dark:text-white ${privacyClass}`}>${(inst.monthlyAmount || 0).toLocaleString()}/mo</span>
                   </div>
                   <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-widest">
-                    <span>{inst.paidCount} of {inst.installmentCount} Paid</span>
-                    <span>{progress.toFixed(0)}%</span>
+                    <span>{inst.paidCount || 0} of {inst.installmentCount || 1} Paid</span>
+                    <span>{(progress || 0).toFixed(0)}%</span>
                   </div>
                   <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div className="h-full bg-amber-500 rounded-full" style={{ width: `${progress}%` }} />
@@ -476,7 +476,7 @@ const Dashboard: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {goals.slice(0, 3).map(goal => {
-            const progress = Math.min((goal.currentAmount / goal.targetAmount) * 100, 100);
+            const progress = Math.min(((goal.currentAmount || 0) / (goal.targetAmount || 1)) * 100, 100);
             return (
               <div key={goal.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors" onClick={() => navigate('/goals')}>
                 <div className="flex items-center gap-3 mb-3">
@@ -484,9 +484,9 @@ const Dashboard: React.FC = () => {
                     {goal.icon}
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">{goal.title}</h4>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">{goal.title || 'Goal'}</h4>
                     <p className={`text-[10px] font-bold text-slate-500 ${privacyClass}`}>
-                      {baseCurrency} {goal.currentAmount.toLocaleString()} / {goal.targetAmount.toLocaleString()}
+                      {baseCurrency} {(goal.currentAmount || 0).toLocaleString()} / {(goal.targetAmount || 1).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -522,7 +522,7 @@ const Dashboard: React.FC = () => {
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart>
                      <Pie data={expenseBreakdown} cx="50%" cy="50%" innerRadius={35} outerRadius={45} paddingAngle={5} dataKey="value">
-                       {expenseBreakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} cornerRadius={4} />)}
+                       {expenseBreakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                      </Pie>
                      <Tooltip />
                    </PieChart>
