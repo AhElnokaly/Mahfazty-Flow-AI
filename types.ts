@@ -56,6 +56,10 @@ export interface UserProfile {
   isAuthenticated: boolean;
   preferredApiKeyId?: string; 
   achievements?: string[];
+  recoveryKey?: string;
+  streak?: number;
+  lastTransactionDate?: string;
+  smartRoundup?: boolean;
 }
 
 export interface Installment {
@@ -141,6 +145,7 @@ export interface AppState {
   isDarkMode: boolean;
   isPro: boolean;
   isPrivacyMode: boolean; // New: Toggle to blur financial numbers
+  isDecoyMode?: boolean; // New: Decoy mode for fake data
   autoSync: boolean;
   isSyncing: boolean;
   isOnline: boolean;
@@ -158,6 +163,7 @@ export interface AppState {
   security: {
     appLock: boolean;
     biometrics: boolean;
+    decoyPassword?: string;
   };
   pushNotifications: boolean;
   aiSettings: {

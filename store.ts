@@ -44,7 +44,8 @@ const INITIAL_STATE: AppState = {
   customWidgets: [], 
   security: {
     appLock: false,
-    biometrics: false
+    biometrics: false,
+    decoyPassword: ''
   },
   pushNotifications: false,
   aiSettings: {
@@ -61,12 +62,15 @@ const INITIAL_STATE: AppState = {
 interface AppContextType {
   state: AppState;
   dispatch: {
+    biometricLogin: (username: string) => void;
     login: (username: string, password?: string) => void;
     signup: (username: string, password?: string, email?: string) => void;
     guestLogin: () => void;
+    decoyLogin: () => void;
     logout: () => void;
     completeOnboarding: () => void;
-    addApiKey: (name: string, key: string) => void;
+    lockApp: () => void;
+  addApiKey: (name: string, key: string) => void;
     deleteApiKey: (id: string) => void;
     setActiveApiKey: (id: string) => void;
     incrementApiKeyUsage: (id: string) => void;
@@ -91,6 +95,7 @@ interface AppContextType {
     toggleDarkMode: () => void;
     togglePrivacyMode: () => void;
     toggleBiometrics: () => void;
+    setDecoyPassword: (password: string) => void;
     togglePushNotifications: () => void;
     updateAvatar: (avatarUrl: string) => void;
     toggleAutoSync: () => void;
@@ -129,6 +134,7 @@ type Action =
   | { type: 'SIGNUP'; payload: { username: string; email?: string; password?: string } }
   | { type: 'GUEST_LOGIN' }
   | { type: 'LOGOUT' }
+  | { type: 'LOCK_APP' }
   | { type: 'ADD_API_KEY'; payload: { name: string; key: string } }
   | { type: 'DELETE_API_KEY'; payload: string }
   | { type: 'SET_ACTIVE_API_KEY'; payload: string }
@@ -182,10 +188,27 @@ type Action =
   | { type: 'ADD_GOAL'; payload: Omit<import('./types').Goal, 'id'> }
   | { type: 'UPDATE_GOAL'; payload: { id: string; update: Partial<import('./types').Goal> } }
   | { type: 'DELETE_GOAL'; payload: string }
-  | { type: 'ADD_NOTIFICATION_TO_HISTORY'; payload: AppNotification };
+  | { type: 'ADD_NOTIFICATION_TO_HISTORY'; payload: AppNotification }
+  | { type: 'SET_DECOY_PASSWORD'; payload: string }
+  | { type: 'DECOY_LOGIN' };
 
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
+    case 'SET_DECOY_PASSWORD':
+      return { ...state, security: { ...state.security, decoyPassword: action.payload } };
+    case 'DECOY_LOGIN':
+      return {
+        ...state,
+        isDecoyMode: true,
+        transactions: [],
+        groups: [],
+        clients: [],
+        installments: [],
+        goals: [],
+        walletBalance: 0,
+        userProfile: { ...state.userProfile, isAuthenticated: true },
+        notification: { message: state.language === 'ar' ? 'تم تسجيل الدخول' : 'Logged in', type: 'success' }
+      };
     case 'LOGIN': {
       const updateMessage = state.language === 'ar' 
         ? 'تم إضافة ميزات جديدة: دمج ونقل العملاء، إضافة مجموعات وعملاء أثناء تسجيل المعاملات، وتفعيل النسخة الاحترافية!' 
@@ -214,6 +237,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
     }
     case 'SIGNUP': {
+      const recoveryKey = `MAH-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
       const welcomeMessage = state.language === 'ar' 
         ? `مرحباً ${action.payload.username}! تم إنشاء حسابك بنجاح.` 
         : `Welcome, ${action.payload.username}! Your account is ready.`;
@@ -226,11 +250,12 @@ const appReducer = (state: AppState, action: Action): AppState => {
           username: action.payload.username,
           email: action.payload.email || state.userProfile.email,
           password: action.payload.password,
+          recoveryKey,
           isAuthenticated: true 
         },
         notification: { 
-          title: state.language === 'ar' ? '🎉 أهلاً بك في محفظتي' : '🎉 Welcome to Mahfazty',
-          message: welcomeMessage, 
+          title: state.language === 'ar' ? 'مفتاح الاسترداد الخاص بك' : 'Your Recovery Key',
+          message: state.language === 'ar' ? `يرجى حفظ هذا المفتاح لاستعادة حسابك: ${recoveryKey}` : `Please save this key to recover your account: ${recoveryKey}`, 
           type: 'success' 
         }
       };
@@ -270,12 +295,32 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'LOGOUT':
       return { 
         ...state, 
+        isDecoyMode: false,
         userProfile: INITIAL_STATE.userProfile, 
         notification: { 
           title: state.language === 'ar' ? 'إلى اللقاء' : 'Goodbye',
           message: state.language === 'ar' ? 'تم تسجيل الخروج بنجاح' : 'Logged out successfully', 
           type: 'info' 
         } 
+      };
+    case 'LOCK_APP':
+      return {
+        ...INITIAL_STATE,
+        language: state.language,
+        isDarkMode: state.isDarkMode,
+        hasSeenOnboarding: state.hasSeenOnboarding,
+        security: state.security,
+        userProfile: {
+          ...INITIAL_STATE.userProfile,
+          username: state.userProfile.username,
+          avatar: state.userProfile.avatar,
+          isAuthenticated: false
+        },
+        notification: {
+          title: state.language === 'ar' ? 'تم قفل التطبيق' : 'App Locked',
+          message: state.language === 'ar' ? 'تم قفل التطبيق بسبب عدم النشاط' : 'App locked due to inactivity',
+          type: 'info'
+        }
       };
     case 'ADD_API_KEY': {
       const newKey = {
@@ -496,14 +541,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (persisted) {
         const parsed = JSON.parse(persisted);
         // Deep merge userProfile to ensure no missing keys
+        const userProfile = { 
+          ...initial.userProfile, 
+          ...(parsed.userProfile || {}),
+          achievements: parsed.userProfile?.achievements || initial.userProfile.achievements 
+        };
+        
+        // If biometrics is enabled, force re-authentication
+        if (parsed.security?.biometrics) {
+          userProfile.isAuthenticated = false;
+        }
+
         return {
           ...initial,
           ...parsed,
-          userProfile: { 
-            ...initial.userProfile, 
-            ...(parsed.userProfile || {}),
-            achievements: parsed.userProfile?.achievements || initial.userProfile.achievements 
-          },
+          userProfile,
           // Ensure arrays are at least empty arrays if missing
           apiKeys: parsed.apiKeys || initial.apiKeys,
           groups: parsed.groups || initial.groups,
@@ -545,6 +597,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   useEffect(() => {
+    if (state.isDecoyMode) return; // Do not save decoy state to local storage
     localStorage.setItem('mahfazty_v1_store', JSON.stringify(state));
     if (state.userProfile.isAuthenticated && state.userProfile.username) {
       localStorage.setItem(`mahfazty_user_${state.userProfile.username}`, JSON.stringify(state));
@@ -552,16 +605,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [state]);
 
   const actions = {
+    biometricLogin: (username: string) => {
+      const savedData = localStorage.getItem(`mahfazty_user_${username}`);
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData);
+          if (parsed.security?.biometrics) {
+            dispatch({ type: 'IMPORT_STATE', payload: { ...parsed, isDecoyMode: false, userProfile: { ...parsed.userProfile, isAuthenticated: true } } });
+            dispatch({ type: 'SET_NOTIFICATION', payload: { message: state.language === 'ar' ? 'تم تسجيل الدخول بالبصمة' : 'Logged in with biometrics', type: 'success' } });
+          }
+        } catch (e) {}
+      }
+    },
     login: (username: string, password?: string) => {
       const savedData = localStorage.getItem(`mahfazty_user_${username}`);
       if (savedData) {
         try {
           const parsed = JSON.parse(savedData);
+          if (parsed.security?.decoyPassword && parsed.security.decoyPassword === password) {
+            dispatch({ type: 'IMPORT_STATE', payload: { ...parsed, isDecoyMode: true, userProfile: { ...parsed.userProfile, isAuthenticated: true } } });
+            dispatch({ type: 'DECOY_LOGIN' });
+            return;
+          }
           if (parsed.userProfile?.password && parsed.userProfile.password !== password) {
             dispatch({ type: 'SET_NOTIFICATION', payload: { title: 'خطأ / Error', message: 'كلمة المرور غير صحيحة / Invalid password', type: 'error' } });
             return;
           }
-          dispatch({ type: 'IMPORT_STATE', payload: { ...parsed, userProfile: { ...parsed.userProfile, isAuthenticated: true } } });
+          dispatch({ type: 'IMPORT_STATE', payload: { ...parsed, isDecoyMode: false, userProfile: { ...parsed.userProfile, isAuthenticated: true } } });
         } catch (e) {
           dispatch({ type: 'LOGIN', payload: { username } });
         }
@@ -590,7 +660,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dispatch({ type: 'GUEST_LOGIN' });
       }
     },
+    decoyLogin: () => dispatch({ type: 'DECOY_LOGIN' }),
     logout: () => dispatch({ type: 'LOGOUT' }),
+    lockApp: () => dispatch({ type: 'LOCK_APP' }),
     completeOnboarding: () => dispatch({ type: 'COMPLETE_ONBOARDING' }),
     addApiKey: (name: string, key: string) => dispatch({ type: 'ADD_API_KEY', payload: { name, key } }),
     deleteApiKey: (id: string) => dispatch({ type: 'DELETE_API_KEY', payload: id }),
@@ -620,6 +692,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     toggleDarkMode: () => dispatch({ type: 'TOGGLE_DARK_MODE' }),
     togglePrivacyMode: () => dispatch({ type: 'TOGGLE_PRIVACY_MODE' }),
     toggleBiometrics: () => dispatch({ type: 'TOGGLE_BIOMETRICS' }),
+    setDecoyPassword: (password: string) => dispatch({ type: 'SET_DECOY_PASSWORD', payload: password }),
     togglePushNotifications: () => dispatch({ type: 'TOGGLE_PUSH_NOTIFICATIONS' }),
     updateAvatar: (avatarUrl: string) => dispatch({ type: 'UPDATE_AVATAR', payload: avatarUrl }),
     toggleAutoSync: () => dispatch({ type: 'TOGGLE_AUTO_SYNC' }),

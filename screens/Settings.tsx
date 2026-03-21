@@ -295,6 +295,42 @@ const Settings: React.FC = () => {
                </button>
             </div>
 
+            {/* Decoy Password Setting */}
+            <div className="flex flex-col gap-3 p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl col-span-1 md:col-span-2">
+               <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-xl ${state.security.decoyPassword ? 'bg-rose-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'} flex items-center justify-center transition-colors`}>
+                      <Key size={18} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'كلمة المرور الوهمية' : 'Decoy Password'}</h4>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">{language === 'ar' ? 'لإخفاء البيانات عند الإجبار' : 'Hide data when forced'}</p>
+                    </div>
+                 </div>
+               </div>
+               <div className="flex items-center gap-2 mt-2">
+                 <input 
+                   type="password"
+                   placeholder={language === 'ar' ? 'أدخل كلمة مرور وهمية' : 'Enter decoy password'}
+                   className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-medium outline-none focus:border-rose-500"
+                   id="decoyPasswordInput"
+                 />
+                 <button 
+                   onClick={() => {
+                     const input = document.getElementById('decoyPasswordInput') as HTMLInputElement;
+                     if (input.value) {
+                       dispatch.setDecoyPassword(input.value);
+                       input.value = '';
+                       dispatch.setNotification({ message: language === 'ar' ? 'تم تعيين كلمة المرور الوهمية' : 'Decoy password set', type: 'success' });
+                     }
+                   }}
+                   className="bg-rose-600 hover:bg-rose-500 text-white px-6 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95"
+                 >
+                   {language === 'ar' ? 'حفظ' : 'SAVE'}
+                 </button>
+               </div>
+            </div>
+
             {/* Push Notifications Toggle */}
             <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl">
                <div className="flex items-center gap-4">

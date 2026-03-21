@@ -84,7 +84,9 @@ const NotificationToast = ({ notification, onClose }: { notification: any, onClo
 
 const WelcomeScreen = () => {
   const { state, dispatch } = useApp();
-  const [view, setView] = useState<'landing' | 'login' | 'signup' | 'forgot-password'>('landing');
+  const [view, setView] = useState<'landing' | 'login' | 'signup' | 'forgot-password' | 'biometric'>(
+    state.userProfile.username && state.userProfile.username !== 'guest' && state.security.biometrics ? 'biometric' : 'landing'
+  );
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -95,35 +97,36 @@ const WelcomeScreen = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (view === 'forgot-password') {
-      if (!email) return;
+      if (!username || !password) return; // password here acts as recovery key
       setLoading(true);
       setTimeout(() => {
-        // Find user by email in local storage
-        let foundUser = false;
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('mahfazty_user_') && key !== 'mahfazty_user_guest') {
-            try {
-              const data = JSON.parse(localStorage.getItem(key) || '{}');
-              if (data.userProfile?.email === email) {
-                foundUser = true;
-                break;
-              }
-            } catch (e) {}
-          }
-        }
-        
-        if (foundUser) {
-          dispatch.setNotification({ 
-            title: state.language === 'ar' ? 'تم الإرسال' : 'Sent',
-            message: state.language === 'ar' ? `تم إرسال رابط إعادة تعيين كلمة المرور إلى ${email}` : `Password reset link sent to ${email}`, 
-            type: 'success' 
-          });
-          setView('login');
+        const savedData = localStorage.getItem(`mahfazty_user_${username}`);
+        if (savedData) {
+          try {
+            const parsed = JSON.parse(savedData);
+            if (parsed.userProfile?.recoveryKey === password) {
+              // Reset password to a default or ask for new one. For simplicity, reset to '123456'
+              parsed.userProfile.password = '123456';
+              localStorage.setItem(`mahfazty_user_${username}`, JSON.stringify(parsed));
+              dispatch.setNotification({ 
+                title: state.language === 'ar' ? 'تم الاسترداد' : 'Recovered',
+                message: state.language === 'ar' ? 'تم إعادة تعيين كلمة المرور إلى: 123456' : 'Password reset to: 123456', 
+                type: 'success' 
+              });
+              setView('login');
+              setPassword('');
+            } else {
+              dispatch.setNotification({ 
+                title: state.language === 'ar' ? 'خطأ' : 'Error',
+                message: state.language === 'ar' ? 'مفتاح الاسترداد غير صحيح' : 'Invalid recovery key', 
+                type: 'error' 
+              });
+            }
+          } catch (e) {}
         } else {
           dispatch.setNotification({ 
             title: state.language === 'ar' ? 'خطأ' : 'Error',
-            message: state.language === 'ar' ? 'البريد الإلكتروني غير مسجل' : 'Email not found', 
+            message: state.language === 'ar' ? 'المستخدم غير موجود' : 'User not found', 
             type: 'error' 
           });
         }
@@ -155,6 +158,59 @@ const WelcomeScreen = () => {
       navigate('/');
     }, 500);
   };
+
+  if (view === 'biometric') {
+    return (
+      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-slate-950 overflow-hidden text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900 via-slate-950 to-slate-950 opacity-80"></div>
+        <div className="absolute w-[600px] h-[600px] bg-emerald-600/10 rounded-full blur-[120px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse"></div>
+        
+        <div className="relative z-10 max-w-md w-full px-6 text-center space-y-12 animate-in fade-in zoom-in-95 duration-1000">
+          <div className="space-y-4">
+            <div className="w-24 h-24 mx-auto rounded-full overflow-hidden border-4 border-slate-800 shadow-2xl">
+              <img src={state.userProfile.avatar} alt="Profile" className="w-full h-full object-cover" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-3xl font-black tracking-tight">{state.language === 'ar' ? 'مرحباً بعودتك' : 'Welcome Back'}</h2>
+              <p className="text-slate-400 font-medium text-lg">{state.userProfile.username}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center justify-center space-y-8">
+            <button 
+              onClick={() => {
+                setLoading(true);
+                setTimeout(() => {
+                  dispatch.biometricLogin(state.userProfile.username!);
+                  setLoading(false);
+                  navigate('/');
+                }, 800);
+              }}
+              disabled={loading}
+              className="relative group w-32 h-32 flex items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all duration-500"
+            >
+              <div className="absolute inset-0 rounded-full border-2 border-emerald-500/50 animate-ping opacity-20 group-hover:opacity-40"></div>
+              <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(16,185,129,0.4)] group-hover:shadow-[0_0_60px_rgba(16,185,129,0.6)] transition-all duration-500 group-hover:scale-110">
+                <ShieldCheck size={40} className="text-emerald-950" />
+              </div>
+            </button>
+            <p className="text-emerald-400/80 text-sm font-bold uppercase tracking-widest animate-pulse">
+              {state.language === 'ar' ? 'اضغط للفتح بالبصمة' : 'Tap to unlock'}
+            </p>
+          </div>
+
+          <div className="pt-8">
+            <button 
+              onClick={() => setView('login')}
+              className="text-slate-500 text-xs font-bold uppercase tracking-[2px] hover:text-white transition-colors"
+            >
+              {state.language === 'ar' ? 'تسجيل الدخول بكلمة المرور' : 'Login with password'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (view === 'landing') {
     return (
@@ -224,7 +280,7 @@ const WelcomeScreen = () => {
        
        <div className="relative z-10 w-full max-w-md p-8 animate-in slide-in-from-bottom-8 duration-500">
           <button 
-            onClick={() => setView('landing')}
+            onClick={() => setView(state.userProfile.username && state.userProfile.username !== 'guest' && state.security.biometrics ? 'biometric' : 'landing')}
             className="absolute top-8 left-8 text-slate-500 hover:text-white transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest"
           >
             ← {state.language === 'ar' ? 'عودة' : 'Back'}
@@ -245,26 +301,24 @@ const WelcomeScreen = () => {
 
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[2.5rem] space-y-6 shadow-2xl">
             <form onSubmit={handleSubmit} className="space-y-5">
-              {view !== 'forgot-password' && (
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
-                    {state.language === 'ar' ? 'اسم المستخدم' : 'Username'}
-                  </label>
-                  <div className="relative group">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
-                    <input 
-                      type="text" 
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
-                      placeholder="username"
-                      autoFocus={true}
-                    />
-                  </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                  {state.language === 'ar' ? 'اسم المستخدم' : 'Username'}
+                </label>
+                <div className="relative group">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
+                  <input 
+                    type="text" 
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
+                    placeholder="username"
+                    autoFocus={true}
+                  />
                 </div>
-              )}
+              </div>
 
-              {(view === 'signup' || view === 'forgot-password') && (
+              {view === 'signup' && (
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
                     {state.language === 'ar' ? 'البريد الإلكتروني' : 'Email'}
@@ -277,7 +331,24 @@ const WelcomeScreen = () => {
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
                       placeholder="email@example.com"
-                      autoFocus={view === 'forgot-password'}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {view === 'forgot-password' && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                    {state.language === 'ar' ? 'مفتاح الاسترداد' : 'Recovery Key'}
+                  </label>
+                  <div className="relative group">
+                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
+                    <input 
+                      type="text" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-900 transition-all font-medium"
+                      placeholder="XXXX-XXXX-XXXX-XXXX"
                     />
                   </div>
                 </div>
@@ -302,7 +373,7 @@ const WelcomeScreen = () => {
                     <div className="flex justify-end mt-2">
                       <button 
                         type="button"
-                        onClick={() => setView('forgot-password')}
+                        onClick={() => { setView('forgot-password'); setPassword(''); }}
                         className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium"
                       >
                         {state.language === 'ar' ? 'نسيت كلمة المرور؟' : 'Forgot Password?'}
@@ -327,7 +398,7 @@ const WelcomeScreen = () => {
                 {view === 'signup' 
                   ? (state.language === 'ar' ? 'إنشاء حساب' : 'Create Account') 
                   : view === 'forgot-password'
-                  ? (state.language === 'ar' ? 'إرسال الرابط' : 'Send Link')
+                  ? (state.language === 'ar' ? 'استرداد الحساب' : 'Recover Account')
                   : (state.language === 'ar' ? 'تسجيل الدخول' : 'Sign In')}
               </button>
             </form>
@@ -602,26 +673,76 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   );
 };
 
+const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { state } = useApp();
+  const location = useLocation();
+  
+  if (!state.userProfile.isAuthenticated && location.pathname !== '/auth') {
+    return <Navigate to="/auth" replace />;
+  }
+  
+  if (state.userProfile.isAuthenticated && location.pathname === '/auth') {
+    return <Navigate to="/" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
+const AutoLock: React.FC = () => {
+  const { state, dispatch } = useApp();
+  
+  useEffect(() => {
+    if (!state.userProfile.isAuthenticated || !state.security.biometrics) return;
+
+    let timeoutId: NodeJS.Timeout;
+    const INACTIVITY_LIMIT = 5 * 60 * 1000; // 5 minutes
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        dispatch.lockApp();
+      }, INACTIVITY_LIMIT);
+    };
+
+    // Listen to user activity
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(event => document.addEventListener(event, resetTimer));
+
+    // Initial start
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach(event => document.removeEventListener(event, resetTimer));
+    };
+  }, [state.userProfile.isAuthenticated, state.security.biometrics, dispatch]);
+
+  return null;
+};
+
 const App: React.FC = () => {
   return (
     <AppProvider>
       <SmartNotifications />
+      <AutoLock />
       <HashRouter>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/auth" element={<WelcomeScreen />} />
-            <Route path="/add" element={<AddFlow />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/installments" element={<Installments />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/archive" element={<Archive />} />
-            <Route path="/ai" element={<AIInsights />} />
-            <Route path="/upgrade" element={<ProUpgrade />} />
-            <Route path="/goals" element={<Goals />} />
-          </Routes>
-        </Layout>
+        <AuthGuard>
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/auth" element={<WelcomeScreen />} />
+              <Route path="/add" element={<AddFlow />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/installments" element={<Installments />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/archive" element={<Archive />} />
+              <Route path="/ai" element={<AIInsights />} />
+              <Route path="/upgrade" element={<ProUpgrade />} />
+              <Route path="/goals" element={<Goals />} />
+            </Routes>
+          </Layout>
+        </AuthGuard>
       </HashRouter>
     </AppProvider>
   );
