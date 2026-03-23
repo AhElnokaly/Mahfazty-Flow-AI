@@ -2,7 +2,8 @@
 
 export enum TransactionType {
   INCOME = 'INCOME',
-  EXPENSE = 'EXPENSE'
+  EXPENSE = 'EXPENSE',
+  TRANSFER = 'TRANSFER'
 }
 
 export interface Group {
@@ -10,6 +11,7 @@ export interface Group {
   name: string;
   icon?: string; 
   monthlyBudget?: number; // New: Budgeting support
+  allocatedAmount?: number; // New: Money transferred to this group
   isArchived?: boolean;
 }
 
@@ -31,11 +33,17 @@ export interface TransactionItem {
   barcode?: string;
 }
 
+export type PaymentMethod = 'cash' | 'credit';
+
 export interface Transaction {
   id: string;
   amount: number;
+  referenceTotal?: number; // New: Full bill amount for partial payments
   currency: string;
   type: TransactionType;
+  paymentMethod?: PaymentMethod;
+  dueDate?: string;
+  isSettled?: boolean;
   date: string;
   groupId: string;
   clientId: string;

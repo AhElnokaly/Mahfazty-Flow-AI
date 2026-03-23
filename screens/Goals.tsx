@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../store';
 import { Target, Plus, Check, X, TrendingUp, Trophy, AlertCircle, Trash2, Edit2 } from 'lucide-react';
 import { Goal } from '../types';
+import { CalculatorInput } from '../components/CalculatorInput';
 
 const Goals: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -131,10 +132,9 @@ const Goals: React.FC = () => {
               <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">{language === 'ar' ? 'المبلغ المستهدف' : 'Target Amount'}</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{baseCurrency}</span>
-                <input 
-                  type="number" 
+                <CalculatorInput 
                   value={targetAmount}
-                  onChange={(e) => setTargetAmount(e.target.value)}
+                  onChange={setTargetAmount}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-12 pr-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                   placeholder="0.00"
                 />
@@ -145,10 +145,9 @@ const Goals: React.FC = () => {
               <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">{language === 'ar' ? 'المبلغ الحالي (اختياري)' : 'Current Amount (Optional)'}</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{baseCurrency}</span>
-                <input 
-                  type="number" 
+                <CalculatorInput 
                   value={currentAmount}
-                  onChange={(e) => setCurrentAmount(e.target.value)}
+                  onChange={setCurrentAmount}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-12 pr-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                   placeholder="0.00"
                 />

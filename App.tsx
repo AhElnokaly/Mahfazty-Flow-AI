@@ -19,7 +19,7 @@ import {
   LayoutDashboard, BarChart3, Layers, User, 
   Bell, Plus, History as HistoryIcon,
   CheckCircle2, AlertCircle, Sun, Moon,
-  RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn, Eye, EyeOff, Key, ShieldCheck, Mail, Gift
+  RefreshCw, CloudOff, Check, Zap, Crown, Star, Sparkles, CreditCard, X, LogIn, Eye, EyeOff, Key, ShieldCheck, Mail, Gift, Menu
 } from 'lucide-react';
 
 // Helper to decode JWT without external library
@@ -408,111 +408,47 @@ const WelcomeScreen = () => {
   );
 };
 
+import { Sidebar } from './components/Sidebar';
+
 const HeaderActions = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [showNotifications, setShowNotifications] = useState(false);
-  const notifRef = useRef<HTMLDivElement>(null);
-
-  const unreadCount = state.notificationHistory.filter(n => !n.read).length;
-
-  const handleToggleLanguage = () => {
-    if (navigator.vibrate) navigator.vibrate(15);
-    dispatch.toggleLanguage();
-  };
-
-  const handleToggleTheme = () => {
-    if (navigator.vibrate) navigator.vibrate(15);
-    dispatch.toggleDarkMode();
-  };
-  
-  const handleTogglePrivacy = () => {
-    if (navigator.vibrate) navigator.vibrate(15);
-    dispatch.togglePrivacyMode();
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 h-16 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 shadow-sm px-4">
-      <div className="w-full max-w-screen-xl flex items-center justify-between">
-        
-        <div className="flex items-center gap-2">
-           <button onClick={handleToggleLanguage} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-700 hover:bg-blue-50 transition-colors">
-             <span className="text-[10px] font-black">{state.language.toUpperCase()}</span>
-           </button>
-           <button onClick={handleToggleTheme} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-700 hover:bg-amber-50 transition-colors">
-             {state.isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
-           </button>
-           <button onClick={handleTogglePrivacy} className={`w-8 h-8 flex items-center justify-center rounded-xl border transition-colors ${state.isPrivacyMode ? 'bg-blue-500 text-white border-blue-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-700'}`}>
-             {state.isPrivacyMode ? <EyeOff size={15} /> : <Eye size={15} />}
-           </button>
-        </div>
-
-        <div className="flex flex-col items-center">
-          <h1 className="text-sm sm:text-lg font-black text-slate-900 dark:text-white uppercase tracking-[4px] cursor-pointer" onClick={() => navigate('/')}>
-            {state.language === 'ar' ? 'محفظتي' : 'Mahfazty'}
-          </h1>
-          {state.isPro && (
-            <div className="flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse"></span>
-              <span className="text-[7px] font-black text-amber-500 uppercase tracking-widest leading-none">Pro Active</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-4">
-          <button 
-            onClick={() => state.isPro ? navigate('/settings') : navigate('/upgrade')}
-            className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-2xl transition-all duration-300 ${
-              state.isPro 
-                ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-lg shadow-amber-500/30' 
-                : 'bg-white dark:bg-slate-800 border-2 border-amber-400/30 text-amber-600 dark:text-amber-400 hover:border-amber-400'
-            }`}
-          >
-            {state.isPro ? <Crown size={14} className="animate-bounce" fill="currentColor" /> : <Zap size={14} className="animate-pulse" />}
-            <span className="text-[9px] font-black uppercase tracking-tighter hidden sm:block">
-              {state.isPro ? 'Pro Member' : 'Get Pro'}
-            </span>
-          </button>
-
-          <div className="relative" ref={notifRef}>
+    <>
+      <header className="sticky top-0 z-40 h-16 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 shadow-sm px-4">
+        <div className="w-full max-w-screen-xl flex items-center justify-between">
+          
+          <div className="flex items-center">
             <button 
-              onClick={() => { if (!showNotifications) dispatch.markNotificationsRead(); setShowNotifications(!showNotifications); }}
-              className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 relative"
+              onClick={() => setIsSidebarOpen(true)} 
+              className="p-2 -ml-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
-              <Bell size={18} />
-              {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white dark:border-slate-900"></span>}
+              <Menu size={24} />
             </button>
           </div>
-          
-          {state.userProfile.username === 'guest' ? (
-            <button 
-              onClick={() => navigate('/auth')}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg shadow-blue-500/30"
-            >
-              <LogIn size={14} />
-              <span className="text-[9px] font-black uppercase tracking-tighter hidden sm:block">
-                {state.language === 'ar' ? 'تسجيل الدخول' : 'Sign In'}
-              </span>
-            </button>
-          ) : (
-            <Link to="/settings" className="w-8 h-8 sm:w-10 sm:h-10 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-700 shadow-lg hover:scale-105 transition-transform">
-              <img src={state.userProfile.avatar} alt="Profile" className="w-full h-full object-cover" />
-            </Link>
-          )}
+
+          <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2">
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-[4px] cursor-pointer" onClick={() => navigate('/')}>
+              {state.language === 'ar' ? 'محفظتي' : 'Mahfazty'}
+            </h1>
+            {state.isPro && (
+              <div className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest leading-none">Pro Active</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center w-10">
+            {/* Empty div for flex balance */}
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+    </>
   );
 };
 

@@ -5,8 +5,10 @@ import { TransactionType, TransactionItem } from '../types';
 import { ArrowLeft, Save, TrendingUp, TrendingDown, Calendar, User, FileText, ChevronRight, Layers, Sparkles, Loader2, Camera, Scan, Plus, Trash2, ShoppingCart, Tag, Barcode } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { suggestTransactionNote, sendChatMessage } from '../geminiService';
+import { CalculatorInput } from '../components/CalculatorInput';
 
 const CURRENCIES = ['EGP', 'USD', 'EUR', 'GBP', 'SAR', 'AED'];
+
 const ITEM_CATEGORIES = ['Groceries', 'Electronics', 'Clothing', 'Home', 'Health', 'Entertainment', 'Transport', 'Other'];
 
 const AddFlow: React.FC = () => {
@@ -29,7 +31,11 @@ const AddFlow: React.FC = () => {
   const [type, setType] = useState<TransactionType>(
     location.state?.type === 'income' ? TransactionType.INCOME : TransactionType.EXPENSE
   );
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit'>('cash');
+  const [dueDate, setDueDate] = useState('');
   const [amount, setAmount] = useState('');
+  const [referenceTotal, setReferenceTotal] = useState('');
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
   const [currency, setCurrency] = useState(baseCurrency);
   const [groupId, setGroupId] = useState(groups[0]?.id || '');
   const [clientId, setClientId] = useState('');
@@ -73,21 +79,6 @@ const AddFlow: React.FC = () => {
 
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
-  };
-
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (items.length > 0) return; // Prevent manual edit if items exist
-    const rawValue = e.target.value.replace(/[^0-9.]/g, '');
-    const parts = rawValue.split('.');
-    if (parts.length > 2) return;
-    setAmount(rawValue);
-  };
-
-  const formattedAmount = () => {
-    if (!amount) return '';
-    const parts = amount.split('.');
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return parts.join('.');
   };
 
   const handleAddItem = () => {
@@ -250,11 +241,15 @@ const AddFlow: React.FC = () => {
       amount: parseFloat(amount),
       currency,
       type,
+      paymentMethod,
+      dueDate: paymentMethod === 'credit' ? dueDate : undefined,
+      isSettled: paymentMethod === 'credit' ? false : undefined,
       groupId,
       clientId,
       note,
       date,
-      items: validItems.length > 0 ? validItems : undefined
+      items: validItems.length > 0 ? validItems : undefined,
+      referenceTotal: isPartialPayment && referenceTotal ? parseFloat(referenceTotal) : undefined
     });
     
     if (transactions.length === 0) {
@@ -301,12 +296,17 @@ const AddFlow: React.FC = () => {
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4 px-2">
                 {language === 'ar' ? 'قيمة التدفق المالي' : 'Transaction Value'}
               </label>
-              <div className="relative">
-                <input
-                  type="text" inputMode="decimal" value={formattedAmount()} onChange={handleAmountChange} placeholder="0.00"
-                  className="w-full py-6 md:py-8 bg-transparent border-b-4 border-slate-100 dark:border-slate-800 text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 dark:text-white focus:outline-none focus:border-blue-600 transition-all"
-                />
-                <div className="absolute right-0 top-1/2 -translate-y-1/2">
+              <div className="relative flex items-center">
+                <div className="flex-1">
+                  <CalculatorInput
+                    value={amount}
+                    onChange={setAmount}
+                    placeholder="0.00"
+                    disabled={items.length > 0}
+                    className="w-full py-6 md:py-8 bg-transparent border-b-4 border-slate-100 dark:border-slate-800 text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 dark:text-white focus:outline-none focus:border-blue-600 transition-all"
+                  />
+                </div>
+                <div className="absolute right-12 top-1/2 -translate-y-1/2">
                   <select 
                     value={currency} onChange={(e) => setCurrency(e.target.value)}
                     className="text-lg md:text-xl font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 rounded-2xl appearance-none cursor-pointer outline-none"
@@ -315,6 +315,70 @@ const AddFlow: React.FC = () => {
                   </select>
                 </div>
               </div>
+            </div>
+
+            <div className="mb-8 md:mb-12">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isPartialPayment}
+                  onChange={(e) => setIsPartialPayment(e.target.checked)}
+                  className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                  {language === 'ar' ? 'هذه دفعة جزئية من حساب' : 'This is a partial payment of a bill'}
+                </span>
+              </label>
+              
+              {isPartialPayment && (
+                <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
+                    {language === 'ar' ? 'إجمالي الحساب (للمرجعية)' : 'Total Bill Amount (Reference)'}
+                  </label>
+                  <CalculatorInput
+                    value={referenceTotal}
+                    onChange={setReferenceTotal}
+                    placeholder="0.00"
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-lg font-black text-slate-800 dark:text-white outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="mb-8 md:mb-12">
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4 px-2">
+                {language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}
+              </label>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`flex-1 py-4 rounded-2xl font-bold transition-all ${paymentMethod === 'cash' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                >
+                  {language === 'ar' ? 'كاش' : 'Cash'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('credit')}
+                  className={`flex-1 py-4 rounded-2xl font-bold transition-all ${paymentMethod === 'credit' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                >
+                  {language === 'ar' ? 'فيزا / ائتمان' : 'Credit / Visa'}
+                </button>
+              </div>
+              
+              {paymentMethod === 'credit' && (
+                <div className="mt-6 animate-in fade-in slide-in-from-top-2">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
+                    {language === 'ar' ? 'تاريخ الاستحقاق (للتذكير)' : 'Due Date (For Reminder)'}
+                  </label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-lg font-black text-slate-800 dark:text-white outline-none"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">

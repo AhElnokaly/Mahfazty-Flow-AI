@@ -143,8 +143,7 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
 
       const tools: Tool[] = [];
       if (state.isPro && isProChat) {
-        // Pro users get Search and Chart tools + Installment
-        tools.push({ googleSearch: {} });
+        // Pro users get Chart tools + Installment
         tools.push({ functionDeclarations: [createChartTool, addInstallmentTool] });
       } else {
         // Standard users get Installment tool
@@ -155,7 +154,7 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
         model: modelName,
         contents: [
           ...history.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-          { role: 'user', parts: (parts.length > 1 ? { parts } : parts[0]) }
+          { role: 'user', parts: parts }
         ],
         config: { 
           systemInstruction: getSystemInstruction(state, isProChat ? 'architect' : 'assistant'),
@@ -211,20 +210,12 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
     } catch (error: any) {
       console.error(`AI Error (Key: ${activeKeyConfig.name}):`, error);
       
-      // Auto-switch logic
-      if (error.message?.includes('429') || error.message?.includes('403') || error.message?.includes('key') || error.message?.includes('quota')) {
-         if (dispatch) dispatch.blockApiKey(activeKeyConfig.id);
-         excludedIds.push(activeKeyConfig.id);
-         attempt++;
-         // Continue to next iteration to try next key
-         continue;
-      }
-
-      return { text: `System Alert: ${error.message}` };
+      // Return the actual error message so the user knows what's wrong
+      return { text: `API Error: ${error.message || 'Unknown error occurred.'}` };
     }
   }
 
-  return { text: state.language === 'ar' ? 'فشلت جميع مفاتيح API. يرجى التحقق من الإعدادات.' : 'All API Keys failed. Please check Settings.' };
+  return { text: state.language === 'ar' ? 'يرجى إضافة مفتاح API نشط في الإعدادات.' : 'Please add an active API Key in Settings.' };
 };
 
 // Image Editing with Gemini 2.5 Flash Image
@@ -259,12 +250,6 @@ export const editFinancialImage = async (state: AppState, dispatch: any, prompt:
       return null;
     } catch (error: any) {
       console.error(`Image Edit Error (Key: ${activeKeyConfig.name}):`, error);
-      if (error.message?.includes('429') || error.message?.includes('403') || error.message?.includes('key') || error.message?.includes('quota')) {
-         if (dispatch) dispatch.blockApiKey(activeKeyConfig.id);
-         excludedIds.push(activeKeyConfig.id);
-         attempt++;
-         continue;
-      }
       return null;
     }
   }
@@ -318,12 +303,6 @@ export const generateVideo = async (state: AppState, dispatch: any, prompt: stri
       return null;
     } catch (error: any) {
       console.error(`Video Generation Error (Key: ${activeKeyConfig.name}):`, error);
-      if (error.message?.includes('429') || error.message?.includes('403') || error.message?.includes('key') || error.message?.includes('quota')) {
-         if (dispatch) dispatch.blockApiKey(activeKeyConfig.id);
-         excludedIds.push(activeKeyConfig.id);
-         attempt++;
-         continue;
-      }
       return null;
     }
   }
@@ -351,12 +330,7 @@ export const suggestTransactionNote = async (state: AppState, dispatch: any, dat
       if (dispatch) dispatch.incrementApiKeyUsage(activeKeyConfig.id);
       return response.text?.trim() || "";
     } catch (e: any) { 
-      if (e.message?.includes('429') || e.message?.includes('403') || e.message?.includes('key') || e.message?.includes('quota')) {
-         if (dispatch) dispatch.blockApiKey(activeKeyConfig.id);
-         excludedIds.push(activeKeyConfig.id);
-         attempt++;
-         continue;
-      }
+      console.error(`Note Suggestion Error (Key: ${activeKeyConfig.name}):`, e);
       return ""; 
     }
   }

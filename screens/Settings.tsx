@@ -6,7 +6,7 @@ import { cloudService } from '../services/cloud';
 import { AuthModal } from '../components/AuthModal';
 import { Link } from 'react-router-dom';
 import { 
-  Trash2, Edit3, Globe, Zap, Share2, Upload, Server, Info, ToggleLeft, ToggleRight, Check, CreditCard, ExternalLink, Key, Plus, MessageCircle, Mail, AlertTriangle, X, LogOut, ShieldCheck, Eye, EyeOff, RefreshCcw, Cloud, CloudOff, RefreshCw, TrendingUp, Sparkles, Target, Archive
+  Trash2, Edit3, Globe, Zap, Share2, Upload, Server, Info, ToggleLeft, ToggleRight, Check, CreditCard, ExternalLink, Key, Plus, MessageCircle, Mail, AlertTriangle, X, LogOut, ShieldCheck, Eye, EyeOff, RefreshCcw, Cloud, CloudOff, RefreshCw, TrendingUp, Sparkles, Target, Archive, Wallet
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -276,6 +276,37 @@ const Settings: React.FC = () => {
                </div>
                <button onClick={() => dispatch.togglePrivacyMode()} className="text-2xl">
                  {isPrivacyMode ? <ToggleRight size={32} className="text-indigo-600" /> : <ToggleLeft size={32} className="text-slate-300" />}
+               </button>
+            </div>
+
+            {/* Edit Starting Balance */}
+            <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl">
+               <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center transition-colors">
+                    <Wallet size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'الرصيد الافتتاحي' : 'Starting Balance'}</h4>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">{language === 'ar' ? 'تعديل الرصيد الحالي' : 'Edit current balance'}</p>
+                  </div>
+               </div>
+               <button 
+                 onClick={() => {
+                   const totalIncome = state.transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
+                   const totalExpense = state.transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
+                   const totalInstallmentsPaid = state.installments.reduce((sum, i) => sum + (i.paidCount * i.monthlyAmount), 0);
+                   const calculatedBalance = totalIncome - totalExpense - totalInstallmentsPaid;
+                   const adjustment = state.walletBalance - calculatedBalance;
+
+                   const newBalance = prompt(language === 'ar' ? 'أدخل الرصيد الافتتاحي الجديد:' : 'Enter new starting balance:', adjustment.toString());
+                   if (newBalance !== null && !isNaN(parseFloat(newBalance))) {
+                     dispatch.updateWalletBalance(calculatedBalance + parseFloat(newBalance));
+                     dispatch.setNotification({ message: language === 'ar' ? 'تم تحديث الرصيد بنجاح' : 'Balance updated successfully', type: 'success' });
+                   }
+                 }}
+                 className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95"
+               >
+                 {language === 'ar' ? 'تعديل' : 'EDIT'}
                </button>
             </div>
 

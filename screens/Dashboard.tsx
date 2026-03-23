@@ -1,23 +1,25 @@
 
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../store';
 import { 
   Plus, MoreHorizontal, ArrowUpRight, Sparkles, Zap, ShieldCheck,
   ArrowDownLeft, ArrowUpLeft, Wallet, ArrowDownRight, TrendingUp, TrendingDown,
-  Target, ChevronRight, PieChart as PieIcon, Calendar, Clock, ArrowRight, Info
+  Target, ChevronRight, PieChart as PieIcon, Calendar, Clock, ArrowRight, Info, X, Edit2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Tooltip 
 } from 'recharts';
 import { TransactionType } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { TransferModal } from '../components/TransferModal';
 
 // Dashboard component for financial overview
 const Dashboard: React.FC = () => {
   const { state } = useApp();
   const navigate = useNavigate();
   const { language, walletBalance, installments, goals, isPro, baseCurrency, isPrivacyMode } = state;
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   
   const groups = useMemo(() => state.groups.filter(g => !g.isArchived), [state.groups]);
   const clients = useMemo(() => state.clients.filter(c => !c.isArchived), [state.clients]);
@@ -101,6 +103,7 @@ const Dashboard: React.FC = () => {
         expense,
         icon: group.icon,
         monthlyBudget: group.monthlyBudget || 0,
+        allocatedAmount: group.allocatedAmount || 0,
         style: cardStyles[index % cardStyles.length],
         isVirtual: false
       };
@@ -142,6 +145,19 @@ const Dashboard: React.FC = () => {
     return data;
   }, [transactions]);
 
+  const [showBalanceBreakdown, setShowBalanceBreakdown] = useState(false);
+
+  // Calculate Balance Breakdown
+  const breakdown = useMemo(() => {
+    const totalIncome = transactions.filter(t => t.type === TransactionType.INCOME).reduce((sum, t) => sum + t.amount, 0);
+    const totalExpense = transactions.filter(t => t.type === TransactionType.EXPENSE).reduce((sum, t) => sum + t.amount, 0);
+    const totalInstallmentsPaid = installments.reduce((sum, i) => sum + (i.paidCount * i.monthlyAmount), 0);
+    const calculatedBalance = totalIncome - totalExpense - totalInstallmentsPaid;
+    const adjustment = walletBalance - calculatedBalance;
+
+    return { totalIncome, totalExpense, totalInstallmentsPaid, calculatedBalance, adjustment };
+  }, [transactions, installments, walletBalance]);
+
   // Privacy Blur Helper
   const privacyClass = isPrivacyMode ? 'blur-sm select-none' : '';
 
@@ -149,13 +165,71 @@ const Dashboard: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-700 pb-20 px-2 max-w-5xl mx-auto">
       
       {/* Total Balance Section */}
-      <section className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden">
+      <section 
+        onClick={() => setShowBalanceBreakdown(true)}
+        className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
+      >
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
-        <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">{language === 'ar' ? 'إجمالي الرصيد' : 'Total Balance'}</p>
+        <div className="flex items-center gap-2 mb-2">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{language === 'ar' ? 'إجمالي الرصيد' : 'Total Balance'}</p>
+          <Info size={14} className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
         <h2 className={`text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tighter ${privacyClass}`}>
           {baseCurrency} {walletBalance.toLocaleString()}
         </h2>
       </section>
+
+      {showBalanceBreakdown && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-white">
+                {language === 'ar' ? 'تفاصيل الرصيد' : 'Balance Breakdown'}
+              </h3>
+              <button onClick={() => setShowBalanceBreakdown(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800/50">
+                <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'إجمالي الدخل' : 'Total Income'}</span>
+                <span className="text-sm font-black text-emerald-600">+{baseCurrency} {breakdown.totalIncome.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800/50">
+                <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'إجمالي المصروفات' : 'Total Expenses'}</span>
+                <span className="text-sm font-black text-rose-600">-{baseCurrency} {breakdown.totalExpense.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800/50">
+                <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'أقساط مدفوعة' : 'Paid Installments'}</span>
+                <span className="text-sm font-black text-rose-600">-{baseCurrency} {breakdown.totalInstallmentsPaid.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800/50">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'رصيد افتتاحي / تسويات' : 'Starting / Adjustments'}</span>
+                  <button 
+                    onClick={() => {
+                      const newBalance = prompt(language === 'ar' ? 'أدخل الرصيد الافتتاحي الجديد:' : 'Enter new starting balance:', breakdown.adjustment.toString());
+                      if (newBalance !== null && !isNaN(parseFloat(newBalance))) {
+                        dispatch.updateWalletBalance(breakdown.calculatedBalance + parseFloat(newBalance));
+                      }
+                    }}
+                    className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-blue-500"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                </div>
+                <span className={`text-sm font-black ${breakdown.adjustment >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {breakdown.adjustment > 0 ? '+' : ''}{baseCurrency} {breakdown.adjustment.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-4 mt-2">
+                <span className="text-base font-black uppercase tracking-widest text-slate-900 dark:text-white">{language === 'ar' ? 'الرصيد النهائي' : 'Final Balance'}</span>
+                <span className="text-xl font-black text-blue-600">{baseCurrency} {walletBalance.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions & AI Card */}
       {/* +++ تم تعديل حواف البطاقات والمسافات الداخلية بناءً على طلبك +++ */}
@@ -202,17 +276,30 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <button 
-          onClick={() => navigate('/add')}
-          className="md:w-32 bg-emerald-500 hover:bg-emerald-600 text-white rounded-3xl p-5 md:p-6 flex flex-col items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
-        >
-          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-            <Plus size={24} />
-          </div>
-          <span className="text-xs font-bold uppercase tracking-wide text-center">
-            {language === 'ar' ? 'إضافة' : 'Quick Add'}
-          </span>
-        </button>
+        <div className="flex gap-4 md:w-auto">
+          <button 
+            onClick={() => setIsTransferModalOpen(true)}
+            className="flex-1 md:w-32 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white rounded-3xl p-5 md:p-6 flex flex-col items-center justify-center gap-2 shadow-lg shadow-slate-500/20 transition-all hover:scale-[1.02]"
+          >
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+              <ArrowRight size={24} />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-center">
+              {language === 'ar' ? 'تحويل' : 'Transfer'}
+            </span>
+          </button>
+          <button 
+            onClick={() => navigate('/add')}
+            className="flex-1 md:w-32 bg-emerald-500 hover:bg-emerald-600 text-white rounded-3xl p-5 md:p-6 flex flex-col items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
+          >
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+              <Plus size={24} />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-center">
+              {language === 'ar' ? 'إضافة' : 'Quick Add'}
+            </span>
+          </button>
+        </div>
       </section>
 
       {/* 2. Global Stats Bar (Dedicated Income/Expense Cards) */}
@@ -319,6 +406,14 @@ const Dashboard: React.FC = () => {
                  <h4 className="text-xs font-bold uppercase tracking-wide opacity-80 mb-1">{account.name}</h4>
                  <p className={`text-xl font-black tracking-tighter ${privacyClass}`}>${account.balance.toLocaleString()}</p>
                  
+                 {account.allocatedAmount > 0 && (
+                   <div className="mt-2 inline-block bg-white/20 backdrop-blur-md px-2 py-1 rounded-md">
+                     <p className="text-[10px] font-bold uppercase tracking-wide">
+                       {language === 'ar' ? 'الرصيد المخصص:' : 'Allocated:'} ${account.allocatedAmount.toLocaleString()}
+                     </p>
+                   </div>
+                 )}
+
                  {account.monthlyBudget > 0 && (
                    <div className="mt-3">
                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-wide opacity-90 mb-1">
@@ -393,9 +488,16 @@ const Dashboard: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  <p className={`text-sm font-black ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} ${privacyClass}`}>
-                    {isIncome ? '+' : '-'}{baseCurrency} {t.amount.toLocaleString()}
-                  </p>
+                  <div className="flex flex-col items-end">
+                    <p className={`text-sm font-black ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} ${privacyClass}`}>
+                      {isIncome ? '+' : '-'}{baseCurrency} {t.amount.toLocaleString()}
+                    </p>
+                    {t.referenceTotal && (
+                      <span className="text-[10px] text-slate-400 font-bold mt-0.5">
+                        {language === 'ar' ? 'من أصل' : 'out of'} {baseCurrency} {t.referenceTotal.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             }) : (
@@ -565,6 +667,10 @@ const Dashboard: React.FC = () => {
         </div>
       </section>
 
+      <TransferModal 
+        isOpen={isTransferModalOpen} 
+        onClose={() => setIsTransferModalOpen(false)} 
+      />
     </div>
   );
 };

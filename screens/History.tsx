@@ -46,6 +46,9 @@ const History: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editDate, setEditDate] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editGroupId, setEditGroupId] = useState('');
+  const [editClientId, setEditClientId] = useState('');
   const [detailedItem, setDetailedItem] = useState<string | null>(null);
   
   // Delete confirmation state
@@ -152,7 +155,13 @@ const History: React.FC = () => {
     const val = parseFloat(editAmount);
     if (!isNaN(val)) {
       vibrate();
-      dispatch.updateTransaction(id, { amount: val, date: editDate });
+      dispatch.updateTransaction(id, { 
+        amount: val, 
+        date: editDate,
+        note: editNote,
+        groupId: editGroupId,
+        clientId: editClientId
+      });
     }
     setEditingId(null);
   };
@@ -611,11 +620,25 @@ const History: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center text-lg shadow-sm">{client?.icon || '👤'}</div>
                         <div className="flex flex-col">
-                          <span className="text-xs font-black text-black dark:text-slate-100">{client?.name} <span className="text-[10px] text-slate-500 ml-1 font-bold">({group?.name})</span></span>
                           {editingId === t.id ? (
-                             <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="text-xs font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-2 py-1 rounded-lg mt-1 outline-none ring-2 ring-blue-500/20" />
+                             <div className="flex flex-col gap-1 mt-1">
+                               <select value={editGroupId} onChange={e => {
+                                 setEditGroupId(e.target.value);
+                                 const firstClient = clients.find(c => c.groupId === e.target.value);
+                                 if (firstClient) setEditClientId(firstClient.id);
+                               }} className="text-xs font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-2 py-1 rounded-lg outline-none ring-2 ring-blue-500/20">
+                                 {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                               </select>
+                               <select value={editClientId} onChange={e => setEditClientId(e.target.value)} className="text-xs font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-2 py-1 rounded-lg outline-none ring-2 ring-blue-500/20">
+                                 {clients.filter(c => c.groupId === editGroupId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                               </select>
+                               <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="text-xs font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-2 py-1 rounded-lg outline-none ring-2 ring-blue-500/20" />
+                             </div>
                           ) : (
-                             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">{new Date(t.date).toLocaleDateString()}</span>
+                             <>
+                               <span className="text-xs font-black text-black dark:text-slate-100">{client?.name} <span className="text-[10px] text-slate-500 ml-1 font-bold">({group?.name})</span></span>
+                               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">{new Date(t.date).toLocaleDateString()}</span>
+                             </>
                           )}
                         </div>
                       </div>
@@ -627,16 +650,32 @@ const History: React.FC = () => {
                           <button onClick={() => handleUpdate(t.id)} className="text-emerald-500 p-2"><Check size={20}/></button>
                         </div>
                       ) : (
-                        <span className={`text-sm font-black ${t.type === TransactionType.INCOME ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'}`}>
-                          ${t.amount.toLocaleString()}
-                        </span>
+                        <div className="flex flex-col items-end">
+                          <span className={`text-sm font-black ${t.type === TransactionType.INCOME ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'}`}>
+                            ${t.amount.toLocaleString()}
+                          </span>
+                          {t.referenceTotal && (
+                            <span className="text-[10px] text-slate-400 font-bold mt-0.5">
+                              {language === 'ar' ? 'من أصل' : 'out of'} ${t.referenceTotal.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-4 md:px-6 py-4 text-right relative">
                        <div className="flex flex-col items-end">
-                         <span className="text-xs font-bold text-slate-500 dark:text-slate-400 max-w-[150px] truncate" title={t.note}>
-                           {t.note || (language === 'ar' ? '-' : '-')}
-                         </span>
+                         {editingId === t.id ? (
+                           <input 
+                             value={editNote} 
+                             onChange={e => setEditNote(e.target.value)} 
+                             className="w-full max-w-[150px] text-xs font-bold p-2 bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white rounded-xl outline-none ring-2 ring-blue-500/20 text-right mb-2" 
+                             placeholder={language === 'ar' ? 'الملاحظة' : 'Note'}
+                           />
+                         ) : (
+                           <span className="text-xs font-bold text-slate-500 dark:text-slate-400 max-w-[150px] truncate" title={t.note}>
+                             {t.note || (language === 'ar' ? '-' : '-')}
+                           </span>
+                         )}
                          {t.items && t.items.length > 0 && (
                            <div className="mt-2 w-full max-w-[200px] bg-slate-50 dark:bg-slate-900/50 rounded-xl p-2 border border-slate-100 dark:border-slate-800">
                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 text-left">
@@ -682,7 +721,14 @@ const History: React.FC = () => {
                          {/* ++++++++++++++++++++++++++++ */}
                          {/* Secondary hover actions to keep app functional but clean */}
                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700">
-                           <button onClick={() => { setEditingId(t.id); setEditAmount(t.amount.toString()); setEditDate(t.date); }} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit3 size={14}/></button>
+                           <button onClick={() => { 
+                             setEditingId(t.id); 
+                             setEditAmount(t.amount.toString()); 
+                             setEditDate(t.date); 
+                             setEditNote(t.note || '');
+                             setEditGroupId(t.groupId);
+                             setEditClientId(t.clientId);
+                           }} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit3 size={14}/></button>
                            <button onClick={() => handleDelete(t.id)} className="p-1.5 text-slate-400 hover:text-rose-500"><Trash2 size={14}/></button>
                          </div>
                        </div>

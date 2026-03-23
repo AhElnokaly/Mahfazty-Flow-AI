@@ -5,7 +5,7 @@ import { cloudService } from './services/cloud';
 import { cryptoUtils } from './utils/crypto';
 
 const INITIAL_STATE: AppState = {
-  walletBalance: 24500,
+  walletBalance: 0,
   baseCurrency: 'EGP',
   userProfile: {
     name: 'Guest User',
@@ -114,6 +114,8 @@ interface AppContextType {
     addGoal: (goal: Omit<import('./types').Goal, 'id'>) => void;
     updateGoal: (id: string, update: Partial<import('./types').Goal>) => void;
     deleteGoal: (id: string) => void;
+    transferToGroup: (groupId: string, amount: number) => void;
+    transferToSavings: (goalId: string, amount: number) => void;
     clearChat: (isProChat: boolean) => void;
     resetData: () => void;
     importState: (jsonData: string) => void;
@@ -143,6 +145,7 @@ type Action =
   | { type: 'ADD_TRANSACTION'; payload: Omit<Transaction, 'id'> }
   | { type: 'UPDATE_TRANSACTION'; payload: { id: string; update: Partial<Transaction> } }
   | { type: 'DELETE_TRANSACTION'; payload: string }
+  | { type: 'UPDATE_WALLET_BALANCE'; payload: number }
   | { type: 'ADD_GROUP'; payload: { name: string; icon?: string; budget?: number; id?: string } }
   | { type: 'UPDATE_GROUP'; payload: { id: string; update: Partial<Group> } }
   | { type: 'SET_GROUP_BUDGET'; payload: { id: string; amount: number } }
@@ -188,6 +191,8 @@ type Action =
   | { type: 'ADD_GOAL'; payload: Omit<import('./types').Goal, 'id'> }
   | { type: 'UPDATE_GOAL'; payload: { id: string; update: Partial<import('./types').Goal> } }
   | { type: 'DELETE_GOAL'; payload: string }
+  | { type: 'TRANSFER_TO_GROUP'; payload: { groupId: string; amount: number } }
+  | { type: 'TRANSFER_TO_SAVINGS'; payload: { goalId: string; amount: number } }
   | { type: 'ADD_NOTIFICATION_TO_HISTORY'; payload: AppNotification }
   | { type: 'SET_DECOY_PASSWORD'; payload: string }
   | { type: 'DECOY_LOGIN' };
@@ -357,10 +362,28 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
     case 'ADD_TRANSACTION': {
       const newTransaction = { id: Date.now().toString(), ...action.payload };
-      const newBalance = action.payload.type === TransactionType.INCOME 
-        ? state.walletBalance + action.payload.amount 
-        : state.walletBalance - action.payload.amount;
-      return { ...state, transactions: [newTransaction, ...state.transactions], walletBalance: newBalance };
+      let newBalance = state.walletBalance;
+      let updatedGroups = state.groups;
+
+      if (action.payload.type === TransactionType.INCOME) {
+        newBalance += action.payload.amount;
+      } else if (action.payload.type === TransactionType.EXPENSE) {
+        const group = state.groups.find(g => g.id === action.payload.groupId);
+        if (group && group.allocatedAmount && group.allocatedAmount > 0) {
+          const deduction = Math.min(group.allocatedAmount, action.payload.amount);
+          const remainingExpense = action.payload.amount - deduction;
+          updatedGroups = state.groups.map(g => 
+            g.id === group.id ? { ...g, allocatedAmount: g.allocatedAmount! - deduction } : g
+          );
+          newBalance -= remainingExpense;
+        } else {
+          newBalance -= action.payload.amount;
+        }
+      } else if (action.payload.type === TransactionType.TRANSFER) {
+        newBalance -= action.payload.amount;
+      }
+
+      return { ...state, transactions: [newTransaction, ...state.transactions], walletBalance: newBalance, groups: updatedGroups };
     }
     case 'ADD_GROUP':
       return { ...state, groups: [...state.groups, { id: action.payload.id || Date.now().toString(), name: action.payload.name, icon: action.payload.icon, monthlyBudget: action.payload.budget }] };
@@ -502,13 +525,38 @@ const appReducer = (state: AppState, action: Action): AppState => {
         notification: { message: `Achievement Unlocked!`, type: 'success' }
       };
     }
-    case 'UPDATE_TRANSACTION':
+    case 'UPDATE_TRANSACTION': {
+      const oldT = state.transactions.find(t => t.id === action.payload.id);
+      if (!oldT) return state;
+      const newT = { ...oldT, ...action.payload.update };
+      let newBalance = state.walletBalance;
+      
+      if (oldT.type === TransactionType.INCOME) newBalance -= oldT.amount;
+      else if (oldT.type === TransactionType.EXPENSE) newBalance += oldT.amount;
+      else if (oldT.type === TransactionType.TRANSFER) newBalance += oldT.amount;
+
+      if (newT.type === TransactionType.INCOME) newBalance += newT.amount;
+      else if (newT.type === TransactionType.EXPENSE) newBalance -= newT.amount;
+      else if (newT.type === TransactionType.TRANSFER) newBalance -= newT.amount;
+
       return { 
         ...state, 
-        transactions: state.transactions.map(t => t.id === action.payload.id ? { ...t, ...action.payload.update } : t) 
+        transactions: state.transactions.map(t => t.id === action.payload.id ? newT : t),
+        walletBalance: newBalance
       };
-    case 'DELETE_TRANSACTION':
-      return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
+    }
+    case 'DELETE_TRANSACTION': {
+      const t = state.transactions.find(t => t.id === action.payload);
+      if (!t) return state;
+      let newBalance = state.walletBalance;
+      if (t.type === TransactionType.INCOME) newBalance -= t.amount;
+      else if (t.type === TransactionType.EXPENSE) newBalance += t.amount;
+      else if (t.type === TransactionType.TRANSFER) newBalance += t.amount;
+      
+      return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload), walletBalance: newBalance };
+    }
+    case 'UPDATE_WALLET_BALANCE':
+      return { ...state, walletBalance: action.payload };
     case 'UPDATE_GROUP':
       return { ...state, groups: state.groups.map(g => g.id === action.payload.id ? { ...g, ...action.payload.update } : g) };
     case 'SET_GROUP_BUDGET':
@@ -527,6 +575,18 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, goals: state.goals.map(g => g.id === action.payload.id ? { ...g, ...action.payload.update } : g) };
     case 'DELETE_GOAL':
       return { ...state, goals: state.goals.filter(g => g.id !== action.payload) };
+    case 'TRANSFER_TO_GROUP':
+      return {
+        ...state,
+        walletBalance: state.walletBalance - action.payload.amount,
+        groups: state.groups.map(g => g.id === action.payload.groupId ? { ...g, allocatedAmount: (g.allocatedAmount || 0) + action.payload.amount } : g)
+      };
+    case 'TRANSFER_TO_SAVINGS':
+      return {
+        ...state,
+        walletBalance: state.walletBalance - action.payload.amount,
+        goals: state.goals.map(g => g.id === action.payload.goalId ? { ...g, currentAmount: g.currentAmount + action.payload.amount } : g)
+      };
     case 'ADD_SYNC_LOG':
       return { ...state, syncHistory: [action.payload, ...state.syncHistory].slice(0, 50) }; // Keep last 50 logs
     default:
@@ -672,6 +732,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addTransaction: (t: Omit<Transaction, 'id'>) => dispatch({ type: 'ADD_TRANSACTION', payload: t }),
     updateTransaction: (id: string, t: Partial<Transaction>) => dispatch({ type: 'UPDATE_TRANSACTION', payload: { id, update: t } }),
     deleteTransaction: (id: string) => dispatch({ type: 'DELETE_TRANSACTION', payload: id }),
+    updateWalletBalance: (amount: number) => dispatch({ type: 'UPDATE_WALLET_BALANCE', payload: amount }),
     addGroup: (name: string, icon?: string, budget?: number, id?: string) => dispatch({ type: 'ADD_GROUP', payload: { name, icon, budget, id } }),
     updateGroup: (id: string, update: Partial<Group>) => dispatch({ type: 'UPDATE_GROUP', payload: { id, update } }),
     setGroupBudget: (id: string, amount: number) => dispatch({ type: 'SET_GROUP_BUDGET', payload: { id, amount } }),
@@ -680,6 +741,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addGoal: (goal: Omit<import('./types').Goal, 'id'>) => dispatch({ type: 'ADD_GOAL', payload: goal }),
     updateGoal: (id: string, update: Partial<import('./types').Goal>) => dispatch({ type: 'UPDATE_GOAL', payload: { id, update } }),
     deleteGoal: (id: string) => dispatch({ type: 'DELETE_GOAL', payload: id }),
+    transferToGroup: (groupId: string, amount: number) => dispatch({ type: 'TRANSFER_TO_GROUP', payload: { groupId, amount } }),
+    transferToSavings: (goalId: string, amount: number) => dispatch({ type: 'TRANSFER_TO_SAVINGS', payload: { goalId, amount } }),
     setPro: (val: boolean) => dispatch({ type: 'SET_PRO', payload: val }),
     addChatMessage: (msg: ChatMessage, isProChat = false) => dispatch({ type: 'ADD_CHAT_MESSAGE', payload: { msg, isProChat } }),
     updateProfile: (profile: UserProfile) => dispatch({ type: 'UPDATE_PROFILE', payload: profile }),

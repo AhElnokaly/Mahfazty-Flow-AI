@@ -189,6 +189,13 @@ const GroupsManager: React.FC = () => {
                             <span className="text-[9px] text-emerald-600 font-black uppercase">In: ${stats.income.toLocaleString()}</span>
                             <span className="text-[9px] text-rose-600 font-black uppercase">Out: ${stats.expense.toLocaleString()}</span>
                           </div>
+                          {group.allocatedAmount !== undefined && group.allocatedAmount > 0 && (
+                            <div className="mt-2">
+                              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-md">
+                                {language === 'ar' ? 'الرصيد المخصص:' : 'Allocated:'} ${group.allocatedAmount.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="text-right flex items-center gap-4">

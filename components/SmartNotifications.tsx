@@ -67,7 +67,36 @@ export const SmartNotifications = () => {
         }
       });
 
-      // 2. Budgets
+      // 2. Credit Card Due Dates
+      state.transactions.forEach(t => {
+        if (t.paymentMethod === 'credit' && t.dueDate && !t.isSettled) {
+          const dueDate = new Date(t.dueDate);
+          const diffTime = dueDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          if (diffDays === 1 || diffDays === 2 || diffDays === 0) {
+            sendNotification(
+              `cc_due_${t.id}`,
+              state.language === 'ar' ? 'تذكير سداد فيزا 💳' : 'Credit Card Due 💳',
+              state.language === 'ar'
+                ? `اقترب موعد سداد بطاقة الائتمان لمعاملة بقيمة ${t.amount} ${t.currency} ${diffDays === 0 ? 'اليوم' : `خلال ${diffDays} يوم`}.`
+                : `Credit card payment for ${t.amount} ${t.currency} is due ${diffDays === 0 ? 'today' : `in ${diffDays} days`}.`,
+              'info'
+            );
+          } else if (diffDays < 0 && diffDays >= -5) {
+            sendNotification(
+              `cc_overdue_${t.id}`,
+              state.language === 'ar' ? 'سداد فيزا متأخر ⚠️' : 'Overdue Credit Card ⚠️',
+              state.language === 'ar'
+                ? `تنبيه: لديك سداد بطاقة ائتمان متأخر لمعاملة بقيمة ${t.amount} ${t.currency} منذ ${Math.abs(diffDays)} يوم.`
+                : `Alert: Credit card payment for ${t.amount} ${t.currency} is overdue by ${Math.abs(diffDays)} days.`,
+              'error'
+            );
+          }
+        }
+      });
+
+      // 3. Budgets
       state.groups.forEach(group => {
         if (!group.monthlyBudget) return;
         
