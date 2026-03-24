@@ -35,6 +35,18 @@ export interface TransactionItem {
 
 export type PaymentMethod = 'cash' | 'credit';
 
+export interface CreditCard {
+  id: string;
+  name: string; // e.g., "CIB Visa"
+  limit: number; // Total credit limit
+  balance: number; // Current used balance
+  billingDate: number; // Day of the month (1-31)
+  dueDate: number; // Day of the month (1-31)
+  color: string; // Tailwind color class
+  icon: string; // Lucide icon name
+  isArchived?: boolean;
+}
+
 export interface Transaction {
   id: string;
   amount: number;
@@ -42,6 +54,7 @@ export interface Transaction {
   currency: string;
   type: TransactionType;
   paymentMethod?: PaymentMethod;
+  creditCardId?: string; // New: Link to a specific credit card
   dueDate?: string;
   isSettled?: boolean;
   date: string;
@@ -148,6 +161,7 @@ export interface AppState {
   transactions: Transaction[];
   clients: Client[];
   installments: Installment[];
+  creditCards: CreditCard[]; // New: Credit Cards support
   goals: Goal[];
   language: 'ar' | 'en';
   isDarkMode: boolean;

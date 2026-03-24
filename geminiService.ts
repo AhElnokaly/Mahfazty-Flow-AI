@@ -210,6 +210,16 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
     } catch (error: any) {
       console.error(`AI Error (Key: ${activeKeyConfig.name}):`, error);
       
+      const errorMessage = error.message?.toLowerCase() || '';
+      // If it's a quota or auth error, try the next key
+      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('403') || errorMessage.includes('401') || errorMessage.includes('api key')) {
+        excludedIds.push(activeKeyConfig.id);
+        attempt++;
+        if (attempt < maxAttempts) {
+          continue;
+        }
+      }
+      
       // Return the actual error message so the user knows what's wrong
       return { text: `API Error: ${error.message || 'Unknown error occurred.'}` };
     }
@@ -250,6 +260,14 @@ export const editFinancialImage = async (state: AppState, dispatch: any, prompt:
       return null;
     } catch (error: any) {
       console.error(`Image Edit Error (Key: ${activeKeyConfig.name}):`, error);
+      const errorMessage = error.message?.toLowerCase() || '';
+      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('403') || errorMessage.includes('401') || errorMessage.includes('api key')) {
+        excludedIds.push(activeKeyConfig.id);
+        attempt++;
+        if (attempt < maxAttempts) {
+          continue;
+        }
+      }
       return null;
     }
   }
@@ -303,6 +321,14 @@ export const generateVideo = async (state: AppState, dispatch: any, prompt: stri
       return null;
     } catch (error: any) {
       console.error(`Video Generation Error (Key: ${activeKeyConfig.name}):`, error);
+      const errorMessage = error.message?.toLowerCase() || '';
+      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('403') || errorMessage.includes('401') || errorMessage.includes('api key')) {
+        excludedIds.push(activeKeyConfig.id);
+        attempt++;
+        if (attempt < maxAttempts) {
+          continue;
+        }
+      }
       return null;
     }
   }
@@ -331,6 +357,14 @@ export const suggestTransactionNote = async (state: AppState, dispatch: any, dat
       return response.text?.trim() || "";
     } catch (e: any) { 
       console.error(`Note Suggestion Error (Key: ${activeKeyConfig.name}):`, e);
+      const errorMessage = e.message?.toLowerCase() || '';
+      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('403') || errorMessage.includes('401') || errorMessage.includes('api key')) {
+        excludedIds.push(activeKeyConfig.id);
+        attempt++;
+        if (attempt < maxAttempts) {
+          continue;
+        }
+      }
       return ""; 
     }
   }

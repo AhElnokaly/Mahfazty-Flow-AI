@@ -59,15 +59,54 @@ const AddFlow: React.FC = () => {
     return new Date(d.getTime() - offset).toISOString().split('T')[0];
   });
 
+  const editTransactionId = location.state?.editTransactionId;
+  const isEditMode = !!editTransactionId;
+
+  useEffect(() => {
+    if (isEditMode) {
+      const tToEdit = state.transactions.find(t => t.id === editTransactionId);
+      if (tToEdit) {
+        setType(tToEdit.type);
+        setAmount(tToEdit.amount.toString());
+        setCurrency(tToEdit.currency);
+        setGroupId(tToEdit.groupId);
+        setClientId(tToEdit.clientId);
+        setNote(tToEdit.note || '');
+        setDate(tToEdit.date);
+        if (tToEdit.paymentMethod) setPaymentMethod(tToEdit.paymentMethod);
+        if (tToEdit.dueDate) setDueDate(tToEdit.dueDate);
+        if (tToEdit.referenceTotal) {
+          setIsPartialPayment(true);
+          setReferenceTotal(tToEdit.referenceTotal.toString());
+        }
+        if (tToEdit.items && tToEdit.items.length > 0) {
+          setItems(tToEdit.items);
+          setShowItems(true);
+        }
+      }
+    }
+  }, [isEditMode, editTransactionId, state.transactions]);
+
   const filteredClients = clients.filter(c => c.groupId === groupId);
 
   useEffect(() => {
-    if (filteredClients.length > 0) {
-      setClientId(filteredClients[0].id);
+    if (!isEditMode) {
+      if (filteredClients.length > 0) {
+        setClientId(filteredClients[0].id);
+      } else {
+        setClientId('');
+      }
     } else {
-      setClientId('');
+      // In edit mode, ensure the client is still valid for the group, otherwise reset
+      if (!filteredClients.find(c => c.id === clientId)) {
+        if (filteredClients.length > 0) {
+          setClientId(filteredClients[0].id);
+        } else {
+          setClientId('');
+        }
+      }
     }
-  }, [groupId]);
+  }, [groupId, isEditMode]);
 
   // Recalculate total amount when items change
   useEffect(() => {
@@ -237,7 +276,7 @@ const AddFlow: React.FC = () => {
     // Filter out empty items
     const validItems = items.filter(item => item.name.trim() !== '' && item.price > 0);
 
-    dispatch.addTransaction({
+    const transactionData = {
       amount: parseFloat(amount),
       currency,
       type,
@@ -250,13 +289,19 @@ const AddFlow: React.FC = () => {
       date,
       items: validItems.length > 0 ? validItems : undefined,
       referenceTotal: isPartialPayment && referenceTotal ? parseFloat(referenceTotal) : undefined
-    });
-    
-    if (transactions.length === 0) {
-      dispatch.unlockAchievement('first_transaction');
+    };
+
+    if (isEditMode && editTransactionId) {
+      dispatch.updateTransaction(editTransactionId, transactionData);
+      dispatch.setNotification({ message: language === 'ar' ? 'تم تحديث المعاملة بنجاح' : 'Transaction updated successfully', type: 'success' });
+    } else {
+      dispatch.addTransaction(transactionData);
+      if (transactions.length === 0) {
+        dispatch.unlockAchievement('first_transaction');
+      }
     }
     
-    navigate('/');
+    navigate(-1); // Go back to the previous screen (History or Dashboard)
   };
 
   return (
@@ -268,9 +313,13 @@ const AddFlow: React.FC = () => {
           </button>
           <div>
             <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white leading-tight">
-              {language === 'ar' ? 'إضافة تدفق مالي' : 'New Flow Entry'}
+              {isEditMode 
+                ? (language === 'ar' ? 'تعديل تدفق مالي' : 'Edit Flow Entry') 
+                : (language === 'ar' ? 'إضافة تدفق مالي' : 'New Flow Entry')}
             </h2>
-            <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Financial Wizard</p>
+            <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
+              {isEditMode ? (language === 'ar' ? 'تحديث البيانات' : 'Update Data') : 'Financial Wizard'}
+            </p>
           </div>
         </div>
 
@@ -638,7 +687,10 @@ const AddFlow: React.FC = () => {
              </div>
              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={language === 'ar' ? 'ملاحظات...' : 'Notes...'} className="w-full p-6 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white min-h-[140px] resize-none outline-none" />
              <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-3xl font-black text-xl shadow-xl shadow-blue-500/20 hover:scale-[1.02] active:scale-95 transition-all">
-              <Save size={28} className="inline mr-3" /> {language === 'ar' ? 'تأكيد وحفظ' : 'Confirm & Save'}
+              <Save size={28} className="inline mr-3" /> 
+              {isEditMode 
+                ? (language === 'ar' ? 'حفظ التعديلات' : 'Save Changes') 
+                : (language === 'ar' ? 'تأكيد وحفظ' : 'Confirm & Save')}
             </button>
            </div>
         </div>

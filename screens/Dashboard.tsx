@@ -1,6 +1,6 @@
 
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useApp } from '../store';
 import { 
   Plus, MoreHorizontal, ArrowUpRight, Sparkles, Zap, ShieldCheck,
@@ -16,7 +16,7 @@ import { TransferModal } from '../components/TransferModal';
 
 // Dashboard component for financial overview
 const Dashboard: React.FC = () => {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const { language, walletBalance, installments, goals, isPro, baseCurrency, isPrivacyMode } = state;
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -146,11 +146,41 @@ const Dashboard: React.FC = () => {
   }, [transactions]);
 
   const [showBalanceBreakdown, setShowBalanceBreakdown] = useState(false);
+  const [balanceAnimation, setBalanceAnimation] = useState<'up' | 'down' | null>(null);
+  const [balanceDiff, setBalanceDiff] = useState<number | null>(null);
+  const prevBalanceRef = useRef(walletBalance);
+
+  useEffect(() => {
+    if (walletBalance !== prevBalanceRef.current) {
+      const diff = walletBalance - prevBalanceRef.current;
+      setBalanceDiff(diff);
+      if (walletBalance > prevBalanceRef.current) {
+        setBalanceAnimation('up');
+      } else {
+        setBalanceAnimation('down');
+      }
+      prevBalanceRef.current = walletBalance;
+      
+      const timer = setTimeout(() => {
+        setBalanceAnimation(null);
+        setBalanceDiff(null);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [walletBalance]);
 
   // Calculate Balance Breakdown
   const breakdown = useMemo(() => {
-    const totalIncome = transactions.filter(t => t.type === TransactionType.INCOME).reduce((sum, t) => sum + t.amount, 0);
-    const totalExpense = transactions.filter(t => t.type === TransactionType.EXPENSE).reduce((sum, t) => sum + t.amount, 0);
+    const isAdjustment = (t: any) => t.groupId === 'system_adjustment' && t.clientId === 'system_adjustment';
+    
+    const totalIncome = transactions
+      .filter(t => t.type === TransactionType.INCOME && !isAdjustment(t))
+      .reduce((sum, t) => sum + t.amount, 0);
+      
+    const totalExpense = transactions
+      .filter(t => t.type === TransactionType.EXPENSE && !isAdjustment(t))
+      .reduce((sum, t) => sum + t.amount, 0);
+      
     const totalInstallmentsPaid = installments.reduce((sum, i) => sum + (i.paidCount * i.monthlyAmount), 0);
     const calculatedBalance = totalIncome - totalExpense - totalInstallmentsPaid;
     const adjustment = walletBalance - calculatedBalance;
@@ -167,16 +197,21 @@ const Dashboard: React.FC = () => {
       {/* Total Balance Section */}
       <section 
         onClick={() => setShowBalanceBreakdown(true)}
-        className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
+        className={`bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden cursor-pointer hover:shadow-md transition-all duration-500 group ${balanceAnimation === 'up' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 scale-[1.02] shadow-[0_0_30px_rgba(16,185,129,0.2)]' : balanceAnimation === 'down' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 scale-[0.98] shadow-[0_0_30px_rgba(244,63,94,0.2)]' : ''}`}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
         <div className="flex items-center gap-2 mb-2">
           <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{language === 'ar' ? 'إجمالي الرصيد' : 'Total Balance'}</p>
           <Info size={14} className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
-        <h2 className={`text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tighter ${privacyClass}`}>
+        <h2 className={`text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tighter transition-all duration-300 ${balanceAnimation === 'up' ? 'text-emerald-500' : balanceAnimation === 'down' ? 'text-rose-500' : ''} ${privacyClass}`}>
           {baseCurrency} {walletBalance.toLocaleString()}
         </h2>
+        {balanceDiff !== null && (
+          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xl font-black pointer-events-none animate-in slide-in-from-bottom-4 fade-in duration-500 slide-out-to-top-8 fade-out ${balanceDiff > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+            {balanceDiff > 0 ? '+' : ''}{balanceDiff.toLocaleString()}
+          </div>
+        )}
       </section>
 
       {showBalanceBreakdown && (
@@ -210,7 +245,19 @@ const Dashboard: React.FC = () => {
                     onClick={() => {
                       const newBalance = prompt(language === 'ar' ? 'أدخل الرصيد الافتتاحي الجديد:' : 'Enter new starting balance:', breakdown.adjustment.toString());
                       if (newBalance !== null && !isNaN(parseFloat(newBalance))) {
-                        dispatch.updateWalletBalance(breakdown.calculatedBalance + parseFloat(newBalance));
+                        const newAdjustment = parseFloat(newBalance);
+                        const diff = newAdjustment - breakdown.adjustment;
+                        if (diff !== 0) {
+                          dispatch.addTransaction({
+                            amount: Math.abs(diff),
+                            currency: baseCurrency,
+                            type: diff > 0 ? TransactionType.INCOME : TransactionType.EXPENSE,
+                            date: new Date().toISOString().split('T')[0],
+                            groupId: 'system_adjustment',
+                            clientId: 'system_adjustment',
+                            note: language === 'ar' ? 'تسوية رصيد' : 'Balance Adjustment'
+                          });
+                        }
                       }
                     }}
                     className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-blue-500"

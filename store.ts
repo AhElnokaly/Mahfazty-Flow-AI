@@ -27,6 +27,7 @@ const INITIAL_STATE: AppState = {
   ],
   transactions: [],
   installments: [], 
+  creditCards: [],
   goals: [],
   language: 'ar',
   isDarkMode: false,
@@ -83,6 +84,9 @@ interface AppContextType {
     setGroupBudget: (id: string, amount: number) => void;
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => void;
     payInstallment: (id: string, penalty?: number) => void;
+    addCreditCard: (card: Omit<import('./types').CreditCard, 'id'>) => void;
+    updateCreditCard: (id: string, update: Partial<import('./types').CreditCard>) => void;
+    deleteCreditCard: (id: string) => void;
     setPro: (val: boolean) => void;
     addChatMessage: (msg: ChatMessage, isProChat?: boolean) => void;
     updateProfile: (profile: UserProfile) => void;
@@ -151,6 +155,9 @@ type Action =
   | { type: 'SET_GROUP_BUDGET'; payload: { id: string; amount: number } }
   | { type: 'ADD_INSTALLMENT'; payload: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'> }
   | { type: 'PAY_INSTALLMENT'; payload: { id: string; penalty: number } }
+  | { type: 'ADD_CREDIT_CARD'; payload: Omit<import('./types').CreditCard, 'id'> }
+  | { type: 'UPDATE_CREDIT_CARD'; payload: { id: string; update: Partial<import('./types').CreditCard> } }
+  | { type: 'DELETE_CREDIT_CARD'; payload: string }
   | { type: 'SET_PRO'; payload: boolean }
   | { type: 'ADD_CHAT_MESSAGE'; payload: { msg: ChatMessage; isProChat: boolean } }
   | { type: 'TOGGLE_LANGUAGE' }
@@ -364,26 +371,47 @@ const appReducer = (state: AppState, action: Action): AppState => {
       const newTransaction = { id: Date.now().toString(), ...action.payload };
       let newBalance = state.walletBalance;
       let updatedGroups = state.groups;
+      let updatedCreditCards = state.creditCards || [];
 
       if (action.payload.type === TransactionType.INCOME) {
         newBalance += action.payload.amount;
       } else if (action.payload.type === TransactionType.EXPENSE) {
-        const group = state.groups.find(g => g.id === action.payload.groupId);
-        if (group && group.allocatedAmount && group.allocatedAmount > 0) {
-          const deduction = Math.min(group.allocatedAmount, action.payload.amount);
-          const remainingExpense = action.payload.amount - deduction;
-          updatedGroups = state.groups.map(g => 
-            g.id === group.id ? { ...g, allocatedAmount: g.allocatedAmount! - deduction } : g
+        if (action.payload.paymentMethod === 'credit' && action.payload.creditCardId) {
+          // If paid by credit card, increase the used balance of the card, don't deduct from wallet
+          updatedCreditCards = updatedCreditCards.map(c => 
+            c.id === action.payload.creditCardId ? { ...c, balance: c.balance + action.payload.amount } : c
           );
-          newBalance -= remainingExpense;
         } else {
-          newBalance -= action.payload.amount;
+          // Paid by cash/wallet
+          const group = state.groups.find(g => g.id === action.payload.groupId);
+          if (group && group.allocatedAmount && group.allocatedAmount > 0) {
+            const deduction = Math.min(group.allocatedAmount, action.payload.amount);
+            const remainingExpense = action.payload.amount - deduction;
+            updatedGroups = state.groups.map(g => 
+              g.id === group.id ? { ...g, allocatedAmount: g.allocatedAmount! - deduction } : g
+            );
+            newBalance -= remainingExpense;
+          } else {
+            newBalance -= action.payload.amount;
+          }
         }
       } else if (action.payload.type === TransactionType.TRANSFER) {
+        // If transfer is to pay a credit card bill
+        if (action.payload.creditCardId) {
+          updatedCreditCards = updatedCreditCards.map(c => 
+            c.id === action.payload.creditCardId ? { ...c, balance: Math.max(0, c.balance - action.payload.amount) } : c
+          );
+        }
         newBalance -= action.payload.amount;
       }
 
-      return { ...state, transactions: [newTransaction, ...state.transactions], walletBalance: newBalance, groups: updatedGroups };
+      return { 
+        ...state, 
+        transactions: [newTransaction, ...state.transactions], 
+        walletBalance: newBalance, 
+        groups: updatedGroups,
+        creditCards: updatedCreditCards
+      };
     }
     case 'ADD_GROUP':
       return { ...state, groups: [...state.groups, { id: action.payload.id || Date.now().toString(), name: action.payload.name, icon: action.payload.icon, monthlyBudget: action.payload.budget }] };
@@ -425,6 +453,12 @@ const appReducer = (state: AppState, action: Action): AppState => {
         installments: state.installments.map(i => i.id === action.payload.id ? { ...i, paidCount: i.paidCount + 1, status: i.paidCount + 1 >= i.installmentCount ? 'completed' : 'active', lastPaymentDate: new Date().toISOString() } : i),
         walletBalance: state.walletBalance - (state.installments.find(i => i.id === action.payload.id)?.monthlyAmount || 0) - action.payload.penalty
       };
+    case 'ADD_CREDIT_CARD':
+      return { ...state, creditCards: [...(state.creditCards || []), { id: Date.now().toString(), ...action.payload }] };
+    case 'UPDATE_CREDIT_CARD':
+      return { ...state, creditCards: (state.creditCards || []).map(c => c.id === action.payload.id ? { ...c, ...action.payload.update } : c) };
+    case 'DELETE_CREDIT_CARD':
+      return { ...state, creditCards: (state.creditCards || []).map(c => c.id === action.payload ? { ...c, isArchived: true } : c) };
     case 'SET_PRO':
       return { ...state, isPro: action.payload };
     case 'ADD_CHAT_MESSAGE':
@@ -738,6 +772,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGroupBudget: (id: string, amount: number) => dispatch({ type: 'SET_GROUP_BUDGET', payload: { id, amount } }),
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => dispatch({ type: 'ADD_INSTALLMENT', payload: i }),
     payInstallment: (id: string, penalty?: number) => dispatch({ type: 'PAY_INSTALLMENT', payload: { id, penalty: penalty || 0 } }),
+    addCreditCard: (card: Omit<import('./types').CreditCard, 'id'>) => dispatch({ type: 'ADD_CREDIT_CARD', payload: card }),
+    updateCreditCard: (id: string, update: Partial<import('./types').CreditCard>) => dispatch({ type: 'UPDATE_CREDIT_CARD', payload: { id, update } }),
+    deleteCreditCard: (id: string) => dispatch({ type: 'DELETE_CREDIT_CARD', payload: id }),
     addGoal: (goal: Omit<import('./types').Goal, 'id'>) => dispatch({ type: 'ADD_GOAL', payload: goal }),
     updateGoal: (id: string, update: Partial<import('./types').Goal>) => dispatch({ type: 'UPDATE_GOAL', payload: { id, update } }),
     deleteGoal: (id: string) => dispatch({ type: 'DELETE_GOAL', payload: id }),

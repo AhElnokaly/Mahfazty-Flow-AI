@@ -187,8 +187,14 @@ const Settings: React.FC = () => {
                               {state.activeApiKeyId === key.id && <span className="text-[8px] bg-blue-500 text-white px-2 py-0.5 rounded-full">ACTIVE</span>}
                             </h4>
                             <div className="flex items-center gap-3 mt-1">
-                              <span className="text-[9px] font-bold text-slate-400 uppercase">Used: {key.usageCount} times</span>
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Used: {key.usageCount} / 1500</span>
                               {key.lastUsed && <span className="text-[9px] font-bold text-slate-400 uppercase">Last: {new Date(key.lastUsed).toLocaleDateString()}</span>}
+                            </div>
+                            <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden max-w-[200px]">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${key.usageCount > 1400 ? 'bg-rose-500' : key.usageCount > 1000 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                                style={{ width: `${Math.min((key.usageCount / 1500) * 100, 100)}%` }}
+                              />
                             </div>
                           </div>
                         </div>

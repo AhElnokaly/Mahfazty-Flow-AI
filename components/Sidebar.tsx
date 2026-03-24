@@ -1,7 +1,7 @@
 import React from 'react';
 import { useApp } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { X, Sun, Moon, Eye, EyeOff, Zap, Crown, Bell, LogIn, Settings, User } from 'lucide-react';
+import { X, Sun, Moon, Eye, EyeOff, Zap, Crown, Bell, LogIn, Settings, User, Share2 } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -27,6 +27,30 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const handleTogglePrivacy = () => {
     if (navigator.vibrate) navigator.vibrate(15);
     dispatch.togglePrivacyMode();
+  };
+
+  const handleShareApp = async () => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    const shareData = {
+      title: state.language === 'ar' ? 'محفظتي - Mahfazty Flow' : 'Mahfazty Flow',
+      text: state.language === 'ar' ? 'جرب تطبيق محفظتي لإدارة أموالك بذكاء!' : 'Check out Mahfazty Flow to manage your money smartly!',
+      url: window.location.origin,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        // Fallback to copy to clipboard
+        await navigator.clipboard.writeText(shareData.url);
+        dispatch.setNotification({
+          message: state.language === 'ar' ? 'تم نسخ الرابط بنجاح' : 'Link copied to clipboard',
+          type: 'success'
+        });
+      }
+    } catch (err) {
+      console.error('Error sharing:', err);
+    }
   };
 
   return (
@@ -122,6 +146,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                   {state.isPro ? (state.language === 'ar' ? 'عضوية برو' : 'Pro Member') : (state.language === 'ar' ? 'الترقية لبرو' : 'Get Pro')}
                 </span>
               </div>
+            </button>
+
+            <button 
+              onClick={() => { onClose(); handleShareApp(); }}
+              className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <Share2 size={20} />
+              <span className="text-sm font-bold">{state.language === 'ar' ? 'مشاركة التطبيق' : 'Share App'}</span>
             </button>
 
             <button 
