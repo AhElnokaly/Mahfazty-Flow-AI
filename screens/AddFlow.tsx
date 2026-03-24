@@ -32,6 +32,7 @@ const AddFlow: React.FC = () => {
     location.state?.type === 'income' ? TransactionType.INCOME : TransactionType.EXPENSE
   );
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit'>('cash');
+  const [creditCardId, setCreditCardId] = useState<string>('');
   const [dueDate, setDueDate] = useState('');
   const [amount, setAmount] = useState('');
   const [referenceTotal, setReferenceTotal] = useState('');
@@ -74,6 +75,7 @@ const AddFlow: React.FC = () => {
         setNote(tToEdit.note || '');
         setDate(tToEdit.date);
         if (tToEdit.paymentMethod) setPaymentMethod(tToEdit.paymentMethod);
+        if (tToEdit.creditCardId) setCreditCardId(tToEdit.creditCardId);
         if (tToEdit.dueDate) setDueDate(tToEdit.dueDate);
         if (tToEdit.referenceTotal) {
           setIsPartialPayment(true);
@@ -281,6 +283,7 @@ const AddFlow: React.FC = () => {
       currency,
       type,
       paymentMethod,
+      creditCardId: paymentMethod === 'credit' ? creditCardId : undefined,
       dueDate: paymentMethod === 'credit' ? dueDate : undefined,
       isSettled: paymentMethod === 'credit' ? false : undefined,
       groupId,
@@ -416,16 +419,41 @@ const AddFlow: React.FC = () => {
               </div>
               
               {paymentMethod === 'credit' && (
-                <div className="mt-6 animate-in fade-in slide-in-from-top-2">
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
-                    {language === 'ar' ? 'تاريخ الاستحقاق (للتذكير)' : 'Due Date (For Reminder)'}
-                  </label>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-lg font-black text-slate-800 dark:text-white outline-none"
-                  />
+                <div className="mt-6 animate-in fade-in slide-in-from-top-2 space-y-4">
+                  {state.creditCards && state.creditCards.length > 0 ? (
+                    <div>
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
+                        {language === 'ar' ? 'اختر البطاقة' : 'Select Card'}
+                      </label>
+                      <select
+                        value={creditCardId}
+                        onChange={(e) => setCreditCardId(e.target.value)}
+                        className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-lg font-black text-slate-800 dark:text-white outline-none appearance-none"
+                        required
+                      >
+                        <option value="" disabled>{language === 'ar' ? 'اختر بطاقة ائتمان...' : 'Select a credit card...'}</option>
+                        {state.creditCards.filter(c => !c.isArchived).map(card => (
+                          <option key={card.id} value={card.id}>{card.name} ({card.balance.toLocaleString()} / {card.limit.toLocaleString()})</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-2xl text-sm font-bold">
+                      {language === 'ar' ? 'لا توجد بطاقات ائتمان مضافة. يرجى إضافة بطاقة أولاً من القائمة الجانبية.' : 'No credit cards added. Please add a card first from the sidebar.'}
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
+                      {language === 'ar' ? 'تاريخ الاستحقاق (للتذكير)' : 'Due Date (For Reminder)'}
+                    </label>
+                    <input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-lg font-black text-slate-800 dark:text-white outline-none"
+                    />
+                  </div>
                 </div>
               )}
             </div>

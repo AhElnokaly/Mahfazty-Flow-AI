@@ -71,7 +71,7 @@ interface AppContextType {
     logout: () => void;
     completeOnboarding: () => void;
     lockApp: () => void;
-  addApiKey: (name: string, key: string) => void;
+  addApiKey: (name: string, key: string, provider?: string) => void; // +++ أضيف بناءً على طلبك +++
     deleteApiKey: (id: string) => void;
     setActiveApiKey: (id: string) => void;
     incrementApiKeyUsage: (id: string) => void;
@@ -79,6 +79,7 @@ interface AppContextType {
     addTransaction: (t: Omit<Transaction, 'id'>) => void;
     updateTransaction: (id: string, t: Partial<Transaction>) => void;
     deleteTransaction: (id: string) => void;
+    updateWalletBalance: (amount: number) => void;
     addGroup: (name: string, icon?: string, budget?: number, id?: string) => void;
     updateGroup: (id: string, update: Partial<Group>) => void;
     setGroupBudget: (id: string, amount: number) => void;
@@ -141,7 +142,7 @@ type Action =
   | { type: 'GUEST_LOGIN' }
   | { type: 'LOGOUT' }
   | { type: 'LOCK_APP' }
-  | { type: 'ADD_API_KEY'; payload: { name: string; key: string } }
+  | { type: 'ADD_API_KEY'; payload: { name: string; key: string; provider?: string } }
   | { type: 'DELETE_API_KEY'; payload: string }
   | { type: 'SET_ACTIVE_API_KEY'; payload: string }
   | { type: 'INCREMENT_API_USAGE'; payload: string }
@@ -335,10 +336,11 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       };
     case 'ADD_API_KEY': {
-      const newKey = {
+      const newKey: import('./types').ApiKey = {
         id: Date.now().toString(),
         name: action.payload.name,
         key: action.payload.key,
+        provider: (action.payload.provider as import('./types').AIProvider) || 'gemini',
         usageCount: 0
       };
       return { 
@@ -758,7 +760,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logout: () => dispatch({ type: 'LOGOUT' }),
     lockApp: () => dispatch({ type: 'LOCK_APP' }),
     completeOnboarding: () => dispatch({ type: 'COMPLETE_ONBOARDING' }),
-    addApiKey: (name: string, key: string) => dispatch({ type: 'ADD_API_KEY', payload: { name, key } }),
+    addApiKey: (name: string, key: string, provider?: string) => dispatch({ type: 'ADD_API_KEY', payload: { name, key, provider } }), // +++ أضيف بناءً على طلبك +++
     deleteApiKey: (id: string) => dispatch({ type: 'DELETE_API_KEY', payload: id }),
     setActiveApiKey: (id: string) => dispatch({ type: 'SET_ACTIVE_API_KEY', payload: id }),
     incrementApiKeyUsage: (id: string) => dispatch({ type: 'INCREMENT_API_USAGE', payload: id }),

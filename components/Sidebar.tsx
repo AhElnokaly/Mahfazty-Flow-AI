@@ -1,7 +1,7 @@
 import React from 'react';
 import { useApp } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { X, Sun, Moon, Eye, EyeOff, Zap, Crown, Bell, LogIn, Settings, User, Share2 } from 'lucide-react';
+import { X, Sun, Moon, Eye, EyeOff, Zap, Crown, Bell, LogIn, Settings, User, Share2, CreditCard } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -146,6 +146,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                   {state.isPro ? (state.language === 'ar' ? 'عضوية برو' : 'Pro Member') : (state.language === 'ar' ? 'الترقية لبرو' : 'Get Pro')}
                 </span>
               </div>
+            </button>
+
+            <button 
+              onClick={() => { onClose(); navigate('/credit-cards'); }}
+              className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <CreditCard size={20} />
+              <span className="text-sm font-bold">{state.language === 'ar' ? 'البطاقات الائتمانية' : 'Credit Cards'}</span>
             </button>
 
             <button 

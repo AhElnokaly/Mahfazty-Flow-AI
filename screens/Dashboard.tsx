@@ -520,10 +520,11 @@ const Dashboard: React.FC = () => {
               const group = groups.find(g => g.id === t.groupId);
               const client = clients.find(c => c.id === t.clientId);
               const isIncome = t.type === TransactionType.INCOME;
+              const isCredit = t.paymentMethod === 'credit';
               return (
                 <div key={t.id} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer" onClick={() => navigate('/history')}>
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${isIncome ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30'}`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${isIncome ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' : isCredit ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30'}`}>
                       {group?.icon || '💰'}
                     </div>
                     <div>
@@ -536,7 +537,7 @@ const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
-                    <p className={`text-sm font-black ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} ${privacyClass}`}>
+                    <p className={`text-sm font-black ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : isCredit ? 'text-purple-600 dark:text-purple-400' : 'text-rose-600 dark:text-rose-400'} ${privacyClass}`}>
                       {isIncome ? '+' : '-'}{baseCurrency} {t.amount.toLocaleString()}
                     </p>
                     {t.referenceTotal && (

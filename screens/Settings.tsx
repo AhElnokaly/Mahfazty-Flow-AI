@@ -184,6 +184,7 @@ const Settings: React.FC = () => {
                           <div>
                             <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase flex items-center gap-2">
                               {key.name}
+                              <span className="text-[8px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full">{key.provider?.toUpperCase() || 'GEMINI'}</span>
                               {state.activeApiKeyId === key.id && <span className="text-[8px] bg-blue-500 text-white px-2 py-0.5 rounded-full">ACTIVE</span>}
                             </h4>
                             <div className="flex items-center gap-3 mt-1">
@@ -220,7 +221,16 @@ const Settings: React.FC = () => {
              {(showAddKey || state.apiKeys.length === 0) && (
                <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
                  <div className="space-y-4">
-                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                     <select
+                       id="newKeyProvider"
+                       className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-500"
+                     >
+                       <option value="gemini">Google Gemini</option>
+                       <option value="xai">xAI (Grok)</option>
+                       <option value="openai">OpenAI</option>
+                       <option value="groq">Groq</option>
+                     </select>
                      <input 
                        placeholder={language === 'ar' ? 'اسم المفتاح (مثلاً: الشخصي)' : 'Key Name (e.g. Personal)'}
                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-500"
@@ -235,15 +245,17 @@ const Settings: React.FC = () => {
                        />
                        <button 
                          onClick={() => {
+                           const providerInput = document.getElementById('newKeyProvider') as HTMLSelectElement;
                            const nameInput = document.getElementById('newKeyName') as HTMLInputElement;
                            const keyInput = document.getElementById('newKeyValue') as HTMLInputElement;
                            if (nameInput.value && keyInput.value) {
-                             dispatch.addApiKey(nameInput.value, keyInput.value);
+                             dispatch.addApiKey(nameInput.value, keyInput.value, providerInput.value);
                              if (state.apiKeys.length === 0) {
                                dispatch.unlockAchievement('first_api_key');
                              }
                              nameInput.value = '';
                              keyInput.value = '';
+                             providerInput.value = 'gemini';
                              setShowAddKey(false);
                            }
                          }}

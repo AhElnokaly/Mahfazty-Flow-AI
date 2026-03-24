@@ -125,10 +125,13 @@ export interface CustomWidget {
   colorTheme: 'blue' | 'emerald' | 'rose' | 'amber' | 'purple';
 }
 
+export type AIProvider = 'gemini' | 'xai' | 'openai' | 'groq'; // +++ أضيف بناءً على طلبك +++
+
 export interface ApiKey {
   id: string;
   name: string;
   key: string;
+  provider?: AIProvider; // +++ أضيف بناءً على طلبك +++
   usageCount: number;
   isBlocked?: boolean;
   lastUsed?: string;

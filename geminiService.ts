@@ -128,6 +128,45 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
     }
 
     try {
+      if (activeKeyConfig.provider === 'xai' || activeKeyConfig.provider === 'openai' || activeKeyConfig.provider === 'groq') { // +++ أضيف بناءً على طلبك +++
+        const baseUrl = activeKeyConfig.provider === 'xai' ? 'https://api.x.ai/v1/chat/completions' :
+                        activeKeyConfig.provider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' :
+                        'https://api.openai.com/v1/chat/completions';
+        const model = activeKeyConfig.provider === 'xai' ? 'grok-beta' :
+                      activeKeyConfig.provider === 'groq' ? 'llama3-8b-8192' :
+                      (state.isPro ? 'gpt-4o' : 'gpt-4o-mini');
+        
+        const systemInstruction = getSystemInstruction(state, isProChat ? 'architect' : 'assistant');
+        const messages = [
+          { role: 'system', content: systemInstruction },
+          ...history.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text })),
+          { role: 'user', content: message }
+        ];
+
+        const res = await fetch(baseUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeKeyConfig.key}`
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: 0.7
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP error! status: ${res.status}`);
+        }
+        const data = await res.json();
+        const text = data.choices[0].message.content;
+        
+        if (dispatch) dispatch.incrementApiKeyUsage(activeKeyConfig.id);
+        return { text };
+      }
+
       const ai = new GoogleGenAI({ apiKey: activeKeyConfig.key });
       const modelName = state.isPro ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
       
@@ -210,14 +249,11 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
     } catch (error: any) {
       console.error(`AI Error (Key: ${activeKeyConfig.name}):`, error);
       
-      const errorMessage = error.message?.toLowerCase() || '';
-      // If it's a quota or auth error, try the next key
-      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('403') || errorMessage.includes('401') || errorMessage.includes('api key')) {
-        excludedIds.push(activeKeyConfig.id);
-        attempt++;
-        if (attempt < maxAttempts) {
-          continue;
-        }
+      // Always try the next key if this one fails for any reason
+      excludedIds.push(activeKeyConfig.id);
+      attempt++;
+      if (attempt < maxAttempts) {
+        continue;
       }
       
       // Return the actual error message so the user knows what's wrong
@@ -260,14 +296,13 @@ export const editFinancialImage = async (state: AppState, dispatch: any, prompt:
       return null;
     } catch (error: any) {
       console.error(`Image Edit Error (Key: ${activeKeyConfig.name}):`, error);
-      const errorMessage = error.message?.toLowerCase() || '';
-      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('403') || errorMessage.includes('401') || errorMessage.includes('api key')) {
-        excludedIds.push(activeKeyConfig.id);
-        attempt++;
-        if (attempt < maxAttempts) {
-          continue;
-        }
+      
+      excludedIds.push(activeKeyConfig.id);
+      attempt++;
+      if (attempt < maxAttempts) {
+        continue;
       }
+      
       return null;
     }
   }
@@ -321,14 +356,13 @@ export const generateVideo = async (state: AppState, dispatch: any, prompt: stri
       return null;
     } catch (error: any) {
       console.error(`Video Generation Error (Key: ${activeKeyConfig.name}):`, error);
-      const errorMessage = error.message?.toLowerCase() || '';
-      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('403') || errorMessage.includes('401') || errorMessage.includes('api key')) {
-        excludedIds.push(activeKeyConfig.id);
-        attempt++;
-        if (attempt < maxAttempts) {
-          continue;
-        }
+      
+      excludedIds.push(activeKeyConfig.id);
+      attempt++;
+      if (attempt < maxAttempts) {
+        continue;
       }
+      
       return null;
     }
   }
@@ -345,6 +379,41 @@ export const suggestTransactionNote = async (state: AppState, dispatch: any, dat
     if (!activeKeyConfig) return "";
 
     try {
+      if (activeKeyConfig.provider === 'xai' || activeKeyConfig.provider === 'openai' || activeKeyConfig.provider === 'groq') { // +++ أضيف بناءً على طلبك +++
+        const baseUrl = activeKeyConfig.provider === 'xai' ? 'https://api.x.ai/v1/chat/completions' :
+                        activeKeyConfig.provider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' :
+                        'https://api.openai.com/v1/chat/completions';
+        const model = activeKeyConfig.provider === 'xai' ? 'grok-beta' :
+                      activeKeyConfig.provider === 'groq' ? 'llama3-8b-8192' :
+                      'gpt-4o-mini';
+        
+        const res = await fetch(baseUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeKeyConfig.key}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: `Max 4 words. Language: ${state.language === 'ar' ? 'Arabic' : 'English'}.` },
+              { role: 'user', content: `Smart note for: ${data.type} of ${data.amount} ${data.currency} via ${data.clientName}.` }
+            ],
+            temperature: 0.7
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP error! status: ${res.status}`);
+        }
+        const resData = await res.json();
+        const text = resData.choices[0].message.content;
+        
+        if (dispatch) dispatch.incrementApiKeyUsage(activeKeyConfig.id);
+        return text?.trim() || "";
+      }
+
       const ai = new GoogleGenAI({ apiKey: activeKeyConfig.key });
       const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -357,14 +426,13 @@ export const suggestTransactionNote = async (state: AppState, dispatch: any, dat
       return response.text?.trim() || "";
     } catch (e: any) { 
       console.error(`Note Suggestion Error (Key: ${activeKeyConfig.name}):`, e);
-      const errorMessage = e.message?.toLowerCase() || '';
-      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('403') || errorMessage.includes('401') || errorMessage.includes('api key')) {
-        excludedIds.push(activeKeyConfig.id);
-        attempt++;
-        if (attempt < maxAttempts) {
-          continue;
-        }
+      
+      excludedIds.push(activeKeyConfig.id);
+      attempt++;
+      if (attempt < maxAttempts) {
+        continue;
       }
+      
       return ""; 
     }
   }

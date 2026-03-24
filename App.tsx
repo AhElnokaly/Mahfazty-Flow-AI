@@ -12,6 +12,7 @@ import Settings from './screens/Settings';
 import ProUpgrade from './screens/ProUpgrade';
 import Archive from './screens/Archive';
 import Installments from './screens/Installments';
+import { CreditCards } from './screens/CreditCards';
 import Onboarding from './screens/Onboarding';
 import Goals from './screens/Goals';
 import { SmartNotifications } from './components/SmartNotifications';
@@ -671,6 +672,7 @@ const App: React.FC = () => {
               <Route path="/history" element={<History />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/installments" element={<Installments />} />
+              <Route path="/credit-cards" element={<CreditCards />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/archive" element={<Archive />} />
               <Route path="/ai" element={<AIInsights />} />

@@ -614,7 +614,13 @@ const History: React.FC = () => {
                     </td>
                     <td className="px-4 md:px-6 py-4 text-right">
                         <div className="flex flex-col items-end">
-                          <span className={`text-sm font-black ${t.type === TransactionType.INCOME ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'}`}>
+                          <span className={`text-sm font-black ${
+                            t.type === TransactionType.INCOME 
+                              ? 'text-emerald-600 dark:text-emerald-500' 
+                              : t.paymentMethod === 'credit' 
+                                ? 'text-purple-600 dark:text-purple-500' 
+                                : 'text-rose-600 dark:text-rose-500'
+                          }`}>
                             ${t.amount.toLocaleString()}
                           </span>
                           {t.referenceTotal && (
