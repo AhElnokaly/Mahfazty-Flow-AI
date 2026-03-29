@@ -95,6 +95,8 @@ interface AppContextType {
     setNotification: (notif: AppState['notification']) => void;
     addNotificationToHistory: (notif: AppNotification) => void;
     addCustomWidget: (widget: CustomWidget) => void;
+    updateCustomWidget: (id: string, update: Partial<CustomWidget>) => void;
+    deleteCustomWidget: (id: string) => void;
     addAnalyticsWidget: (id: string) => void;
     removeAnalyticsWidget: (id: string) => void;
     toggleLanguage: () => void;
@@ -171,6 +173,8 @@ type Action =
   | { type: 'SET_NOTIFICATION'; payload: AppState['notification'] }
   | { type: 'UPDATE_PROFILE'; payload: UserProfile }
   | { type: 'ADD_CUSTOM_WIDGET'; payload: CustomWidget }
+  | { type: 'UPDATE_CUSTOM_WIDGET'; payload: { id: string; update: Partial<CustomWidget> } }
+  | { type: 'DELETE_CUSTOM_WIDGET'; payload: string }
   | { type: 'ADD_ANALYTICS_WIDGET'; payload: string }
   | { type: 'REMOVE_ANALYTICS_WIDGET'; payload: string }
   | { type: 'DELETE_GROUP'; payload: string }
@@ -567,6 +571,17 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, [chatKey]: [...state[chatKey], action.payload.msg] };
     case 'ADD_CUSTOM_WIDGET':
       return { ...state, customWidgets: [...state.customWidgets, action.payload] };
+    case 'UPDATE_CUSTOM_WIDGET':
+      return {
+        ...state,
+        customWidgets: state.customWidgets.map(w => w.id === action.payload.id ? { ...w, ...action.payload.update } : w)
+      };
+    case 'DELETE_CUSTOM_WIDGET':
+      return {
+        ...state,
+        customWidgets: state.customWidgets.filter(w => w.id !== action.payload),
+        activeWidgets: state.activeWidgets.filter(id => id !== action.payload)
+      };
     case 'ADD_ANALYTICS_WIDGET':
       return { ...state, activeWidgets: [...state.activeWidgets, action.payload] };
     case 'REMOVE_ANALYTICS_WIDGET':
@@ -1050,6 +1065,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotification: (notif: AppState['notification']) => dispatch({ type: 'SET_NOTIFICATION', payload: notif }),
     addNotificationToHistory: (notif: AppNotification) => dispatch({ type: 'ADD_NOTIFICATION_TO_HISTORY', payload: notif }),
     addCustomWidget: (widget: CustomWidget) => dispatch({ type: 'ADD_CUSTOM_WIDGET', payload: widget }),
+    updateCustomWidget: (id: string, update: Partial<CustomWidget>) => dispatch({ type: 'UPDATE_CUSTOM_WIDGET', payload: { id, update } }),
+    deleteCustomWidget: (id: string) => dispatch({ type: 'DELETE_CUSTOM_WIDGET', payload: id }),
     addAnalyticsWidget: (id: string) => dispatch({ type: 'ADD_ANALYTICS_WIDGET', payload: id }),
     removeAnalyticsWidget: (id: string) => dispatch({ type: 'REMOVE_ANALYTICS_WIDGET', payload: id }),
     toggleLanguage: () => dispatch({ type: 'TOGGLE_LANGUAGE' }),

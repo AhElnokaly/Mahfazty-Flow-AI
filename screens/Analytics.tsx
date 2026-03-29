@@ -8,7 +8,7 @@ import {
 import { 
   Activity, Target, PieChart, ArrowUpRight, ArrowDownRight, Zap, Star,
   Trash2, Plus, X, BarChart3, TrendingUp, Users, BrainCircuit, Sparkles,
-  Filter, Calendar, ChevronDown, Tag
+  Filter, Calendar, ChevronDown, Tag, Edit2
 } from 'lucide-react';
 import { TransactionType, CustomWidget, Transaction } from '../types';
 
@@ -185,11 +185,13 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
 const ChartWidget: React.FC<{ 
   widgetId: string, 
   globalState: any, 
-  dispatch: any 
+  dispatch: any,
+  onEditCustomWidget?: (widget: CustomWidget) => void
 }> = ({ 
   widgetId, 
   globalState, 
-  dispatch 
+  dispatch,
+  onEditCustomWidget
 }) => {
   const { language, isPro, customWidgets } = globalState;
   const groups = useMemo(() => globalState.groups.filter((g: any) => !g.isArchived), [globalState.groups]);
@@ -242,11 +244,23 @@ const ChartWidget: React.FC<{
   const standardConfig = WIDGET_LIBRARY.find(w => w.id === widgetId);
   const customConfig = customWidgets.find((w: CustomWidget) => w.id === widgetId);
   
+  const getTailwindClasses = (theme?: string) => {
+    switch (theme) {
+      case 'emerald': return { color: 'text-emerald-500', bgColor: 'bg-emerald-50 dark:bg-emerald-900/20' };
+      case 'rose': return { color: 'text-rose-500', bgColor: 'bg-rose-50 dark:bg-rose-900/20' };
+      case 'amber': return { color: 'text-amber-500', bgColor: 'bg-amber-50 dark:bg-amber-900/20' };
+      case 'purple': return { color: 'text-purple-500', bgColor: 'bg-purple-50 dark:bg-purple-900/20' };
+      default: return { color: 'text-blue-500', bgColor: 'bg-blue-50 dark:bg-blue-900/20' };
+    }
+  };
+
+  const customThemeClasses = customConfig ? getTailwindClasses(customConfig.colorTheme) : { color: '', bgColor: '' };
+
   const config = standardConfig || (customConfig ? {
     id: customConfig.id,
     icon: BrainCircuit,
-    color: `text-${customConfig.colorTheme}-500`,
-    bgColor: `bg-${customConfig.colorTheme}-50 dark:bg-${customConfig.colorTheme}-900/20`,
+    color: customThemeClasses.color,
+    bgColor: customThemeClasses.bgColor,
     titleEn: customConfig.title,
     titleAr: customConfig.title,
     descEn: customConfig.description,
@@ -536,12 +550,22 @@ const ChartWidget: React.FC<{
 
   return (
     <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 relative group animate-in zoom-in-95 duration-300">
-       <button 
-         onClick={() => dispatch.removeAnalyticsWidget(widgetId)}
-         className="absolute top-4 right-4 p-2 bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-rose-500 rounded-full opacity-0 group-hover:opacity-100 transition-all z-10"
-       >
-         <Trash2 size={16} />
-       </button>
+       <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-10">
+         {customConfig && onEditCustomWidget && (
+           <button 
+             onClick={() => onEditCustomWidget(customConfig)}
+             className="p-2 bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-blue-500 rounded-full"
+           >
+             <Edit2 size={16} />
+           </button>
+         )}
+         <button 
+           onClick={() => dispatch.removeAnalyticsWidget(widgetId)}
+           className="p-2 bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-rose-500 rounded-full"
+         >
+           <Trash2 size={16} />
+         </button>
+       </div>
 
        {/* Header with Filters */}
        <div className="flex flex-col gap-4 mb-6">
@@ -1060,20 +1084,38 @@ const Analytics: React.FC = () => {
   const handleCreateCustomChart = () => {
     if (!customChartConfig.title) return;
     
-    const newWidget: CustomWidget = {
-      id: `custom_${Date.now()}`,
-      title: customChartConfig.title,
-      description: customChartConfig.description || 'Custom User Chart',
-      chartType: customChartConfig.chartType as any,
-      dataSource: customChartConfig.dataSource as any,
-      groupBy: customChartConfig.groupBy as any,
-      colorTheme: customChartConfig.colorTheme as any
-    };
-
-    dispatch.addCustomWidget(newWidget);
-    dispatch.addAnalyticsWidget(newWidget.id);
+    if (customChartConfig.id) {
+      // Edit existing
+      dispatch.updateCustomWidget(customChartConfig.id, {
+        title: customChartConfig.title,
+        description: customChartConfig.description || 'Custom User Chart',
+        chartType: customChartConfig.chartType as any,
+        dataSource: customChartConfig.dataSource as any,
+        groupBy: customChartConfig.groupBy as any,
+        colorTheme: customChartConfig.colorTheme as any
+      });
+    } else {
+      // Create new
+      const newWidget: CustomWidget = {
+        id: `custom_${Date.now()}`,
+        title: customChartConfig.title,
+        description: customChartConfig.description || 'Custom User Chart',
+        chartType: customChartConfig.chartType as any,
+        dataSource: customChartConfig.dataSource as any,
+        groupBy: customChartConfig.groupBy as any,
+        colorTheme: customChartConfig.colorTheme as any
+      };
+      dispatch.addCustomWidget(newWidget);
+      dispatch.addAnalyticsWidget(newWidget.id);
+    }
+    
     setShowCustomChartModal(false);
     setShowAddModal(false);
+  };
+
+  const handleEditCustomChart = (widget: CustomWidget) => {
+    setCustomChartConfig(widget);
+    setShowCustomChartModal(true);
   };
   // +++ نهاية الإضافة +++
 
@@ -1122,6 +1164,7 @@ const Analytics: React.FC = () => {
              widgetId={widgetId} 
              globalState={state} 
              dispatch={dispatch} 
+             onEditCustomWidget={handleEditCustomChart}
            />
          ))}
          
@@ -1197,7 +1240,7 @@ const Analytics: React.FC = () => {
                         {state.customWidgets.map((widget: CustomWidget) => {
                             const isActive = activeWidgets.includes(widget.id);
                             return (
-                                <div key={widget.id} className={`p-6 rounded-3xl border transition-all relative ${isActive ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-purple-300'}`}>
+                                <div key={widget.id} className={`p-6 rounded-3xl border transition-all relative group ${isActive ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-purple-300'}`}>
                                     <div className="flex items-start justify-between mb-4">
                                         <div className={`w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-2xl flex items-center justify-center`}>
                                             <BrainCircuit size={24} />
@@ -1212,6 +1255,14 @@ const Analytics: React.FC = () => {
                                             </button>
                                         )}
                                     </div>
+                                    <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => handleEditCustomChart(widget)} className="p-1.5 bg-white dark:bg-slate-800 text-slate-400 hover:text-blue-500 rounded-lg shadow-sm">
+                                            <Edit2 size={14} />
+                                        </button>
+                                        <button onClick={() => dispatch.deleteCustomWidget(widget.id)} className="p-1.5 bg-white dark:bg-slate-800 text-slate-400 hover:text-rose-500 rounded-lg shadow-sm">
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
                                     <h4 className="font-black text-slate-900 dark:text-white text-sm mb-1">{widget.title}</h4>
                                     <p className="text-[10px] font-bold text-slate-500 leading-relaxed">{widget.description}</p>
                                 </div>
@@ -1224,7 +1275,17 @@ const Analytics: React.FC = () => {
                 {/* +++ أضيف بناءً على طلبك +++ (Create Custom Chart Button) */}
                 <div className="col-span-full mt-4">
                    <button 
-                     onClick={() => setShowCustomChartModal(true)}
+                     onClick={() => {
+                       setCustomChartConfig({
+                         title: '',
+                         description: '',
+                         chartType: 'bar',
+                         dataSource: 'expense',
+                         groupBy: 'group',
+                         colorTheme: 'blue'
+                       });
+                       setShowCustomChartModal(true);
+                     }}
                      className="w-full py-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl text-slate-500 hover:text-blue-600 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2"
                    >
                      <Plus size={16} />
@@ -1243,7 +1304,7 @@ const Analytics: React.FC = () => {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setShowCustomChartModal(false)}></div>
           <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative flex flex-col animate-in zoom-in-95 duration-300">
              <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-               <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'رسم بياني جديد' : 'New Custom Chart'}</h3>
+               <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase">{customChartConfig.id ? (language === 'ar' ? 'تعديل الرسم البياني' : 'Edit Custom Chart') : (language === 'ar' ? 'رسم بياني جديد' : 'New Custom Chart')}</h3>
                <button onClick={() => setShowCustomChartModal(false)} className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 hover:text-rose-500"><X size={16}/></button>
              </div>
              
@@ -1285,17 +1346,33 @@ const Analytics: React.FC = () => {
                  </div>
                </div>
 
-               <div>
-                 <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">{language === 'ar' ? 'تجميع حسب' : 'Group By'}</label>
-                 <select 
-                   value={customChartConfig.groupBy} 
-                   onChange={e => setCustomChartConfig({...customChartConfig, groupBy: e.target.value as any})}
-                   className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none"
-                 >
-                   <option value="group">{language === 'ar' ? 'المجموعة' : 'Category/Group'}</option>
-                   <option value="client">{language === 'ar' ? 'الجهة' : 'Client/Store'}</option>
-                   <option value="date">{language === 'ar' ? 'التاريخ' : 'Date'}</option>
-                 </select>
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">{language === 'ar' ? 'تجميع حسب' : 'Group By'}</label>
+                   <select 
+                     value={customChartConfig.groupBy} 
+                     onChange={e => setCustomChartConfig({...customChartConfig, groupBy: e.target.value as any})}
+                     className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none"
+                   >
+                     <option value="group">{language === 'ar' ? 'المجموعة' : 'Category/Group'}</option>
+                     <option value="client">{language === 'ar' ? 'الجهة' : 'Client/Store'}</option>
+                     <option value="date">{language === 'ar' ? 'التاريخ' : 'Date'}</option>
+                   </select>
+                 </div>
+                 <div>
+                   <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">{language === 'ar' ? 'اللون' : 'Color Theme'}</label>
+                   <select 
+                     value={customChartConfig.colorTheme} 
+                     onChange={e => setCustomChartConfig({...customChartConfig, colorTheme: e.target.value as any})}
+                     className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none"
+                   >
+                     <option value="blue">{language === 'ar' ? 'أزرق' : 'Blue'}</option>
+                     <option value="emerald">{language === 'ar' ? 'أخضر' : 'Emerald'}</option>
+                     <option value="rose">{language === 'ar' ? 'أحمر' : 'Rose'}</option>
+                     <option value="amber">{language === 'ar' ? 'أصفر' : 'Amber'}</option>
+                     <option value="purple">{language === 'ar' ? 'بنفسجي' : 'Purple'}</option>
+                   </select>
+                 </div>
                </div>
 
                <button 
@@ -1303,7 +1380,7 @@ const Analytics: React.FC = () => {
                  disabled={!customChartConfig.title}
                  className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg hover:shadow-xl hover:bg-blue-500 transition-all disabled:opacity-50 mt-4"
                >
-                 {language === 'ar' ? 'إنشاء وإضافة' : 'Create & Add'}
+                 {customChartConfig.id ? (language === 'ar' ? 'حفظ التعديلات' : 'Save Changes') : (language === 'ar' ? 'إنشاء وإضافة' : 'Create & Add')}
                </button>
              </div>
           </div>
