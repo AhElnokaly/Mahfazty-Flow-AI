@@ -41,7 +41,7 @@ const INITIAL_STATE: AppState = {
   syncProvider: 'local',
   chatHistory: [],
   proChatHistory: [],
-  activeWidgets: ['cash_flow', 'lifestyle_radar', 'item_price_tracker'],
+  activeWidgets: ['cash_flow', 'lifestyle_radar', 'expense_distribution', 'debt_position', 'investment_portfolio'],
   customWidgets: [], 
   security: {
     appLock: false,
@@ -88,6 +88,7 @@ interface AppContextType {
     addCreditCard: (card: Omit<import('./types').CreditCard, 'id'>) => void;
     updateCreditCard: (id: string, update: Partial<import('./types').CreditCard>) => void;
     deleteCreditCard: (id: string) => void;
+    settleCreditCard: (payload: { creditCardId: string; paymentAmount: number; settledTransactions: string[]; settledItems: { transactionId: string, itemId: string }[]; adjustmentTransaction?: Omit<Transaction, 'id'> }) => void;
     setPro: (val: boolean) => void;
     addChatMessage: (msg: ChatMessage, isProChat?: boolean) => void;
     updateProfile: (profile: UserProfile) => void;
@@ -128,6 +129,8 @@ interface AppContextType {
     clearNotificationHistory: () => void;
     enableCloudSync: (token: string) => void;
     disableCloudSync: () => void;
+    setCustomDbConfig: (config: AppState['customDbConfig']) => void;
+    setOnlineStatus: (isOnline: boolean) => void;
     syncWithCloud: () => Promise<void>;
     pullFromCloud: () => Promise<void>;
     unlockAchievement: (achievementId: string) => void;
@@ -159,6 +162,7 @@ type Action =
   | { type: 'ADD_CREDIT_CARD'; payload: Omit<import('./types').CreditCard, 'id'> }
   | { type: 'UPDATE_CREDIT_CARD'; payload: { id: string; update: Partial<import('./types').CreditCard> } }
   | { type: 'DELETE_CREDIT_CARD'; payload: string }
+  | { type: 'SETTLE_CREDIT_CARD'; payload: { creditCardId: string; paymentAmount: number; settledTransactions: string[]; settledItems: { transactionId: string, itemId: string }[]; adjustmentTransaction?: Omit<Transaction, 'id'> } }
   | { type: 'SET_PRO'; payload: boolean }
   | { type: 'ADD_CHAT_MESSAGE'; payload: { msg: ChatMessage; isProChat: boolean } }
   | { type: 'TOGGLE_LANGUAGE' }
@@ -190,7 +194,9 @@ type Action =
   | { type: 'COMPLETE_ONBOARDING' }
   | { type: 'ENABLE_CLOUD_SYNC'; payload: string }
   | { type: 'DISABLE_CLOUD_SYNC' }
+  | { type: 'SET_CUSTOM_DB_CONFIG'; payload: AppState['customDbConfig'] }
   | { type: 'SYNC_SUCCESS'; payload: string }
+  | { type: 'SET_ONLINE_STATUS'; payload: boolean }
   | { type: 'ADD_SYNC_LOG'; payload: SyncLogEntry }
   | { type: 'TOGGLE_BIOMETRICS' }
   | { type: 'TOGGLE_PUSH_NOTIFICATIONS' }
@@ -204,6 +210,10 @@ type Action =
   | { type: 'ADD_NOTIFICATION_TO_HISTORY'; payload: AppNotification }
   | { type: 'SET_DECOY_PASSWORD'; payload: string }
   | { type: 'DECOY_LOGIN' };
+
+// +++ أضيف بناءً على طلبك +++
+export const isIncomeLike = (t: Transaction) => t.type === TransactionType.INCOME || (t.type === TransactionType.INVESTMENT && (t.investmentAction === 'SELL' || t.investmentAction === 'RETURN'));
+export const isExpenseLike = (t: Transaction) => t.type === TransactionType.EXPENSE || (t.type === TransactionType.INVESTMENT && t.investmentAction !== 'SELL' && t.investmentAction !== 'RETURN');
 
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
@@ -370,14 +380,14 @@ const appReducer = (state: AppState, action: Action): AppState => {
         apiKeys: state.apiKeys.map(k => k.id === action.payload ? { ...k, isBlocked: true } : k)
       };
     case 'ADD_TRANSACTION': {
-      const newTransaction = { id: Date.now().toString(), ...action.payload };
+      const newTransaction = { ...action.payload, id: Date.now().toString() };
       let newBalance = state.walletBalance;
       let updatedGroups = state.groups;
       let updatedCreditCards = state.creditCards || [];
 
-      if (action.payload.type === TransactionType.INCOME) {
+      if (isIncomeLike(newTransaction as Transaction)) { // +++ أضيف بناءً على طلبك +++
         newBalance += action.payload.amount;
-      } else if (action.payload.type === TransactionType.EXPENSE) {
+      } else if (isExpenseLike(newTransaction as Transaction)) { // +++ أضيف بناءً على طلبك +++
         if (action.payload.paymentMethod === 'credit' && action.payload.creditCardId) {
           // If paid by credit card, increase the used balance of the card, don't deduct from wallet
           updatedCreditCards = updatedCreditCards.map(c => 
@@ -447,20 +457,109 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return INITIAL_STATE;
     case 'IMPORT_STATE':
       return { ...state, ...action.payload };
-    case 'ADD_INSTALLMENT':
-      return { ...state, installments: [...state.installments, { id: Date.now().toString(), ...action.payload, monthlyAmount: action.payload.totalAmount / action.payload.installmentCount, paidCount: 0, status: 'active' }] };
-    case 'PAY_INSTALLMENT':
+    case 'ADD_INSTALLMENT': {
+      const newInstallment = { ...action.payload, id: Date.now().toString(), monthlyAmount: action.payload.totalAmount / action.payload.installmentCount, paidCount: 0, status: 'active' as const };
+      
+      if (action.payload.type === 'loan') {
+        const newTransaction: Transaction = {
+          id: Date.now().toString() + 'loan',
+          amount: action.payload.totalAmount,
+          currency: state.baseCurrency,
+          type: TransactionType.INCOME,
+          date: new Date().toISOString().split('T')[0],
+          groupId: state.groups[0]?.id || 'default',
+          clientId: state.clients[0]?.id || 'default',
+          note: `Loan Received: ${action.payload.title}`
+        };
+        return { 
+          ...state, 
+          installments: [...state.installments, newInstallment],
+          walletBalance: state.walletBalance + action.payload.totalAmount,
+          transactions: [newTransaction, ...state.transactions]
+        };
+      }
+      
+      return { ...state, installments: [...state.installments, newInstallment] };
+    }
+    case 'PAY_INSTALLMENT': {
+      const installment = state.installments.find(i => i.id === action.payload.id);
+      if (!installment) return state;
+      
+      const paymentAmount = installment.monthlyAmount + action.payload.penalty;
+      
+      const newTransaction: Transaction = {
+        id: Date.now().toString(),
+        amount: paymentAmount,
+        currency: state.baseCurrency,
+        type: TransactionType.EXPENSE,
+        date: new Date().toISOString().split('T')[0],
+        groupId: state.groups[0]?.id || 'default',
+        clientId: state.clients[0]?.id || 'default',
+        note: `Installment Payment: ${installment.title}${action.payload.penalty > 0 ? ` (+${action.payload.penalty} penalty)` : ''}`
+      };
+
       return { 
         ...state, 
         installments: state.installments.map(i => i.id === action.payload.id ? { ...i, paidCount: i.paidCount + 1, status: i.paidCount + 1 >= i.installmentCount ? 'completed' : 'active', lastPaymentDate: new Date().toISOString() } : i),
-        walletBalance: state.walletBalance - (state.installments.find(i => i.id === action.payload.id)?.monthlyAmount || 0) - action.payload.penalty
+        walletBalance: state.walletBalance - paymentAmount,
+        transactions: [newTransaction, ...state.transactions]
       };
+    }
     case 'ADD_CREDIT_CARD':
-      return { ...state, creditCards: [...(state.creditCards || []), { id: Date.now().toString(), ...action.payload }] };
+      return { ...state, creditCards: [...(state.creditCards || []), { ...action.payload, id: Date.now().toString() }] };
     case 'UPDATE_CREDIT_CARD':
       return { ...state, creditCards: (state.creditCards || []).map(c => c.id === action.payload.id ? { ...c, ...action.payload.update } : c) };
     case 'DELETE_CREDIT_CARD':
       return { ...state, creditCards: (state.creditCards || []).map(c => c.id === action.payload ? { ...c, isArchived: true } : c) };
+    case 'SETTLE_CREDIT_CARD': {
+      const { creditCardId, paymentAmount, settledTransactions, settledItems, adjustmentTransaction } = action.payload;
+      
+      // 1. Deduct from wallet
+      let newBalance = state.walletBalance - paymentAmount;
+      
+      // 2. Reduce credit card balance
+      let updatedCreditCards = (state.creditCards || []).map(c => 
+        c.id === creditCardId ? { ...c, balance: Math.max(0, c.balance - paymentAmount) } : c
+      );
+      
+      // 3. Mark transactions/items as settled
+      let updatedTransactions = state.transactions.map(t => {
+        if (settledTransactions.includes(t.id)) {
+          return { ...t, isSettled: true };
+        }
+        
+        // Check if any items in this transaction are settled
+        const itemsToSettle = settledItems.filter(si => si.transactionId === t.id).map(si => si.itemId);
+        if (itemsToSettle.length > 0 && t.items) {
+          const updatedItems = t.items.map(item => 
+            itemsToSettle.includes(item.id) ? { ...item, isSettled: true } : item
+          );
+          
+          // If all items are now settled, mark the whole transaction as settled
+          const allSettled = updatedItems.every(item => item.isSettled);
+          return { ...t, items: updatedItems, isSettled: allSettled };
+        }
+        
+        return t;
+      });
+      
+      // 4. Add adjustment transaction if provided
+      if (adjustmentTransaction) {
+        const newTx = { ...adjustmentTransaction, id: Date.now().toString() };
+        updatedTransactions = [newTx, ...updatedTransactions];
+        // The adjustment transaction (fees) is added to the credit card balance
+        updatedCreditCards = updatedCreditCards.map(c => 
+          c.id === creditCardId ? { ...c, balance: c.balance + adjustmentTransaction.amount } : c
+        );
+      }
+      
+      return {
+        ...state,
+        walletBalance: newBalance,
+        creditCards: updatedCreditCards,
+        transactions: updatedTransactions
+      };
+    }
     case 'SET_PRO':
       return { ...state, isPro: action.payload };
     case 'ADD_CHAT_MESSAGE':
@@ -488,45 +587,148 @@ const appReducer = (state: AppState, action: Action): AppState => {
     }
     case 'PERMANENT_DELETE_GROUP': {
       const clientsToDelete = state.clients.filter(c => c.groupId === action.payload).map(c => c.id);
+      const groupTransactions = state.transactions.filter(t => t.groupId === action.payload || clientsToDelete.includes(t.clientId));
+      
+      let newBalance = state.walletBalance;
+      let updatedCreditCards = state.creditCards || [];
+      
+      groupTransactions.forEach(t => {
+        if (t.paymentMethod === 'credit' && t.creditCardId) {
+          updatedCreditCards = updatedCreditCards.map(c => 
+            c.id === t.creditCardId ? { ...c, balance: Math.max(0, c.balance - t.amount) } : c
+          );
+        } else {
+          if (isIncomeLike(t)) newBalance -= t.amount;
+          else if (isExpenseLike(t)) newBalance += t.amount;
+          else if (t.type === TransactionType.TRANSFER) {
+            newBalance += t.amount;
+            if (t.creditCardId) {
+              updatedCreditCards = updatedCreditCards.map(c => 
+                c.id === t.creditCardId ? { ...c, balance: c.balance + t.amount } : c
+              );
+            }
+          }
+        }
+      });
+
       return { 
         ...state, 
         groups: state.groups.filter(g => g.id !== action.payload),
         clients: state.clients.filter(c => c.groupId !== action.payload),
-        transactions: state.transactions.filter(t => t.groupId !== action.payload && !clientsToDelete.includes(t.clientId))
+        transactions: state.transactions.filter(t => t.groupId !== action.payload && !clientsToDelete.includes(t.clientId)),
+        walletBalance: newBalance,
+        creditCards: updatedCreditCards
       };
     }
     case 'ADD_CLIENT':
-      return { ...state, clients: [...state.clients, { id: action.payload.id || Date.now().toString(), ...action.payload }] };
+      return { ...state, clients: [...state.clients, { ...action.payload, id: action.payload.id || Date.now().toString() + Math.random().toString(36).substr(2, 9) }] };
     case 'UPDATE_CLIENT':
       return { ...state, clients: state.clients.map(c => c.id === action.payload.id ? { ...c, ...action.payload.update } : c) };
-    case 'DELETE_CLIENT':
+    case 'DELETE_CLIENT': {
+      const clientTransactions = state.transactions.filter(t => t.clientId === action.payload || (t.clientIds && t.clientIds.includes(action.payload)));
+      let newBalance = state.walletBalance;
+      let updatedCreditCards = state.creditCards || [];
+      
+      clientTransactions.forEach(t => {
+        const numClients = t.clientIds ? t.clientIds.length : 1;
+        const amountPerClient = t.amount / numClients;
+        
+        if (t.paymentMethod === 'credit' && t.creditCardId) {
+          updatedCreditCards = updatedCreditCards.map(c => 
+            c.id === t.creditCardId ? { ...c, balance: Math.max(0, c.balance - amountPerClient) } : c
+          );
+        } else {
+          if (isIncomeLike(t)) newBalance -= amountPerClient;
+          else if (isExpenseLike(t)) newBalance += amountPerClient;
+          else if (t.type === TransactionType.TRANSFER) {
+            newBalance += amountPerClient;
+            if (t.creditCardId) {
+              updatedCreditCards = updatedCreditCards.map(c => 
+                c.id === t.creditCardId ? { ...c, balance: c.balance + amountPerClient } : c
+              );
+            }
+          }
+        }
+      });
+
       return { 
         ...state, 
-        clients: state.clients.map(c => c.id === action.payload ? { ...c, isArchived: true } : c),
+        clients: state.clients.map(c => c.id === action.payload ? { ...c, isArchived: true, deletedAt: new Date().toISOString() } : c),
+        walletBalance: newBalance,
+        creditCards: updatedCreditCards
       };
-    case 'RESTORE_CLIENT':
+    }
+    case 'RESTORE_CLIENT': {
+      const clientTransactions = state.transactions.filter(t => t.clientId === action.payload || (t.clientIds && t.clientIds.includes(action.payload)));
+      let newBalance = state.walletBalance;
+      let updatedCreditCards = state.creditCards || [];
+      
+      clientTransactions.forEach(t => {
+        const numClients = t.clientIds ? t.clientIds.length : 1;
+        const amountPerClient = t.amount / numClients;
+        
+        if (t.paymentMethod === 'credit' && t.creditCardId) {
+          updatedCreditCards = updatedCreditCards.map(c => 
+            c.id === t.creditCardId ? { ...c, balance: c.balance + amountPerClient } : c
+          );
+        } else {
+          if (isIncomeLike(t)) newBalance += amountPerClient;
+          else if (isExpenseLike(t)) newBalance -= amountPerClient;
+          else if (t.type === TransactionType.TRANSFER) {
+            newBalance -= amountPerClient;
+            if (t.creditCardId) {
+              updatedCreditCards = updatedCreditCards.map(c => 
+                c.id === t.creditCardId ? { ...c, balance: Math.max(0, c.balance - amountPerClient) } : c
+              );
+            }
+          }
+        }
+      });
+
       return { 
         ...state, 
-        clients: state.clients.map(c => c.id === action.payload ? { ...c, isArchived: false } : c),
+        clients: state.clients.map(c => c.id === action.payload ? { ...c, isArchived: false, deletedAt: undefined } : c),
+        walletBalance: newBalance,
+        creditCards: updatedCreditCards
       };
-    case 'PERMANENT_DELETE_CLIENT':
+    }
+    case 'PERMANENT_DELETE_CLIENT': {
       return { 
         ...state, 
         clients: state.clients.filter(c => c.id !== action.payload),
-        transactions: state.transactions.filter(t => t.clientId !== action.payload)
+        transactions: state.transactions.filter(t => t.clientId !== action.payload && !(t.clientIds && t.clientIds.includes(action.payload)))
       };
+    }
     case 'MOVE_CLIENT':
       return {
         ...state,
         clients: state.clients.map(c => c.id === action.payload.clientId ? { ...c, groupId: action.payload.newGroupId } : c),
-        transactions: state.transactions.map(t => t.clientId === action.payload.clientId ? { ...t, groupId: action.payload.newGroupId } : t)
+        transactions: state.transactions.map(t => {
+          if (t.clientId === action.payload.clientId || (t.clientIds && t.clientIds.includes(action.payload.clientId))) {
+            return { ...t, groupId: action.payload.newGroupId };
+          }
+          return t;
+        })
       };
     case 'MERGE_CLIENT': {
       const { sourceClientId, targetClientId } = action.payload;
       return {
         ...state,
         clients: state.clients.filter(c => c.id !== sourceClientId),
-        transactions: state.transactions.map(t => t.clientId === sourceClientId ? { ...t, clientId: targetClientId } : t)
+        transactions: state.transactions.map(t => {
+          let updatedT = { ...t };
+          if (updatedT.clientId === sourceClientId) {
+            updatedT.clientId = targetClientId;
+          }
+          if (updatedT.clientIds && updatedT.clientIds.includes(sourceClientId)) {
+            updatedT.clientIds = updatedT.clientIds.map(id => id === sourceClientId ? targetClientId : id);
+            // Remove duplicates if targetClientId was already in clientIds
+            updatedT.clientIds = Array.from(new Set(updatedT.clientIds));
+            // Update primary clientId if it was changed
+            updatedT.clientId = updatedT.clientIds[0];
+          }
+          return updatedT;
+        })
       };
     }
     case 'UPDATE_INSTALLMENT':
@@ -566,30 +768,84 @@ const appReducer = (state: AppState, action: Action): AppState => {
       if (!oldT) return state;
       const newT = { ...oldT, ...action.payload.update };
       let newBalance = state.walletBalance;
+      let updatedCreditCards = state.creditCards || [];
       
-      if (oldT.type === TransactionType.INCOME) newBalance -= oldT.amount;
-      else if (oldT.type === TransactionType.EXPENSE) newBalance += oldT.amount;
-      else if (oldT.type === TransactionType.TRANSFER) newBalance += oldT.amount;
+      // Reverse old transaction
+      if (oldT.paymentMethod === 'credit' && oldT.creditCardId) {
+        updatedCreditCards = updatedCreditCards.map(c => 
+          c.id === oldT.creditCardId ? { ...c, balance: Math.max(0, c.balance - oldT.amount) } : c
+        );
+      } else {
+        if (isIncomeLike(oldT)) newBalance -= oldT.amount; // +++ أضيف بناءً على طلبك +++
+        else if (isExpenseLike(oldT)) newBalance += oldT.amount; // +++ أضيف بناءً على طلبك +++
+        else if (oldT.type === TransactionType.TRANSFER) {
+          newBalance += oldT.amount;
+          if (oldT.creditCardId) {
+            updatedCreditCards = updatedCreditCards.map(c => 
+              c.id === oldT.creditCardId ? { ...c, balance: c.balance + oldT.amount } : c
+            );
+          }
+        }
+      }
 
-      if (newT.type === TransactionType.INCOME) newBalance += newT.amount;
-      else if (newT.type === TransactionType.EXPENSE) newBalance -= newT.amount;
-      else if (newT.type === TransactionType.TRANSFER) newBalance -= newT.amount;
+      // Apply new transaction
+      if (newT.paymentMethod === 'credit' && newT.creditCardId) {
+        updatedCreditCards = updatedCreditCards.map(c => 
+          c.id === newT.creditCardId ? { ...c, balance: c.balance + newT.amount } : c
+        );
+      } else {
+        if (isIncomeLike(newT)) newBalance += newT.amount; // +++ أضيف بناءً على طلبك +++
+        else if (isExpenseLike(newT)) newBalance -= newT.amount; // +++ أضيف بناءً على طلبك +++
+        else if (newT.type === TransactionType.TRANSFER) {
+          newBalance -= newT.amount;
+          if (newT.creditCardId) {
+            updatedCreditCards = updatedCreditCards.map(c => 
+              c.id === newT.creditCardId ? { ...c, balance: Math.max(0, c.balance - newT.amount) } : c
+            );
+          }
+        }
+      }
 
       return { 
         ...state, 
         transactions: state.transactions.map(t => t.id === action.payload.id ? newT : t),
-        walletBalance: newBalance
+        walletBalance: newBalance,
+        creditCards: updatedCreditCards
       };
     }
     case 'DELETE_TRANSACTION': {
       const t = state.transactions.find(t => t.id === action.payload);
       if (!t) return state;
-      let newBalance = state.walletBalance;
-      if (t.type === TransactionType.INCOME) newBalance -= t.amount;
-      else if (t.type === TransactionType.EXPENSE) newBalance += t.amount;
-      else if (t.type === TransactionType.TRANSFER) newBalance += t.amount;
       
-      return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload), walletBalance: newBalance };
+      let newBalance = state.walletBalance;
+      let updatedCreditCards = state.creditCards || [];
+
+      if (t.paymentMethod === 'credit' && t.creditCardId) {
+        // If it was paid by credit card, reduce the card's used balance
+        updatedCreditCards = updatedCreditCards.map(c => 
+          c.id === t.creditCardId ? { ...c, balance: Math.max(0, c.balance - t.amount) } : c
+        );
+      } else {
+        // If paid by cash/wallet, reverse the wallet balance
+        if (isIncomeLike(t)) newBalance -= t.amount; // +++ أضيف بناءً على طلبك +++
+        else if (isExpenseLike(t)) newBalance += t.amount; // +++ أضيف بناءً على طلبك +++
+        else if (t.type === TransactionType.TRANSFER) {
+          newBalance += t.amount;
+          // If transfer was to pay a credit card bill, increase the card's used balance back
+          if (t.creditCardId) {
+            updatedCreditCards = updatedCreditCards.map(c => 
+              c.id === t.creditCardId ? { ...c, balance: c.balance + t.amount } : c
+            );
+          }
+        }
+      }
+      
+      return { 
+        ...state, 
+        transactions: state.transactions.filter(t => t.id !== action.payload), 
+        walletBalance: newBalance,
+        creditCards: updatedCreditCards
+      };
     }
     case 'UPDATE_WALLET_BALANCE':
       return { ...state, walletBalance: action.payload };
@@ -603,10 +859,14 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, syncProvider: 'cloud', cloudToken: action.payload, isSyncing: true };
     case 'DISABLE_CLOUD_SYNC':
       return { ...state, syncProvider: 'local', cloudToken: undefined };
+    case 'SET_CUSTOM_DB_CONFIG':
+      return { ...state, syncProvider: action.payload ? 'custom_db' : 'local', customDbConfig: action.payload };
     case 'SYNC_SUCCESS':
       return { ...state, lastSyncTimestamp: action.payload, isSyncing: false };
+    case 'SET_ONLINE_STATUS':
+      return { ...state, isOnline: action.payload };
     case 'ADD_GOAL':
-      return { ...state, goals: [...state.goals, { id: Date.now().toString(), ...action.payload }] };
+      return { ...state, goals: [...state.goals, { ...action.payload, id: Date.now().toString() }] };
     case 'UPDATE_GOAL':
       return { ...state, goals: state.goals.map(g => g.id === action.payload.id ? { ...g, ...action.payload.update } : g) };
     case 'DELETE_GOAL':
@@ -654,17 +914,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           userProfile,
           // Ensure arrays are at least empty arrays if missing
           apiKeys: parsed.apiKeys || initial.apiKeys,
-          groups: parsed.groups || initial.groups,
-          transactions: parsed.transactions || initial.transactions,
-          clients: parsed.clients || initial.clients,
-          installments: parsed.installments || initial.installments,
+          groups: (parsed.groups || initial.groups).map((g: any) => ({ ...g, id: g.id || Date.now().toString() + Math.random().toString(36).substr(2, 9) })),
+          transactions: (parsed.transactions || initial.transactions).map((t: any) => ({ ...t, id: t.id || Date.now().toString() + Math.random().toString(36).substr(2, 9) })),
+          clients: (parsed.clients || initial.clients).map((c: any) => ({ ...c, id: c.id || Date.now().toString() + Math.random().toString(36).substr(2, 9) })),
+          installments: (parsed.installments || initial.installments).map((i: any) => ({ ...i, id: i.id || Date.now().toString() + Math.random().toString(36).substr(2, 9) })),
+          creditCards: (parsed.creditCards || initial.creditCards || []).map((c: any) => ({ ...c, id: c.id || Date.now().toString() + Math.random().toString(36).substr(2, 9) })),
           chatHistory: parsed.chatHistory || initial.chatHistory,
           proChatHistory: parsed.proChatHistory || initial.proChatHistory,
           customWidgets: parsed.customWidgets || initial.customWidgets,
           activeWidgets: parsed.activeWidgets || initial.activeWidgets,
           notificationHistory: parsed.notificationHistory || initial.notificationHistory,
           hasSeenOnboarding: parsed.hasSeenOnboarding ?? initial.hasSeenOnboarding,
-          goals: parsed.goals || initial.goals,
+          goals: (parsed.goals || initial.goals).map((g: any) => ({ ...g, id: g.id || Date.now().toString() + Math.random().toString(36).substr(2, 9) })),
           syncHistory: parsed.syncHistory || initial.syncHistory,
           language: parsed.language || initial.language,
           isDarkMode: parsed.isDarkMode ?? initial.isDarkMode,
@@ -777,6 +1038,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addCreditCard: (card: Omit<import('./types').CreditCard, 'id'>) => dispatch({ type: 'ADD_CREDIT_CARD', payload: card }),
     updateCreditCard: (id: string, update: Partial<import('./types').CreditCard>) => dispatch({ type: 'UPDATE_CREDIT_CARD', payload: { id, update } }),
     deleteCreditCard: (id: string) => dispatch({ type: 'DELETE_CREDIT_CARD', payload: id }),
+    settleCreditCard: (payload: { creditCardId: string; paymentAmount: number; settledTransactions: string[]; settledItems: { transactionId: string, itemId: string }[]; adjustmentTransaction?: Omit<Transaction, 'id'> }) => dispatch({ type: 'SETTLE_CREDIT_CARD', payload }),
     addGoal: (goal: Omit<import('./types').Goal, 'id'>) => dispatch({ type: 'ADD_GOAL', payload: goal }),
     updateGoal: (id: string, update: Partial<import('./types').Goal>) => dispatch({ type: 'UPDATE_GOAL', payload: { id, update } }),
     deleteGoal: (id: string) => dispatch({ type: 'DELETE_GOAL', payload: id }),
@@ -818,6 +1080,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     clearNotificationHistory: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
     enableCloudSync: (token: string) => dispatch({ type: 'ENABLE_CLOUD_SYNC', payload: token }),
     disableCloudSync: () => dispatch({ type: 'DISABLE_CLOUD_SYNC' }),
+    setCustomDbConfig: (config: AppState['customDbConfig']) => dispatch({ type: 'SET_CUSTOM_DB_CONFIG', payload: config }),
+    setOnlineStatus: (isOnline: boolean) => dispatch({ type: 'SET_ONLINE_STATUS', payload: isOnline }),
     syncWithCloud: async () => {
       if (state.syncProvider !== 'cloud' || !state.cloudToken) return;
       try {

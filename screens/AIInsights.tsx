@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../store';
 import { sendChatMessage, editFinancialImage, generateVideo } from '../geminiService';
+import { TransactionType } from '../types';
 import { 
   Sparkles, Send, Bot, Loader2, 
   Zap, MessageSquare, ShieldCheck,
@@ -11,6 +12,7 @@ import {
   LayoutGrid, Search, PieChart, Activity
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getLocalResponse, getLocalSuggestions } from '../knowledgeBase'; // +++ أضيف بناءً على طلبك +++
 
 // AI Feature Definitions
 const AI_FEATURES = [
@@ -194,8 +196,7 @@ const AIInsights: React.FC = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
-  const { language, chatHistory, proChatHistory, isPro, userProfile } = state;
-  const [activeTab, setActiveTab] = useState<'assistant' | 'architect' | 'studio' | 'video'>('assistant');
+  const { language, chatHistory, isPro, userProfile } = state;
   const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const [showFeatureLibrary, setShowFeatureLibrary] = useState(false);
@@ -208,7 +209,9 @@ const AIInsights: React.FC = () => {
   // State to hold pending proposal
   const [pendingProposal, setPendingProposal] = useState<any>(null);
 
-  const currentHistory = activeTab === 'assistant' ? chatHistory : proChatHistory;
+  const isConfigured = state.apiKeys?.some(k => k.provider === 'gemini' && k.key && !k.isBlocked); // +++ أضيف بناءً على طلبك +++
+
+  const currentHistory = chatHistory;
 
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
@@ -246,39 +249,121 @@ const AIInsights: React.FC = () => {
     if ((!messageToSend.trim() && !selectedImage) || isChatting) return;
     vibrate();
     
-    if (activeTab === 'architect' && !isPro) {
-      dispatch.setNotification({ 
-        message: language === 'ar' ? 'وضع المهندس متاح لنسخة PRO فقط' : 'Architect mode is for PRO members', 
-        type: 'error' 
-      });
-      return;
-    }
-
-    if (activeTab === 'studio') {
-      if (!selectedImage) return;
-      handleImageEdit(messageToSend);
-      return;
-    }
-
-    if (activeTab === 'video') {
-      handleGenerateVideo(messageToSend);
-      return;
-    }
-
     const userMsg = messageToSend;
     const currentImageData = selectedImage ? { data: selectedImage.base64, mimeType: selectedImage.file.type } : undefined;
+    const currentSelectedImage = selectedImage;
     
     setChatInput('');
     setSelectedImage(null);
     setPendingProposal(null); // Clear old proposals
     setShowFeatureLibrary(false);
     
-    dispatch.addChatMessage({ role: 'user', text: userMsg + (currentImageData ? ` [Attached: ${selectedImage?.file.name}]` : ''), timestamp: new Date().toISOString() }, activeTab === 'architect');
+    const isImageEditRequest = currentSelectedImage && /edit|improve|clean|تعديل|تحسين|وضح/i.test(userMsg);
+    const isVideoRequest = /video|فيديو|generate video|انشاء فيديو/i.test(userMsg);
+
+    if (isImageEditRequest) {
+      handleImageEdit(userMsg, currentSelectedImage);
+      return;
+    }
+
+    if (isVideoRequest) {
+      handleGenerateVideo(userMsg);
+      return;
+    }
+
+    dispatch.addChatMessage({ role: 'user', text: userMsg + (currentImageData ? ` [Attached: ${currentSelectedImage?.file.name}]` : ''), timestamp: new Date().toISOString() }, isPro);
     
+    // +++ أضيف بناءً على طلبك +++ (Offline Smart Commands)
+    const isOfflineCommand = userMsg.startsWith('/') || 
+      /^(اضف|إضافة|add)\s+(\d+)\s+(.+)/i.test(userMsg) ||
+      /^(رصيد|balance|رصيدي)/i.test(userMsg) ||
+      /^(اهداف|أهداف|أهدافي|goals)/i.test(userMsg) ||
+      /^(مساعدة|help)/i.test(userMsg);
+
+    if (isOfflineCommand || !state.apiKeys?.find(k => k.provider === 'gemini' && k.key)) {
+      const cmd = userMsg.toLowerCase().trim();
+      let reply = '';
+      
+      const addMatch = userMsg.match(/^(?:اضف|إضافة|add)\s+(\d+)\s+(.+)/i);
+      
+      if (cmd === '/help' || cmd === '/faq' || cmd === 'مساعدة' || cmd === 'help') {
+        reply = language === 'ar' 
+          ? 'مرحباً! أنا المساعد الذكي المدمج (يعمل بدون إنترنت).\nالأوامر المتاحة:\n**/balance** أو **رصيدي** - عرض رصيدك الحالي\n**/add [amount] [category]** أو **اضف 500 طعام** - إضافة معاملة سريعة\n**اضف 500 دخل راتب** - لإضافة دخل\n**اضف 500 استثمار اسهم** - لإضافة استثمار\n**/goals** أو **أهدافي** - عرض حالة أهدافك' 
+          : 'Hello! I am the built-in smart assistant (works offline).\nAvailable commands:\n**/balance** or **balance** - Show current balance\n**/add [amount] [category]** or **add 500 food** - Quick add transaction\n**add 500 income salary** - Add income\n**add 500 investment stocks** - Add investment\n**/goals** or **goals** - Show goals status';
+      } else if (cmd === '/balance' || cmd === 'رصيد' || cmd === 'رصيدي' || cmd === 'balance') {
+        reply = language === 'ar' 
+          ? `رصيد محفظتك الحالي هو: **${state.walletBalance}**` 
+          : `Your current wallet balance is: **${state.walletBalance}**`;
+      } else if (cmd.startsWith('/add ') || addMatch) {
+        let amount = 0;
+        let category = '';
+        
+        if (addMatch) {
+          amount = parseFloat(addMatch[1]);
+          category = addMatch[2];
+        } else {
+          const parts = cmd.split(' ');
+          if (parts.length >= 3) {
+            amount = parseFloat(parts[1]);
+            category = parts.slice(2).join(' ');
+          }
+        }
+        
+        if (!isNaN(amount) && amount > 0) {
+          const defaultGroup = state.groups[0]?.id || 'default';
+          const defaultClient = state.clients[0]?.id || 'default';
+          
+          let type: TransactionType = TransactionType.EXPENSE;
+          let typeStr = language === 'ar' ? 'مصروف' : 'expense';
+          
+          if (category.includes('دخل') || category.includes('income')) {
+            type = TransactionType.INCOME;
+            typeStr = language === 'ar' ? 'دخل' : 'income';
+            category = category.replace(/دخل|income/gi, '').trim();
+          } else if (category.includes('استثمار') || category.includes('investment')) {
+            type = TransactionType.INVESTMENT;
+            typeStr = language === 'ar' ? 'استثمار' : 'investment';
+            category = category.replace(/استثمار|investment/gi, '').trim();
+          } else if (category.includes('مصروف') || category.includes('expense')) {
+            type = TransactionType.EXPENSE;
+            typeStr = language === 'ar' ? 'مصروف' : 'expense';
+            category = category.replace(/مصروف|expense/gi, '').trim();
+          }
+
+          dispatch.addTransaction({
+            amount,
+            currency: state.baseCurrency,
+            type,
+            date: new Date().toISOString().split('T')[0],
+            groupId: defaultGroup,
+            clientId: defaultClient,
+            clientIds: [defaultClient],
+            note: `Added via Smart Command: ${category || typeStr}`
+          });
+          
+          reply = language === 'ar' ? `تم إضافة ${typeStr} بقيمة **${amount}** لـ **${category || typeStr}** بنجاح.` : `Successfully added ${typeStr} of **${amount}** to **${category || typeStr}**.`;
+        } else {
+          reply = language === 'ar' ? 'صيغة المبلغ غير صحيحة. استخدم: اضف 500 طعام' : 'Invalid amount format. Use: add 500 food';
+        }
+      } else if (cmd === '/goals' || cmd === 'اهداف' || cmd === 'أهداف' || cmd === 'أهدافي' || cmd === 'goals') {
+        const totalGoals = state.goals?.length || 0;
+        const completed = state.goals?.filter(g => g.currentAmount >= g.targetAmount).length || 0;
+        reply = language === 'ar' ? `لديك **${totalGoals}** أهداف إجمالية.\nتم تحقيق **${completed}** منها.` : `You have **${totalGoals}** total goals.\n**${completed}** are completed.`;
+      } else {
+        reply = getLocalResponse(userMsg, language); // +++ أضيف بناءً على طلبك +++
+      }
+      
+      setTimeout(() => {
+        dispatch.addChatMessage({ role: 'model', text: `⚡ **[Offline Smart System]**\n\n${reply}`, timestamp: new Date().toISOString() }, isPro);
+      }, 500);
+      return;
+    }
+    // +++ نهاية الإضافة +++
+
     setIsChatting(true);
-    const response = await sendChatMessage(state, dispatch, userMsg, activeTab === 'architect', currentImageData);
+    const response = await sendChatMessage(state, dispatch, userMsg, isPro, currentImageData);
     
-    dispatch.addChatMessage({ role: 'model', text: response.text, timestamp: new Date().toISOString() }, activeTab === 'architect');
+    dispatch.addChatMessage({ role: 'model', text: response.text, timestamp: new Date().toISOString() }, isPro);
 
     // Handle Tool Calls
     if (response.chartWidget) {
@@ -315,16 +400,12 @@ const AIInsights: React.FC = () => {
     }
   };
 
-  const handleImageEdit = async (msg: string) => {
-    if (!selectedImage) return;
+  const handleImageEdit = async (msg: string, img: {file: File, preview: string, base64: string}) => {
     setIsChatting(true);
-    const editedUrl = await editFinancialImage(state, dispatch, msg || "Improve the quality of this receipt", selectedImage.base64, selectedImage.file.type);
+    const editedUrl = await editFinancialImage(state, dispatch, msg || "Improve the quality of this receipt", img.base64, img.file.type);
     if (editedUrl) {
-      dispatch.addChatMessage({ role: 'user', text: `${language === 'ar' ? 'تعديل سحري:' : 'Magic Edit:'} ${msg || 'Auto'}`, timestamp: new Date().toISOString() }, false);
-      dispatch.addChatMessage({ role: 'model', text: `![Edited Image](${editedUrl})`, timestamp: new Date().toISOString() }, false);
-      setActiveTab('assistant');
-      setChatInput('');
-      setSelectedImage(null);
+      dispatch.addChatMessage({ role: 'user', text: `${language === 'ar' ? 'تعديل سحري:' : 'Magic Edit:'} ${msg || 'Auto'} [Attached: ${img.file.name}]`, timestamp: new Date().toISOString() }, isPro);
+      dispatch.addChatMessage({ role: 'model', text: `![Edited Image](${editedUrl})`, timestamp: new Date().toISOString() }, isPro);
     } else {
       dispatch.setNotification({ message: language === 'ar' ? 'فشل التعديل' : 'Edit failed', type: 'error' });
     }
@@ -335,14 +416,13 @@ const AIInsights: React.FC = () => {
     if (!msg.trim()) return;
     setIsChatting(true);
     setGeneratedVideoUrl(null);
-    dispatch.addChatMessage({ role: 'user', text: `${language === 'ar' ? 'إنشاء فيديو:' : 'Generate Video:'} ${msg}`, timestamp: new Date().toISOString() }, false);
+    dispatch.addChatMessage({ role: 'user', text: `${language === 'ar' ? 'إنشاء فيديو:' : 'Generate Video:'} ${msg}`, timestamp: new Date().toISOString() }, isPro);
     
     const videoUrl = await generateVideo(state, dispatch, msg);
     
     if (videoUrl) {
       setGeneratedVideoUrl(videoUrl);
-      dispatch.addChatMessage({ role: 'model', text: `[Video Generated Successfully]`, timestamp: new Date().toISOString() }, false);
-      setChatInput('');
+      dispatch.addChatMessage({ role: 'model', text: `[Video Generated Successfully]`, timestamp: new Date().toISOString() }, isPro);
     } else {
       dispatch.setNotification({ message: language === 'ar' ? 'فشل إنشاء الفيديو' : 'Video generation failed', type: 'error' });
     }
@@ -351,14 +431,13 @@ const AIInsights: React.FC = () => {
 
   const initiateFeature = (feature: typeof AI_FEATURES[0]) => {
     vibrate();
-    setActiveTab(feature.mode as any);
     setChatInput(feature.prompt);
     setShowFeatureLibrary(false);
   };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentHistory, isChatting, activeTab, pendingProposal]);
+  }, [currentHistory, isChatting, pendingProposal]);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-32 px-2 animate-in fade-in duration-500">
@@ -385,93 +464,34 @@ const AIInsights: React.FC = () => {
         )}
       </div>
 
-      {/* Tabs Switcher */}
-      <div className="flex gap-2 p-1.5 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 overflow-x-auto custom-scrollbar">
-        <button 
-          onClick={() => setActiveTab('assistant')}
-          className={`flex-1 min-w-[100px] py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-blue-500'}`}
-        >
-          <MessageSquare size={16} /> {language === 'ar' ? 'المساعد' : 'Assistant'}
-        </button>
-        <button 
-          onClick={() => setActiveTab('architect')}
-          className={`flex-1 min-w-[100px] py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'architect' ? 'bg-[#101827] text-amber-400 shadow-lg border border-amber-400/20' : 'text-slate-400 hover:text-amber-500'}`}
-        >
-          <Terminal size={16} /> {language === 'ar' ? 'المهندس' : 'Architect'}
-          {!isPro && <ShieldCheck size={12} className="opacity-50" />}
-        </button>
-        <button 
-          onClick={() => setActiveTab('studio')}
-          className={`flex-1 min-w-[100px] py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'studio' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-purple-500'}`}
-        >
-          <Wand2 size={16} /> {language === 'ar' ? 'الاستوديو' : 'Studio'}
-        </button>
-        <button 
-          onClick={() => setActiveTab('video')}
-          className={`flex-1 min-w-[100px] py-4 rounded-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-indigo-500'}`}
-        >
-          <Sparkles size={16} /> {language === 'ar' ? 'فيديو' : 'Video'}
-        </button>
-      </div>
-
       {/* Chat Window Container */}
-      <div className={`bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-50 dark:border-slate-700 flex flex-col min-h-[550px] overflow-hidden relative ${activeTab === 'architect' && !isPro ? 'grayscale opacity-60' : ''}`}>
+      <div className={`bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-50 dark:border-slate-700 flex flex-col min-h-[550px] overflow-hidden relative`}>
         
-        {/* Pro Barrier for Architect Mode */}
-        {activeTab === 'architect' && !isPro && (
-           <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl p-8 text-center">
-             <div className="w-16 h-16 bg-amber-500 text-white rounded-3xl flex items-center justify-center shadow-2xl mb-4">
-                <ShieldCheck size={32} />
-             </div>
-             <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase mb-2">{language === 'ar' ? 'محتوى حصري لـ PRO' : 'PRO Content Only'}</h4>
-             <p className="text-xs text-slate-500 font-bold mb-6 max-w-[240px]">{language === 'ar' ? 'قم بالترقية للحصول على تحليل مالي عميق وبحث السوق المباشر.' : 'Upgrade to PRO for deep financial audits and live market search.'}</p>
-             <button onClick={() => navigate('/upgrade')} className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all">
-                Upgrade Now
-             </button>
-           </div>
-        )}
-
         {/* Chat History Area */}
         <div className="flex-1 p-6 md:p-8 space-y-6 overflow-y-auto max-h-[500px] custom-scrollbar bg-slate-50/20 dark:bg-slate-900/10">
-          {activeTab === 'studio' ? (
-             <div className="h-full flex flex-col items-center justify-center py-12 gap-6">
-                {!selectedImage ? (
-                  <div 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full max-w-sm aspect-video border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-slate-100 transition-all text-slate-400"
-                  >
-                    <Upload size={32} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">{language === 'ar' ? 'ارفع صورة المستند المالي' : 'Upload Financial Doc'}</span>
-                  </div>
-                ) : (
-                  <div className="relative group w-full max-w-sm">
-                    <img src={selectedImage.preview} className="w-full rounded-3xl shadow-2xl border-4 border-purple-500/20" />
-                    <button onClick={() => setSelectedImage(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg"><X size={16}/></button>
-                  </div>
-                )}
-             </div>
-          ) : activeTab === 'video' ? (
-             <div className="h-full flex flex-col items-center justify-center py-12 gap-6">
-                {!generatedVideoUrl ? (
-                  <div className="w-full max-w-sm aspect-video border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl flex flex-col items-center justify-center gap-3 text-slate-400 bg-slate-50 dark:bg-slate-800/50">
-                    <Sparkles size={32} className="text-indigo-500" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-center px-4">
-                      {isChatting ? (language === 'ar' ? 'جاري إنشاء الفيديو...' : 'Generating Video...') : (language === 'ar' ? 'أدخل وصف الفيديو بالأسفل' : 'Enter video prompt below')}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="relative group w-full max-w-sm">
-                    <video src={generatedVideoUrl} controls className="w-full rounded-3xl shadow-2xl border-4 border-indigo-500/20" />
-                    <button onClick={() => setGeneratedVideoUrl(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg"><X size={16}/></button>
-                  </div>
-                )}
-             </div>
-          ) : (
             <>
               {currentHistory.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center py-20 opacity-25 gap-4">
-                  <Compass size={64} className="text-blue-500" />
-                  <p className="text-xs font-black uppercase tracking-[5px] text-slate-900 dark:text-white">{language === 'ar' ? 'ابدأ المحادثة المالية' : 'Start Finance Chat'}</p>
+                <div className="h-full flex flex-col items-center justify-center text-center py-20 gap-4">
+                  <Compass size={64} className="text-blue-500 opacity-25" />
+                  <p className="text-xs font-black uppercase tracking-[5px] text-slate-900 dark:text-white opacity-25 mb-8">{language === 'ar' ? 'ابدأ المحادثة المالية' : 'Start Finance Chat'}</p>
+                  
+                  {/* Quick Prompts for Empty State */}
+                  <div className="flex flex-wrap justify-center gap-2 max-w-md">
+                    {(isConfigured ? [
+                      { en: "Summarize my spending", ar: "لخص مصاريفي" },
+                      { en: "How can I save money?", ar: "كيف يمكنني توفير المال؟" },
+                      { en: "Analyze my top categories", ar: "حلل أكثر الفئات استهلاكاً" },
+                      { en: "Predict next month's expenses", ar: "توقع مصاريف الشهر القادم" }
+                    ] : getLocalSuggestions(language).map(s => ({ en: s, ar: s }))).map((prompt, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setChatInput(language === 'ar' ? prompt.ar : prompt.en)}
+                        className="px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all border border-blue-100 dark:border-blue-800/30"
+                      >
+                        {language === 'ar' ? prompt.ar : prompt.en}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 currentHistory.map((msg, idx) => (
@@ -493,7 +513,6 @@ const AIInsights: React.FC = () => {
                 ))
               )}
             </>
-          )}
 
           {/* Pending AI Proposal */}
           {pendingProposal && (
@@ -548,8 +567,35 @@ const AIInsights: React.FC = () => {
           </div>
         )}
 
+        {/* +++ أضيف بناءً على طلبك +++ (Quick Prompts) */}
+        {!isChatting && currentHistory.length > 0 && (
+          <div className="px-6 pb-2 flex gap-2 overflow-x-auto custom-scrollbar">
+            {(isConfigured ? [
+              { en: "Summarize my spending", ar: "لخص مصاريفي" },
+              { en: "How can I save money?", ar: "كيف يمكنني توفير المال؟" },
+              { en: "Analyze my top categories", ar: "حلل أكثر الفئات استهلاكاً" },
+              { en: "Predict next month's expenses", ar: "توقع مصاريف الشهر القادم" }
+            ] : getLocalSuggestions(language).map(s => ({ en: s, ar: s }))).map((prompt, i) => (
+              <button
+                key={i}
+                onClick={() => setChatInput(language === 'ar' ? prompt.ar : prompt.en)}
+                className="whitespace-nowrap px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all border border-blue-100 dark:border-blue-800/30"
+              >
+                {language === 'ar' ? prompt.ar : prompt.en}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* +++ نهاية الإضافة +++ */}
+
         {/* Input Control Bar */}
         <div className="p-6 bg-white dark:bg-slate-800 border-t border-slate-50 dark:border-slate-700">
+          {selectedImage && (
+            <div className="mb-4 relative inline-block">
+              <img src={selectedImage.preview} className="h-20 rounded-xl border-2 border-blue-500/20" />
+              <button onClick={() => setSelectedImage(null)} className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg"><X size={12}/></button>
+            </div>
+          )}
           <div className="flex items-center gap-3 relative">
             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
             
@@ -560,11 +606,9 @@ const AIInsights: React.FC = () => {
               <LayoutGrid size={20} />
             </button>
 
-            {activeTab !== 'studio' && activeTab !== 'video' && (
-              <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-blue-600 transition-all flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-800">
-                <ImageIcon size={20} />
-              </button>
-            )}
+            <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-blue-600 transition-all flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-800">
+              <ImageIcon size={20} />
+            </button>
 
             <div className="flex-1 relative">
               <input 
@@ -572,7 +616,7 @@ const AIInsights: React.FC = () => {
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                placeholder={activeTab === 'studio' ? (language === 'ar' ? 'صف التعديل...' : 'Describe edit...') : activeTab === 'video' ? (language === 'ar' ? 'أدخل وصف الفيديو...' : 'Describe video...') : (language === 'ar' ? 'اسأل أي شيء مالي...' : 'Ask anything financial...')}
+                placeholder={language === 'ar' ? 'اسأل أي شيء مالي...' : 'Ask anything financial...'}
                 className="w-full py-4 pl-5 pr-5 bg-slate-50 dark:bg-slate-900 border border-transparent rounded-full text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
               />
             </div>
@@ -580,7 +624,7 @@ const AIInsights: React.FC = () => {
             <button 
               onClick={() => handleSendMessage()}
               disabled={(!chatInput.trim() && !selectedImage) || isChatting}
-              className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl transition-all active:scale-95 disabled:opacity-20 ${activeTab === 'architect' ? 'bg-[#101827] text-amber-400 border border-amber-400/30' : activeTab === 'video' ? 'bg-indigo-600 text-white shadow-indigo-500/20' : 'bg-blue-600 text-white shadow-blue-500/20'}`}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl transition-all active:scale-95 disabled:opacity-20 ${isPro ? 'bg-[#101827] text-amber-400 border border-amber-400/30' : 'bg-blue-600 text-white shadow-blue-500/20'}`}
             >
               <Send size={20} />
             </button>

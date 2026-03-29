@@ -67,6 +67,11 @@ const Installments: React.FC = () => {
     }
   };
 
+  const parseArabicNumber = (val: string) => {
+    const englishVal = val.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    return englishVal.replace(/[^0-9.]/g, '');
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title || !formData.totalAmount || !formData.installmentCount) return;
@@ -336,9 +341,10 @@ const Installments: React.FC = () => {
                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2">{language === 'ar' ? 'المبلغ الإجمالي (الأصل)' : 'Total Principal Amount'}</label>
                  <input 
                    required
-                   type="number"
+                   type="text"
+                   inputMode="decimal"
                    value={formData.totalAmount || ''} 
-                   onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value)})}
+                   onChange={e => setFormData({...formData, totalAmount: parseFloat(parseArabicNumber(e.target.value)) || 0})}
                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl font-bold text-slate-900 dark:text-white border-none outline-none focus:ring-4 focus:ring-rose-500/10"
                    placeholder="0.00"
                  />
@@ -348,9 +354,10 @@ const Installments: React.FC = () => {
                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2">{language === 'ar' ? 'نسبة الفائدة (إن وجدت)' : 'Interest Rate % (Flat)'}</label>
                  <div className="relative">
                     <input 
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={formData.interestRate || ''} 
-                      onChange={e => setFormData({...formData, interestRate: parseFloat(e.target.value)})}
+                      onChange={e => setFormData({...formData, interestRate: parseFloat(parseArabicNumber(e.target.value)) || 0})}
                       className="w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl font-bold text-slate-900 dark:text-white border-none outline-none focus:ring-4 focus:ring-rose-500/10"
                       placeholder="0"
                     />
@@ -362,9 +369,10 @@ const Installments: React.FC = () => {
                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2">{language === 'ar' ? 'عدد الأشهر' : 'Duration (Months)'}</label>
                  <input 
                    required
-                   type="number"
+                   type="text"
+                   inputMode="numeric"
                    value={formData.installmentCount || ''} 
-                   onChange={e => setFormData({...formData, installmentCount: parseFloat(e.target.value)})}
+                   onChange={e => setFormData({...formData, installmentCount: parseFloat(parseArabicNumber(e.target.value)) || 0})}
                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl font-bold text-slate-900 dark:text-white border-none outline-none focus:ring-4 focus:ring-rose-500/10"
                    placeholder="12"
                  />
@@ -476,9 +484,10 @@ const Installments: React.FC = () => {
               <div className="space-y-4 mb-8">
                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2">{language === 'ar' ? 'غرامة تأخير (إن وجدت)' : 'Late Penalty (Optional)'}</label>
                  <input 
-                   type="number"
+                   type="text"
+                   inputMode="decimal"
                    value={penalty}
-                   onChange={e => setPenalty(parseFloat(e.target.value))}
+                   onChange={e => setPenalty(parseFloat(parseArabicNumber(e.target.value)) || 0)}
                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl font-bold text-slate-900 dark:text-white border-none outline-none focus:ring-4 focus:ring-emerald-500/10"
                  />
               </div>

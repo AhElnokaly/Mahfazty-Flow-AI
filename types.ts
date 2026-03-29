@@ -3,7 +3,8 @@
 export enum TransactionType {
   INCOME = 'INCOME',
   EXPENSE = 'EXPENSE',
-  TRANSFER = 'TRANSFER'
+  TRANSFER = 'TRANSFER',
+  INVESTMENT = 'INVESTMENT' // +++ أضيف بناءً على طلبك +++
 }
 
 export interface Group {
@@ -22,6 +23,7 @@ export interface Client {
   icon?: string; 
   contact?: string;
   isArchived?: boolean;
+  deletedAt?: string;
 }
 
 export interface TransactionItem {
@@ -31,6 +33,7 @@ export interface TransactionItem {
   quantity: number;
   category?: string;
   barcode?: string;
+  isSettled?: boolean; // +++ أضيف بناءً على طلبك +++
 }
 
 export type PaymentMethod = 'cash' | 'credit';
@@ -57,15 +60,21 @@ export interface Transaction {
   creditCardId?: string; // New: Link to a specific credit card
   dueDate?: string;
   isSettled?: boolean;
+  isDebt?: boolean; // New: Mark transaction as a debt/loan
+  investmentAction?: 'BUY' | 'SELL' | 'RETURN'; // New: Action for investments
+  debtAction?: 'BORROW' | 'LEND' | 'REPAY_BORROW' | 'REPAY_LEND'; // New: Action for debts
   date: string;
   groupId: string;
   clientId: string;
+  clientIds?: string[]; // +++ أضيف بناءً على طلبك +++
   note?: string;
   items?: TransactionItem[]; // New: Support for itemized transactions
   shares?: number;
   pricePerShare?: number;
   interestRate?: number;
   duration?: number;
+  investmentType?: 'stock' | 'deposit'; // +++ أضيف بناءً على طلبك +++
+  stockSymbol?: string; // +++ أضيف بناءً على طلبك +++
 }
 
 export interface UserProfile {
@@ -176,7 +185,12 @@ export interface AppState {
   isOnline: boolean;
   lastSyncTimestamp: string | null;
   syncLocationSet: boolean;
-  syncProvider: 'local' | 'cloud' | 'manual';
+  syncProvider: 'local' | 'cloud' | 'manual' | 'custom_db';
+  customDbConfig?: {
+    provider: 'firebase' | 'supabase' | 'rest';
+    url: string;
+    apiKey: string;
+  };
   cloudEndpoint?: string;
   cloudToken?: string;
   syncHistory: SyncLogEntry[];

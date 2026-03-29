@@ -1,7 +1,7 @@
 import React from 'react';
 import { useApp } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { X, Sun, Moon, Eye, EyeOff, Zap, Crown, Bell, LogIn, Settings, User, Share2, CreditCard } from 'lucide-react';
+import { X, Sun, Moon, Eye, EyeOff, Zap, Crown, Bell, LogIn, Settings, User, Share2, CreditCard, BarChart3 } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -154,6 +154,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             >
               <CreditCard size={20} />
               <span className="text-sm font-bold">{state.language === 'ar' ? 'البطاقات الائتمانية' : 'Credit Cards'}</span>
+            </button>
+
+            <button 
+              onClick={() => { onClose(); navigate('/graph-maker'); }}
+              className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <BarChart3 size={20} />
+              <span className="text-sm font-bold">{state.language === 'ar' ? 'صانع الجرافات' : 'Graph Maker'}</span>
+            </button>
+
+            <button 
+              onClick={() => { onClose(); navigate('/archive'); }}
+              className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+              <span className="text-sm font-bold">{state.language === 'ar' ? 'الأرشيف' : 'Archive'}</span>
             </button>
 
             <button 

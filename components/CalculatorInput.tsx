@@ -24,7 +24,8 @@ export const CalculatorInput: React.FC<CalculatorInputProps> = ({ value, onChang
     try {
       // Basic safe evaluation of math expression
       // Only allow numbers, dots, and basic operators
-      const sanitized = expression.replace(/[^0-9+\-*/.]/g, '');
+      const englishExpression = expression.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+      const sanitized = englishExpression.replace(/[^0-9+\-*/.]/g, '');
       if (!sanitized) return;
       
       // eslint-disable-next-line no-new-func
@@ -64,9 +65,11 @@ export const CalculatorInput: React.FC<CalculatorInputProps> = ({ value, onChang
       <div className="relative flex items-center">
         <input
           type="text"
+          inputMode="decimal"
           value={isOpen ? expression : value}
           onChange={(e) => {
-            const val = e.target.value.replace(/[^0-9+\-*/.]/g, '');
+            const englishVal = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+            const val = englishVal.replace(/[^0-9+\-*/.]/g, '');
             setExpression(val);
             if (!isOpen) onChange(val);
           }}

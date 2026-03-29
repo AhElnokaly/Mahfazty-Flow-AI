@@ -82,6 +82,36 @@ const Goals: React.FC = () => {
 
   const icons = ['🎯', '🚗', '🏠', '✈️', '💻', '💍', '🎓', '🏥'];
 
+  // +++ أضيف بناءً على طلبك +++ (Future Calculations / Projections)
+  const averageMonthlySavings = useMemo(() => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentIncome = state.transactions
+      .filter(t => t.type === 'INCOME' as any && new Date(t.date) >= thirtyDaysAgo)
+      .reduce((sum, t) => sum + t.amount, 0);
+      
+    const recentExpense = state.transactions
+      .filter(t => t.type === 'EXPENSE' as any && new Date(t.date) >= thirtyDaysAgo)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const savings = recentIncome - recentExpense;
+    return savings > 0 ? savings : 0;
+  }, [state.transactions]);
+
+  const getEstimatedCompletion = (goal: Goal) => {
+    if (goal.currentAmount >= goal.targetAmount) return language === 'ar' ? 'مكتمل' : 'Completed';
+    if (averageMonthlySavings <= 0) return language === 'ar' ? 'لا يوجد توفير كافٍ' : 'Not enough savings';
+    
+    const remaining = goal.targetAmount - goal.currentAmount;
+    const monthsNeeded = Math.ceil(remaining / averageMonthlySavings);
+    
+    const date = new Date();
+    date.setMonth(date.getMonth() + monthsNeeded);
+    return date.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { month: 'short', year: 'numeric' });
+  };
+  // +++ نهاية الإضافة +++
+
   return (
     <div className="space-y-6 animate-in fade-in duration-700 pb-20 px-2 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
@@ -263,9 +293,14 @@ const Goals: React.FC = () => {
               
               <div className="flex justify-between items-center">
                 <span className="text-[10px] font-black text-slate-500">{progress.toFixed(1)}%</span>
-                {isCompleted && (
+                {isCompleted ? (
                   <span className="flex items-center gap-1 text-[10px] font-black text-emerald-500 uppercase tracking-widest">
                     <Trophy size={12} /> {language === 'ar' ? 'مكتمل' : 'Completed'}
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-black text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-100 dark:border-slate-700">
+                    {/* +++ أضيف بناءً على طلبك +++ */}
+                    {language === 'ar' ? 'المتوقع:' : 'Est:'} {getEstimatedCompletion(goal)}
                   </span>
                 )}
               </div>

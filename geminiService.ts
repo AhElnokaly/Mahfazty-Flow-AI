@@ -114,7 +114,59 @@ export const getActiveApiKey = (state: AppState, excludedIds: string[] = []) => 
 // Correct usage of GoogleGenAI: Create instance with process.env.API_KEY inside the call.
 export const sendChatMessage = async (state: AppState, dispatch: any, message: string, isProChat = false, imageData?: { data: string, mimeType: string }): Promise<AIChatResponse> => {
   const history = isProChat ? state.proChatHistory : state.chatHistory;
+  const isArabic = state.language === 'ar';
   
+  // --- OFFLINE COMMAND PROCESSING ---
+  const msg = message.toLowerCase().trim();
+  
+  if (msg.includes('رصيد') || msg.includes('balance')) {
+    return { text: isArabic ? `رصيدك الحالي هو ${state.walletBalance.toLocaleString()} ${state.baseCurrency}` : `Your current balance is ${state.walletBalance.toLocaleString()} ${state.baseCurrency}` };
+  }
+
+  const addMatch = msg.match(/(اضف|إضافة|add)\s+(مصروف|دخل|expense|income)\s+(\d+)\s*(ل|الى|لـ|to)?\s*(.+)/i);
+  if (addMatch) {
+    const typeStr = addMatch[2];
+    const amount = parseFloat(addMatch[3]);
+    let targetNameRaw = addMatch[5].trim();
+    
+    // Handle Arabic prefix "ل" (e.g., "للمنزل" -> "المنزل")
+    if (targetNameRaw.startsWith('ل') && !targetNameRaw.startsWith('لل')) {
+        targetNameRaw = targetNameRaw.substring(1);
+    } else if (targetNameRaw.startsWith('لل')) {
+        targetNameRaw = 'ا' + targetNameRaw.substring(1);
+    }
+
+    const isIncome = typeStr === 'دخل' || typeStr === 'income';
+    
+    let targetGroup = state.groups.find(g => g.name.toLowerCase() === targetNameRaw.toLowerCase() && !g.isArchived);
+    let targetClient = state.clients.find(c => c.name.toLowerCase() === targetNameRaw.toLowerCase() && !c.isArchived);
+
+    if (targetGroup || targetClient) {
+      const groupId = targetGroup ? targetGroup.id : targetClient!.groupId;
+      const clientId = targetClient ? targetClient.id : state.clients.find(c => c.groupId === groupId && !c.isArchived)?.id;
+
+      if (groupId && clientId) {
+        if (dispatch) {
+          dispatch.addTransaction({
+            type: isIncome ? 'INCOME' : 'EXPENSE',
+            amount,
+            currency: state.baseCurrency,
+            groupId,
+            clientId,
+            clientIds: [clientId],
+            date: new Date().toISOString().split('T')[0],
+            note: isArabic ? 'تمت الإضافة عبر المساعد الذكي' : 'Added via Smart Assistant'
+          });
+        }
+        return { text: isArabic ? `تمت إضافة ${isIncome ? 'الدخل' : 'المصروف'} بنجاح بقيمة ${amount} لـ ${targetNameRaw}.` : `Successfully added ${isIncome ? 'income' : 'expense'} of ${amount} to ${targetNameRaw}.` };
+      } else {
+         return { text: isArabic ? `المجموعة "${targetNameRaw}" لا تحتوي على عملاء. يرجى إضافة عميل أولاً.` : `Group "${targetNameRaw}" has no clients. Please add a client first.` };
+      }
+    }
+    return { text: isArabic ? `لم أتمكن من العثور على مجموعة أو عميل باسم "${targetNameRaw}". يرجى التأكد من الاسم.` : `Could not find a group or client named "${targetNameRaw}". Please check the name.` };
+  }
+  // --- END OFFLINE COMMAND PROCESSING ---
+
   let excludedIds: string[] = [];
   let attempt = 0;
   // Allow trying all available keys
@@ -124,7 +176,11 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
     const activeKeyConfig = getActiveApiKey(state, excludedIds);
 
     if (!activeKeyConfig) {
-      return { text: state.language === 'ar' ? 'يرجى إضافة مفتاح API نشط في الإعدادات.' : 'Please add an active API Key in Settings.' };
+      return { 
+        text: isArabic 
+          ? `مرحباً بك في المساعد الذكي (وضع عدم الاتصال).\n\nالأوامر المتاحة حالياً:\n- "كم رصيدي؟"\n- "اضف مصروف [المبلغ] لـ [اسم المجموعة/العميل]"\n- "اضف دخل [المبلغ] لـ [اسم المجموعة/العميل]"\n\nللحصول على تحليل ذكي متقدم، يرجى إضافة مفتاح API في الإعدادات.` 
+          : `Welcome to the Smart Assistant (Offline Mode).\n\nAvailable commands:\n- "What is my balance?"\n- "Add expense [amount] to [Group/Client Name]"\n- "Add income [amount] to [Group/Client Name]"\n\nFor advanced AI analysis, please add an API key in Settings.` 
+      };
     }
 
     try {

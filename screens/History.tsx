@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { useApp } from '../store';
+import { useApp, isIncomeLike, isExpenseLike } from '../store';
 import { TransactionType, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -25,8 +25,12 @@ const History: React.FC = () => {
   const transactions = useMemo(() => {
     return state.transactions.filter(t => {
       const g = state.groups.find(g => g.id === t.groupId);
-      const c = state.clients.find(c => c.id === t.clientId);
-      return (!g || !g.isArchived) && (!c || !c.isArchived);
+      // Check if ANY of the clients associated with the transaction are archived
+      const hasArchivedClient = t.clientIds 
+        ? t.clientIds.some(cId => state.clients.find(c => c.id === cId)?.isArchived)
+        : state.clients.find(c => c.id === t.clientId)?.isArchived;
+      
+      return (!g || !g.isArchived) && !hasArchivedClient;
     });
   }, [state.transactions, state.groups, state.clients]);
 
@@ -73,8 +77,8 @@ const History: React.FC = () => {
     transactions.forEach(t => {
       const tDate = t.date.split('T')[0]; 
       if (!data[tDate]) data[tDate] = { income: 0, expense: 0, count: 0 };
-      if (t.type === TransactionType.INCOME) data[tDate].income += t.amount;
-      else data[tDate].expense += t.amount;
+      if (isIncomeLike(t)) data[tDate].income += t.amount;
+      else if (isExpenseLike(t)) data[tDate].expense += t.amount;
       data[tDate].count += 1;
     });
     return data;
@@ -91,9 +95,11 @@ const History: React.FC = () => {
 
     if (searchQuery) {
       result = result.filter(t => {
-        const client = clients.find(c => c.id === t.clientId);
+        const clientsForTx = t.clientIds && t.clientIds.length > 0 ? t.clientIds : [t.clientId];
+        const clientNames = clientsForTx.map(cId => clients.find(c => c.id === cId)?.name || '').join(' ');
+        
         return (t.note || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-               (client?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+               clientNames.toLowerCase().includes(searchQuery.toLowerCase());
       });
     }
 
@@ -106,7 +112,13 @@ const History: React.FC = () => {
         result = result.filter(t => t.date <= endDate);
       }
       if (selectedType !== 'all') {
-        result = result.filter(t => t.type === selectedType);
+        if (selectedType === TransactionType.INCOME) {
+          result = result.filter(t => isIncomeLike(t));
+        } else if (selectedType === TransactionType.EXPENSE) {
+          result = result.filter(t => isExpenseLike(t));
+        } else {
+          result = result.filter(t => t.type === selectedType);
+        }
       }
       if (timeRange !== 'all' && !startDate && !endDate) {
         result = result.filter(t => {
@@ -132,7 +144,7 @@ const History: React.FC = () => {
     }
 
     if (selectedClientId !== 'all') {
-      result = result.filter(t => t.clientId === selectedClientId);
+      result = result.filter(t => t.clientId === selectedClientId || (t.clientIds && t.clientIds.includes(selectedClientId)));
     }
 
     return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -140,8 +152,8 @@ const History: React.FC = () => {
 
   const totals = useMemo(() => {
     return filteredTransactions.reduce((acc, t) => {
-      if (t.type === TransactionType.INCOME) acc.income += t.amount;
-      else acc.expense += t.amount;
+      if (isIncomeLike(t)) acc.income += t.amount;
+      else if (isExpenseLike(t)) acc.expense += t.amount;
       return acc;
     }, { income: 0, expense: 0 });
   }, [filteredTransactions]);
@@ -164,21 +176,25 @@ const History: React.FC = () => {
       return;
     }
 
-    const headers = ['Date', 'Type', 'Amount', 'Client', 'Group', 'Note', 'Items'];
+    const headers = ['Date', 'Type', 'Amount', 'Client', 'Group', 'Note', 'Items', 'Is Debt']; // +++ أضيف بناءً على طلبك +++
     const csvContent = [
       headers.join(','),
       ...filteredTransactions.map(t => {
-        const client = clients.find(c => c.id === t.clientId);
+        const primaryClient = clients.find(c => c.id === (t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId));
+        const clientNameDisplay = t.clientIds && t.clientIds.length > 1 
+          ? `${primaryClient?.name} +${t.clientIds.length - 1}` 
+          : primaryClient?.name;
         const group = groups.find(g => g.id === t.groupId);
         const itemsStr = t.items ? t.items.map(i => `${i.quantity}x ${i.name} (${i.price})`).join('; ') : '';
         return [
           new Date(t.date).toLocaleDateString(),
           t.type,
           t.amount,
-          `"${client?.name || ''}"`,
+          `"${clientNameDisplay || ''}"`,
           `"${group?.name || ''}"`,
           `"${t.note?.replace(/"/g, '""') || ''}"`,
-          `"${itemsStr.replace(/"/g, '""')}"`
+          `"${itemsStr.replace(/"/g, '""')}"`,
+          t.isDebt ? 'Yes' : 'No' // +++ أضيف بناءً على طلبك +++
         ].join(',');
       })
     ].join('\n');
@@ -209,17 +225,22 @@ const History: React.FC = () => {
     doc.setFontSize(18);
     doc.text(title, 14, 22);
     
-    const headers = [['Date', 'Type', 'Amount', 'Client', 'Group', 'Note']];
+    const headers = [['Date', 'Type', 'Amount', 'Client', 'Group', 'Note', 'Is Debt']]; // +++ أضيف بناءً على طلبك +++
     const data = filteredTransactions.map(t => {
-      const client = clients.find(c => c.id === t.clientId);
+      const primaryClientId = t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId;
+      const client = clients.find(c => c.id === primaryClientId);
+      const clientNameDisplay = t.clientIds && t.clientIds.length > 1 
+        ? `${client?.name} +${t.clientIds.length - 1}` 
+        : client?.name;
       const group = groups.find(g => g.id === t.groupId);
       return [
         new Date(t.date).toLocaleDateString(),
-        t.type === TransactionType.INCOME ? '+' : '-',
+        isIncomeLike(t) ? '+' : '-',
         `${t.amount} ${baseCurrency}`,
-        client?.name || '-',
+        clientNameDisplay || '-',
         group?.name || '-',
-        t.note || '-'
+        t.note || '-',
+        t.isDebt ? 'Yes' : 'No' // +++ أضيف بناءً على طلبك +++
       ];
     });
 
@@ -592,20 +613,29 @@ const History: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
               {filteredTransactions.map(t => {
-                const client = clients.find(c => c.id === t.clientId);
+                const primaryClientId = t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId;
+                const client = clients.find(c => c.id === primaryClientId);
+                const clientNameDisplay = t.clientIds && t.clientIds.length > 1 
+                  ? `${client?.name} +${t.clientIds.length - 1}` 
+                  : client?.name;
                 const group = groups.find(g => g.id === t.groupId);
                 return (
                   <tr key={t.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10 group transition-colors">
                     <td className="px-4 md:px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center text-lg shadow-sm">
-                          {t.groupId === 'system_adjustment' ? '⚖️' : (client?.icon || '👤')}
+                          {t.type === TransactionType.TRANSFER ? '💳' : t.groupId === 'system_adjustment' ? '⚖️' : (client?.icon || '👤')}
                         </div>
                         <div className="flex flex-col">
                              <>
                                <span className="text-xs font-black text-black dark:text-slate-100">
-                                 {t.groupId === 'system_adjustment' ? (language === 'ar' ? 'تسوية رصيد' : 'Balance Adjustment') : client?.name} 
-                                 {t.groupId !== 'system_adjustment' && <span className="text-[10px] text-slate-500 ml-1 font-bold">({group?.name})</span>}
+                                 {t.type === TransactionType.TRANSFER ? (language === 'ar' ? 'تسديد بطاقة ائتمانية' : 'Credit Card Payment') : t.groupId === 'system_adjustment' ? (language === 'ar' ? 'تسوية رصيد' : 'Balance Adjustment') : clientNameDisplay} 
+                                 {t.groupId !== 'system_adjustment' && t.type !== TransactionType.TRANSFER && <span className="text-[10px] text-slate-500 ml-1 font-bold">({group?.name})</span>}
+                                 {t.isDebt && ( // +++ أضيف بناءً على طلبك +++
+                                   <span className="ml-2 px-2 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[10px] rounded-full uppercase tracking-wider">
+                                     {language === 'ar' ? 'دين' : 'Debt'}
+                                   </span>
+                                 )}
                                </span>
                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">{new Date(t.date).toLocaleDateString()}</span>
                              </>
@@ -615,13 +645,15 @@ const History: React.FC = () => {
                     <td className="px-4 md:px-6 py-4 text-right">
                         <div className="flex flex-col items-end">
                           <span className={`text-sm font-black ${
-                            t.type === TransactionType.INCOME 
+                            isIncomeLike(t) 
                               ? 'text-emerald-600 dark:text-emerald-500' 
-                              : t.paymentMethod === 'credit' 
-                                ? 'text-purple-600 dark:text-purple-500' 
-                                : 'text-rose-600 dark:text-rose-500'
+                              : t.type === TransactionType.TRANSFER
+                                ? 'text-blue-600 dark:text-blue-500'
+                                : t.paymentMethod === 'credit' 
+                                  ? 'text-purple-600 dark:text-purple-500' 
+                                  : 'text-rose-600 dark:text-rose-500'
                           }`}>
-                            ${t.amount.toLocaleString()}
+                            {isIncomeLike(t) ? '+' : '-'}${t.amount.toLocaleString()}
                           </span>
                           {t.referenceTotal && (
                             <span className="text-[10px] text-slate-400 font-bold mt-0.5">
@@ -741,7 +773,8 @@ const History: React.FC = () => {
                      quantity: item.quantity,
                      category: item.category,
                      note: t.note,
-                     clientId: t.clientId
+                     clientId: t.clientId,
+                     clientIds: t.clientIds
                    };
                  }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -791,7 +824,11 @@ const History: React.FC = () => {
                            </thead>
                          <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
                            {itemTransactions.map((t: any, idx: number) => {
-                             const client = clients.find((c: any) => c.id === t.clientId);
+                             const primaryClientId = t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId;
+                             const client = clients.find((c: any) => c.id === primaryClientId);
+                             const clientNameDisplay = t.clientIds && t.clientIds.length > 1 
+                               ? `${client?.name} +${t.clientIds.length - 1}` 
+                               : client?.name;
                              return (
                                <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                                  <td className="px-4 md:px-6 py-4 text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -808,7 +845,7 @@ const History: React.FC = () => {
                                      <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs">
                                        {client?.icon || '🏪'}
                                      </span>
-                                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{client?.name || '-'}</span>
+                                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{clientNameDisplay || '-'}</span>
                                    </div>
                                  </td>
                                </tr>

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { useApp } from '../store';
+import { useApp, isIncomeLike, isExpenseLike } from '../store';
 import { 
   Plus, Trash2, Layers, UserPlus, TrendingUp, TrendingDown, 
   Briefcase, Edit3, Check, X, ChevronDown, ChevronUp, History, 
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { TransactionType } from '../types';
 import ConfirmModal from '../components/ConfirmModal';
+import ClientEditModal from '../components/ClientEditModal';
 
 const GroupsManager: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -17,8 +18,10 @@ const GroupsManager: React.FC = () => {
   const transactions = useMemo(() => {
     return state.transactions.filter(t => {
       const g = state.groups.find(g => g.id === t.groupId);
-      const c = state.clients.find(c => c.id === t.clientId);
-      return (!g || !g.isArchived) && (!c || !c.isArchived);
+      const hasArchivedClient = t.clientIds 
+        ? t.clientIds.some(cId => state.clients.find(c => c.id === cId)?.isArchived)
+        : state.clients.find(c => c.id === t.clientId)?.isArchived;
+      return (!g || !g.isArchived) && !hasArchivedClient;
     });
   }, [state.transactions, state.groups, state.clients]);
 
@@ -29,8 +32,7 @@ const GroupsManager: React.FC = () => {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editGroupValue, setEditGroupValue] = useState({ name: '', icon: '', monthlyBudget: 0 });
 
-  const [editingClientId, setEditingClientId] = useState<string | null>(null);
-  const [editClientValue, setEditClientValue] = useState({ name: '', icon: '' });
+  const [clientToEdit, setClientToEdit] = useState<any>(null);
 
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [newClientName, setNewClientName] = useState('');
@@ -42,6 +44,11 @@ const GroupsManager: React.FC = () => {
 
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
+  };
+
+  const parseArabicNumber = (val: string) => {
+    const englishVal = val.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    return englishVal.replace(/[^0-9.]/g, '');
   };
 
   const handleAddGroup = (e: React.FormEvent) => {
@@ -66,14 +73,14 @@ const GroupsManager: React.FC = () => {
   const getGroupStats = (gid: string) => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     const filtered = transactions.filter(t => t.groupId === gid && t.date.startsWith(currentMonth));
-    const income = filtered.filter(t => t.type === TransactionType.INCOME).reduce((s, t) => s + t.amount, 0);
-    const expense = filtered.filter(t => t.type === TransactionType.EXPENSE).reduce((s, t) => s + t.amount, 0);
+    const income = filtered.filter(t => isIncomeLike(t)).reduce((s, t) => s + t.amount, 0);
+    const expense = filtered.filter(t => isExpenseLike(t)).reduce((s, t) => s + t.amount, 0);
     return { income, expense };
   };
 
   const confirmDeleteGroup = () => {
     if (groupToDelete) {
-      dispatch.deleteGroup(groupToDelete);
+      dispatch.permanentDeleteGroup(groupToDelete);
       setGroupToDelete(null);
     }
   };
@@ -86,8 +93,9 @@ const GroupsManager: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500 pb-20 px-2">
-      <div className="text-center py-6 flex flex-col items-center">
+    <>
+      <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500 pb-20 px-2">
+        <div className="text-center py-6 flex flex-col items-center">
         <div className="flex items-center gap-2">
           <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
             {language === 'ar' ? 'هيكلة الميزانية' : 'Budget Architecture'}
@@ -108,7 +116,7 @@ const GroupsManager: React.FC = () => {
       <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800">
         <form onSubmit={handleAddGroup} className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder={language === 'ar' ? 'اسم المجموعة...' : 'Group name...'} className="md:col-span-2 px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
-          <input type="number" value={newGroupBudget} onChange={(e) => setNewGroupBudget(e.target.value)} placeholder={language === 'ar' ? 'الميزانية...' : 'Budget...'} className="px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
+          <input type="text" inputMode="decimal" value={newGroupBudget} onChange={(e) => setNewGroupBudget(parseArabicNumber(e.target.value))} placeholder={language === 'ar' ? 'الميزانية...' : 'Budget...'} className="px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
           <button type="submit" className="bg-blue-600 text-white rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-500/20">
             {language === 'ar' ? 'إنشاء' : 'Create'}
           </button>
@@ -154,9 +162,10 @@ const GroupsManager: React.FC = () => {
                          placeholder="Icon (emoji)"
                        />
                        <input 
-                         type="number"
+                         type="text"
+                         inputMode="decimal"
                          value={editGroupValue.monthlyBudget} 
-                         onChange={(e) => setEditGroupValue({...editGroupValue, monthlyBudget: Number(e.target.value)})} 
+                         onChange={(e) => setEditGroupValue({...editGroupValue, monthlyBudget: Number(parseArabicNumber(e.target.value))})} 
                          className="px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold"
                          placeholder="Monthly Budget"
                        />
@@ -262,70 +271,31 @@ const GroupsManager: React.FC = () => {
                    </div>
 
                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                     {clients.filter(c => c.groupId === group.id).map(client => (
-                       editingClientId === client.id ? (
-                         <div key={client.id} className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-200 dark:border-blue-800">
-                           <div className="flex items-center gap-2 flex-1">
-                             <input 
-                               value={editClientValue.icon} 
-                               onChange={(e) => setEditClientValue({...editClientValue, icon: e.target.value})} 
-                               className="w-10 h-8 px-1 bg-white dark:bg-slate-800 rounded-lg text-center text-sm outline-none" 
-                             />
-                             <input 
-                               value={editClientValue.name} 
-                               onChange={(e) => setEditClientValue({...editClientValue, name: e.target.value})} 
-                               className="flex-1 px-3 py-1 bg-white dark:bg-slate-800 rounded-lg text-xs font-bold outline-none" 
-                             />
-                           </div>
-                           <div className="flex gap-1 ml-2">
-                             <button 
-                               onClick={() => {
-                                 dispatch.updateClient(client.id, editClientValue);
-                                 setEditingClientId(null);
-                               }}
-                               className="text-emerald-500 hover:text-emerald-600 p-1 bg-white dark:bg-slate-800 rounded-lg"
-                             >
-                               <Check size={14} />
-                             </button>
-                             <button 
-                               onClick={() => setEditingClientId(null)}
-                               className="text-slate-400 hover:text-slate-500 p-1 bg-white dark:bg-slate-800 rounded-lg"
-                             >
-                               <X size={14} />
-                             </button>
-                           </div>
-                         </div>
-                       ) : (
-                         <div key={client.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                           <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm text-sm">
-                               {client.icon || '👤'}
-                             </div>
-                             <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{client.name}</span>
-                           </div>
-                           <div className="flex gap-1">
-                             <button 
-                               onClick={() => {
-                                 setEditingClientId(client.id);
-                                 setEditClientValue({ name: client.name, icon: client.icon || '👤' });
-                               }}
-                               className="text-slate-400 hover:text-blue-500 p-1"
-                             >
-                               <Edit3 size={14} />
-                             </button>
-                             <button 
-                               onClick={() => {
-                                 setClientToDelete(client.id);
-                               }}
-                               className="text-slate-400 hover:text-rose-500 p-1"
-                             >
-                               <Trash2 size={14} />
-                             </button>
-                           </div>
-                         </div>
-                       )
-                     ))}
-                   </div>
+                      {clients.filter(c => c.groupId === group.id).map(client => (
+                        <div key={client.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm text-sm">
+                              {client.icon || '👤'}
+                            </div>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{client.name}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setClientToEdit(client); }}
+                              className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setClientToDelete(client.id); }}
+                              className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
 
                    {expandedGroupId === group.id && (
                      <form onSubmit={(e) => handleAddClient(e, group.id)} className="mt-4 flex gap-2 animate-in slide-in-from-top-2">
@@ -353,6 +323,8 @@ const GroupsManager: React.FC = () => {
         })}
       </div>
 
+      </div>
+
       <ConfirmModal
         isOpen={!!groupToDelete}
         onClose={() => setGroupToDelete(null)}
@@ -372,7 +344,25 @@ const GroupsManager: React.FC = () => {
         confirmText={language === 'ar' ? 'مسح' : 'Delete'}
         cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
       />
-    </div>
+
+      <ClientEditModal
+        isOpen={!!clientToEdit}
+        onClose={() => setClientToEdit(null)}
+        client={clientToEdit}
+        groups={groups}
+        language={language}
+        onSave={(name, icon, groupId) => {
+          if (clientToEdit) {
+            if (groupId !== clientToEdit.groupId) {
+              dispatch.moveClient(clientToEdit.id, groupId);
+            }
+            if (name !== clientToEdit.name || icon !== clientToEdit.icon) {
+              dispatch.updateClient(clientToEdit.id, { name, icon });
+            }
+          }
+        }}
+      />
+    </>
   );
 };
 

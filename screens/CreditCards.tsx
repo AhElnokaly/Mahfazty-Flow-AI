@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../store';
 import { CreditCard as CreditCardIcon, Plus, Trash2, Edit3, ArrowLeft, Calendar, DollarSign, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { CreditSettlementModal } from '../components/CreditSettlementModal';
 
 export const CreditCards: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -13,18 +14,27 @@ export const CreditCards: React.FC = () => {
   
   const [name, setName] = useState('');
   const [limit, setLimit] = useState('');
+  const [balance, setBalance] = useState('');
   const [billingDate, setBillingDate] = useState('1');
   const [dueDate, setDueDate] = useState('15');
+
+  const [payingCardId, setPayingCardId] = useState<string | null>(null);
 
   const activeCards = (state.creditCards || []).filter(c => !c.isArchived);
 
   const resetForm = () => {
     setName('');
     setLimit('');
+    setBalance('');
     setBillingDate('1');
     setDueDate('15');
     setIsAdding(false);
     setEditingId(null);
+  };
+
+  const parseArabicNumber = (val: string) => {
+    const englishVal = val.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    return englishVal.replace(/[^0-9.]/g, '');
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -35,6 +45,7 @@ export const CreditCards: React.FC = () => {
       dispatch.updateCreditCard(editingId, {
         name,
         limit: parseFloat(limit),
+        balance: balance ? parseFloat(balance) : 0,
         billingDate: parseInt(billingDate),
         dueDate: parseInt(dueDate)
       });
@@ -43,7 +54,7 @@ export const CreditCards: React.FC = () => {
       dispatch.addCreditCard({
         name,
         limit: parseFloat(limit),
-        balance: 0,
+        balance: balance ? parseFloat(balance) : 0,
         billingDate: parseInt(billingDate),
         dueDate: parseInt(dueDate),
         color: 'bg-slate-800',
@@ -57,6 +68,7 @@ export const CreditCards: React.FC = () => {
   const handleEdit = (card: any) => {
     setName(card.name);
     setLimit(card.limit.toString());
+    setBalance(card.balance.toString());
     setBillingDate(card.billingDate.toString());
     setDueDate(card.dueDate.toString());
     setEditingId(card.id);
@@ -119,22 +131,39 @@ export const CreditCards: React.FC = () => {
                 />
               </div>
               
-              <div>
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
-                  {language === 'ar' ? 'الحد الائتماني (Limit)' : 'Credit Limit'}
-                </label>
-                <div className="relative">
-                  <DollarSign size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="number"
-                    value={limit}
-                    onChange={(e) => setLimit(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500/50"
-                    required
-                    min="0"
-                    step="0.01"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
+                    {language === 'ar' ? 'الحد الائتماني (Limit)' : 'Credit Limit'}
+                  </label>
+                  <div className="relative">
+                    <DollarSign size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={limit}
+                      onChange={(e) => setLimit(parseArabicNumber(e.target.value))}
+                      placeholder="0.00"
+                      className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500/50"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
+                    {language === 'ar' ? 'الرصيد المستخدم الحالي' : 'Current Used Balance'}
+                  </label>
+                  <div className="relative">
+                    <DollarSign size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={balance}
+                      onChange={(e) => setBalance(parseArabicNumber(e.target.value))}
+                      placeholder="0.00"
+                      className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500/50"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -146,13 +175,15 @@ export const CreditCards: React.FC = () => {
                   <div className="relative">
                     <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={billingDate}
-                      onChange={(e) => setBillingDate(e.target.value)}
+                      onChange={(e) => {
+                        const val = parseArabicNumber(e.target.value);
+                        if (!val || (parseInt(val) >= 1 && parseInt(val) <= 31)) setBillingDate(val);
+                      }}
                       className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500/50"
                       required
-                      min="1"
-                      max="31"
                     />
                   </div>
                 </div>
@@ -163,13 +194,15 @@ export const CreditCards: React.FC = () => {
                   <div className="relative">
                     <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={dueDate}
-                      onChange={(e) => setDueDate(e.target.value)}
+                      onChange={(e) => {
+                        const val = parseArabicNumber(e.target.value);
+                        if (!val || (parseInt(val) >= 1 && parseInt(val) <= 31)) setDueDate(val);
+                      }}
                       className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500/50"
                       required
-                      min="1"
-                      max="31"
                     />
                   </div>
                 </div>
@@ -286,12 +319,20 @@ export const CreditCards: React.FC = () => {
                         <span>{language === 'ar' ? 'الاستحقاق:' : 'Due:'} {card.dueDate}</span>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => navigate('/add', { state: { type: 'expense', paymentMethod: 'credit' } })}
-                      className="text-xs font-black text-purple-600 dark:text-purple-400 uppercase tracking-wide hover:underline"
-                    >
-                      {language === 'ar' ? '+ إضافة مصروف' : '+ Add Expense'}
-                    </button>
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => setPayingCardId(card.id)}
+                        className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wide hover:underline"
+                      >
+                        {language === 'ar' ? 'تسديد' : 'Pay'}
+                      </button>
+                      <button 
+                        onClick={() => navigate('/add', { state: { type: 'expense', paymentMethod: 'credit' } })}
+                        className="text-xs font-black text-purple-600 dark:text-purple-400 uppercase tracking-wide hover:underline"
+                      >
+                        {language === 'ar' ? '+ إضافة مصروف' : '+ Add Expense'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -299,6 +340,13 @@ export const CreditCards: React.FC = () => {
           )}
         </div>
       </div>
+
+      {payingCardId && (
+        <CreditSettlementModal 
+          card={state.creditCards.find(c => c.id === payingCardId)!} 
+          onClose={() => setPayingCardId(null)} 
+        />
+      )}
     </div>
   );
 };

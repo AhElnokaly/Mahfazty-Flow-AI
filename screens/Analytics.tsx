@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useApp } from '../store';
+import { useApp, isIncomeLike, isExpenseLike } from '../store';
 import { 
   ComposedChart, Line, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, CartesianGrid,
@@ -48,6 +48,28 @@ const WIDGET_LIBRARY = [
     pro: false
   },
   {
+    id: 'debt_position',
+    icon: ArrowDownRight,
+    color: 'text-orange-500',
+    bgColor: 'bg-orange-50 dark:bg-orange-900/20',
+    titleEn: 'Debt Position',
+    titleAr: 'موقف الديون',
+    descEn: 'Debts you owe vs owed to you.',
+    descAr: 'مقارنة بين الديون التي لك وعليك.',
+    pro: false
+  },
+  {
+    id: 'investment_portfolio',
+    icon: TrendingUp,
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    titleEn: 'Investment Portfolio',
+    titleAr: 'المحفظة الاستثمارية',
+    descEn: 'Invested capital vs returns.',
+    descAr: 'رأس المال المستثمر مقابل العوائد.',
+    pro: false
+  },
+  {
     id: 'top_clients',
     icon: Users,
     color: 'text-emerald-500',
@@ -90,7 +112,20 @@ const WIDGET_LIBRARY = [
     descEn: 'Compare item prices across different stores.',
     descAr: 'مقارنة أسعار السلع بين المتاجر المختلفة.',
     pro: true
+  },
+  // +++ أضيف بناءً على طلبك +++ (Subscription Detection)
+  {
+    id: 'subscription_detector',
+    icon: Calendar,
+    color: 'text-pink-500',
+    bgColor: 'bg-pink-50 dark:bg-pink-900/20',
+    titleEn: 'Subscription Detector',
+    titleAr: 'مكتشف الاشتراكات',
+    descEn: 'Automatically detects recurring payments.',
+    descAr: 'اكتشاف المدفوعات المتكررة والاشتراكات تلقائياً.',
+    pro: false
   }
+  // +++ نهاية الإضافة +++
 ];
 
 // --- Custom Components ---
@@ -162,8 +197,10 @@ const ChartWidget: React.FC<{
   const transactions = useMemo(() => {
     return globalState.transactions.filter((t: any) => {
       const g = globalState.groups.find((g: any) => g.id === t.groupId);
-      const c = globalState.clients.find((c: any) => c.id === t.clientId);
-      return (!g || !g.isArchived) && (!c || !c.isArchived);
+      const hasArchivedClient = t.clientIds 
+        ? t.clientIds.some((cId: string) => globalState.clients.find((c: any) => c.id === cId)?.isArchived)
+        : globalState.clients.find((c: any) => c.id === t.clientId)?.isArchived;
+      return (!g || !g.isArchived) && !hasArchivedClient;
     });
   }, [globalState.transactions, globalState.groups, globalState.clients]);
   
@@ -194,7 +231,7 @@ const ChartWidget: React.FC<{
         txs = txs.filter(t => t.groupId === filterEntity);
       } else {
         // Assume Client ID
-        txs = txs.filter(t => t.clientId === filterEntity);
+        txs = txs.filter(t => t.clientId === filterEntity || (t.clientIds && t.clientIds.includes(filterEntity)));
       }
     }
 
@@ -231,7 +268,10 @@ const ChartWidget: React.FC<{
 
         let key = '';
         if (customConfig.groupBy === 'group') key = groups.find((g: any) => g.id === t.groupId)?.name || 'Unknown';
-        else if (customConfig.groupBy === 'client') key = clients.find((c: any) => c.id === t.clientId)?.name || 'Unknown';
+        else if (customConfig.groupBy === 'client') {
+          const primaryClientId = t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId;
+          key = clients.find((c: any) => c.id === primaryClientId)?.name || 'Unknown';
+        }
         else if (customConfig.groupBy === 'date') key = new Date(t.date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { month: 'short', day: 'numeric' });
 
         const val = (customConfig.dataSource === 'net' && t.type === TransactionType.EXPENSE) ? -t.amount : t.amount;
@@ -245,26 +285,73 @@ const ChartWidget: React.FC<{
       case 'cash_flow': {
         const dataMap: Record<string, { name: string, income: number, expense: number, net: number, dateObj: Date }> = {};
         filteredTransactions.forEach((t: Transaction) => {
+          if (!isIncomeLike(t) && !isExpenseLike(t)) return; // Exclude transfers and pure investments
           const tDate = new Date(t.date);
           // Group by Day if range is Week/Month, else Group by Month
           const isShortTerm = timeRange === '1W' || timeRange === '1M';
           const key = tDate.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', isShortTerm ? { month: 'short', day: 'numeric' } : { month: 'short', year: '2-digit' });
           
           if (!dataMap[key]) dataMap[key] = { name: key, income: 0, expense: 0, net: 0, dateObj: tDate };
-          if (t.type === TransactionType.INCOME) {
+          if (isIncomeLike(t)) {
             dataMap[key].income += t.amount;
             dataMap[key].net += t.amount;
-          } else {
+          } else if (isExpenseLike(t)) {
             dataMap[key].expense += t.amount;
             dataMap[key].net -= t.amount;
           }
         });
         return Object.values(dataMap).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
       }
+      case 'debt_position': {
+        const debtTransactions = filteredTransactions.filter((t: Transaction) => t.isDebt);
+        let totalDebtsIOwe = 0;
+        let totalDebtsOwedToMe = 0;
+        debtTransactions.forEach((t: Transaction) => {
+          if (t.debtAction === 'BORROW') totalDebtsIOwe += t.amount;
+          else if (t.debtAction === 'REPAY_BORROW') totalDebtsIOwe -= t.amount;
+          else if (t.debtAction === 'LEND') totalDebtsOwedToMe += t.amount;
+          else if (t.debtAction === 'REPAY_LEND') totalDebtsOwedToMe -= t.amount;
+          else {
+            // Fallback for old transactions
+            if (isIncomeLike(t)) totalDebtsIOwe += t.amount;
+            else if (isExpenseLike(t)) totalDebtsOwedToMe += t.amount;
+          }
+        });
+
+        const partialPayments = filteredTransactions.filter((t: Transaction) => t.referenceTotal && t.referenceTotal > t.amount);
+        partialPayments.forEach((t: Transaction) => {
+          const remaining = (t.referenceTotal || 0) - t.amount;
+          if (isExpenseLike(t)) totalDebtsIOwe += remaining;
+          else if (isIncomeLike(t)) totalDebtsOwedToMe += remaining;
+        });
+
+        globalState.installments.filter((i: any) => i.status === 'active').forEach((i: any) => {
+          const remaining = (i.totalAmount || (i.monthlyAmount * i.installmentCount)) - (i.paidCount * i.monthlyAmount);
+          if (remaining > 0) totalDebtsIOwe += remaining;
+        });
+
+        return [
+          { name: language === 'ar' ? 'ديون عليك' : 'You Owe', value: Math.max(0, totalDebtsIOwe), fill: '#F43F5E' },
+          { name: language === 'ar' ? 'ديون لك' : 'Owed to You', value: Math.max(0, totalDebtsOwedToMe), fill: '#10B981' }
+        ].filter(d => d.value > 0);
+      }
+      case 'investment_portfolio': {
+        const investmentTransactions = filteredTransactions.filter((t: Transaction) => t.type === TransactionType.INVESTMENT);
+        const investedCapital = investmentTransactions
+          .filter((t: Transaction) => t.investmentAction !== 'SELL' && t.investmentAction !== 'RETURN')
+          .reduce((s: number, t: Transaction) => s + t.amount, 0);
+        const investmentReturns = investmentTransactions
+          .filter((t: Transaction) => t.investmentAction === 'SELL' || t.investmentAction === 'RETURN')
+          .reduce((s: number, t: Transaction) => s + t.amount, 0);
+        return [
+          { name: language === 'ar' ? 'رأس المال' : 'Capital', value: investedCapital, fill: '#3B82F6' },
+          { name: language === 'ar' ? 'عوائد' : 'Returns', value: investmentReturns, fill: '#10B981' }
+        ].filter(d => d.value > 0);
+      }
       case 'lifestyle_radar': {
         const spendingByGroup = groups.map((g: any) => {
           const value = filteredTransactions
-            .filter((t: Transaction) => t.groupId === g.id && t.type === TransactionType.EXPENSE)
+            .filter((t: Transaction) => t.groupId === g.id && isExpenseLike(t))
             .reduce((s: number, t: Transaction) => s + t.amount, 0);
           return { subject: g.name, A: value, fullMark: 100 };
         });
@@ -275,7 +362,7 @@ const ChartWidget: React.FC<{
         const data = groups.map((g: any) => ({
           name: g.name,
           value: filteredTransactions
-            .filter((t: Transaction) => t.groupId === g.id && t.type === TransactionType.EXPENSE)
+            .filter((t: Transaction) => t.groupId === g.id && isExpenseLike(t))
             .reduce((s: number, t: Transaction) => s + t.amount, 0)
         })).filter((d: any) => d.value > 0).sort((a: any, b: any) => b.value - a.value);
         const COLORS = ['#F43F5E', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#64748B'];
@@ -285,7 +372,7 @@ const ChartWidget: React.FC<{
         return clients.map((c: any) => ({
           name: c.name,
           amount: filteredTransactions
-            .filter((t: Transaction) => t.clientId === c.id && t.type === TransactionType.EXPENSE)
+            .filter((t: Transaction) => (t.clientId === c.id || (t.clientIds && t.clientIds.includes(c.id))) && isExpenseLike(t))
             .reduce((s: number, t: Transaction) => s + t.amount, 0)
         })).filter((d: any) => d.amount > 0).sort((a: any, b: any) => b.amount - a.amount).slice(0, 5);
       }
@@ -296,8 +383,8 @@ const ChartWidget: React.FC<{
         const dailyNetMap: Record<string, number> = {};
         
         filteredTransactions.forEach((t: Transaction) => {
-           dailyNetMap[t.date] = (dailyNetMap[t.date] || 0) + (t.type === TransactionType.INCOME ? t.amount : -t.amount);
-           runningBalance += (t.type === TransactionType.INCOME ? t.amount : -t.amount); // Simple accumulation for visual
+           dailyNetMap[t.date] = (dailyNetMap[t.date] || 0) + (isIncomeLike(t) ? t.amount : -t.amount);
+           runningBalance += (isIncomeLike(t) ? t.amount : -t.amount); // Simple accumulation for visual
         });
         
         // Generate trend points
@@ -316,7 +403,7 @@ const ChartWidget: React.FC<{
         const itemHistory: Record<string, { date: string, price: number }[]> = {};
         
         filteredTransactions.forEach((t: Transaction) => {
-          if (t.type === TransactionType.EXPENSE && t.items && t.items.length > 0) {
+          if (isExpenseLike(t) && t.items && t.items.length > 0) {
             t.items.forEach(item => {
               const name = (item.name || '').trim().toLowerCase();
               if (!name) return;
@@ -355,8 +442,9 @@ const ChartWidget: React.FC<{
         const itemStorePrices: Record<string, Record<string, number[]>> = {};
         
         filteredTransactions.forEach((t: Transaction) => {
-          if (t.type === TransactionType.EXPENSE && t.items && t.items.length > 0 && t.clientId) {
-            const clientName = clients.find((c: any) => c.id === t.clientId)?.name || 'Unknown';
+          const primaryClientId = t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId;
+          if (isExpenseLike(t) && t.items && t.items.length > 0 && primaryClientId) {
+            const clientName = clients.find((c: any) => c.id === primaryClientId)?.name || 'Unknown';
             t.items.forEach(item => {
               const name = (item.name || '').trim().toLowerCase();
               if (!name) return;
@@ -386,14 +474,55 @@ const ChartWidget: React.FC<{
           return dataPoint;
         });
       }
+      // +++ أضيف بناءً على طلبك +++ (Subscription Detection Logic)
+      case 'subscription_detector': {
+        const potentialSubs: Record<string, { count: number, total: number, dates: string[], client: string }> = {};
+        
+        filteredTransactions.forEach((t: Transaction) => {
+          if (isExpenseLike(t)) {
+            const primaryClientId = t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId;
+            const key = `${t.amount}_${primaryClientId}`;
+            if (!potentialSubs[key]) {
+              potentialSubs[key] = { count: 0, total: 0, dates: [], client: clients.find((c: any) => c.id === primaryClientId)?.name || 'Unknown' };
+            }
+            potentialSubs[key].count += 1;
+            potentialSubs[key].total += t.amount;
+            potentialSubs[key].dates.push(t.date);
+          }
+        });
+
+        // Filter for recurring (same amount, same client, > 1 time)
+        return Object.entries(potentialSubs)
+          .filter(([_, data]) => data.count > 1)
+          .map(([key, data]) => ({
+            name: data.client,
+            amount: parseFloat(key.split('_')[0]),
+            count: data.count,
+            total: data.total,
+            lastDate: data.dates.sort().pop()
+          }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 5);
+      }
+      // +++ نهاية الإضافة +++
       default:
         return [];
     }
   }, [filteredTransactions, widgetId, groups, clients, language, timeRange]);
 
   const totalFilteredExpense = useMemo(() => {
-     return filteredTransactions.filter((t: Transaction) => t.type === TransactionType.EXPENSE).reduce((s: number, t: Transaction) => s + t.amount, 0);
+     return filteredTransactions.filter((t: Transaction) => isExpenseLike(t)).reduce((s: number, t: Transaction) => s + t.amount, 0);
   }, [filteredTransactions]);
+
+  const totalDebt = useMemo(() => {
+     if (widgetId !== 'debt_position') return 0;
+     return chartData.reduce((sum: number, item: any) => sum + item.value, 0);
+  }, [chartData, widgetId]);
+
+  const totalInvestment = useMemo(() => {
+     if (widgetId !== 'investment_portfolio') return 0;
+     return chartData.reduce((sum: number, item: any) => sum + item.value, 0);
+  }, [chartData, widgetId]);
 
   const getThemeColor = (theme?: string) => {
     switch (theme) {
@@ -492,6 +621,18 @@ const ChartWidget: React.FC<{
               <span className="text-xl font-black text-slate-800 dark:text-white">{totalFilteredExpense.toLocaleString()}</span>
             </div>
           )}
+          {widgetId === 'debt_position' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{language === 'ar' ? 'إجمالي الدين' : 'Total Debt'}</span>
+              <span className="text-xl font-black text-slate-800 dark:text-white">{totalDebt.toLocaleString()}</span>
+            </div>
+          )}
+          {widgetId === 'investment_portfolio' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{language === 'ar' ? 'إجمالي الاستثمار' : 'Total Inv.'}</span>
+              <span className="text-xl font-black text-slate-800 dark:text-white">{totalInvestment.toLocaleString()}</span>
+            </div>
+          )}
           <ResponsiveContainer width="100%" height="100%">
              {(() => {
                // Render based on widget type or custom config
@@ -535,6 +676,32 @@ const ChartWidget: React.FC<{
 
                // --- Expense Distribution ---
                if (widgetId === 'expense_distribution') {
+                  return (
+                      <RePieChart>
+                        <Pie 
+                          data={chartData} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value" labelLine={true} label={renderCustomizedLabel}
+                        >
+                          {chartData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.fill} strokeWidth={0} />)}
+                        </Pie>
+                      </RePieChart>
+                  );
+               }
+
+               // --- Debt Position ---
+               if (widgetId === 'debt_position') {
+                  return (
+                      <RePieChart>
+                        <Pie 
+                          data={chartData} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value" labelLine={true} label={renderCustomizedLabel}
+                        >
+                          {chartData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.fill} strokeWidth={0} />)}
+                        </Pie>
+                      </RePieChart>
+                  );
+               }
+
+               // --- Investment Portfolio ---
+               if (widgetId === 'investment_portfolio') {
                   return (
                       <RePieChart>
                         <Pie 
@@ -666,6 +833,45 @@ const ChartWidget: React.FC<{
                    </BarChart>
                  );
                }
+
+               // +++ أضيف بناءً على طلبك +++ (Subscription Detector Render)
+               if (widgetId === 'subscription_detector') {
+                 if (chartData.length === 0) {
+                   return (
+                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                       <Calendar size={32} className="mb-2 opacity-50" />
+                       <p className="text-xs font-bold text-center px-4">
+                         {language === 'ar' 
+                           ? 'لم يتم اكتشاف اشتراكات أو مدفوعات متكررة.' 
+                           : 'No subscriptions or recurring payments detected.'}
+                       </p>
+                     </div>
+                   );
+                 }
+                 
+                 return (
+                   <div className="h-full overflow-y-auto pr-2 space-y-3">
+                     {chartData.map((sub: any, idx: number) => (
+                       <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl flex items-center justify-between border border-slate-100 dark:border-slate-800">
+                         <div className="flex items-center gap-3">
+                           <div className="w-10 h-10 rounded-xl bg-pink-100 dark:bg-pink-900/30 text-pink-600 flex items-center justify-center shrink-0">
+                             <Calendar size={18} />
+                           </div>
+                           <div>
+                             <h4 className="text-sm font-black text-slate-900 dark:text-white">{sub.name}</h4>
+                             <p className="text-[10px] text-slate-500 font-bold">{sub.count} {language === 'ar' ? 'مرات' : 'times'} • {language === 'ar' ? 'آخر مرة' : 'Last:'} {sub.lastDate}</p>
+                           </div>
+                         </div>
+                         <div className="text-right">
+                           <div className="text-sm font-black text-slate-900 dark:text-white">{sub.amount.toLocaleString()}</div>
+                           <div className="text-[10px] text-slate-500 font-bold">{language === 'ar' ? 'الإجمالي' : 'Total'}: {sub.total.toLocaleString()}</div>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 );
+               }
+               // +++ نهاية الإضافة +++
 
                // --- CUSTOM WIDGETS ---
                if (customConfig) {
@@ -839,10 +1045,41 @@ const Analytics: React.FC = () => {
   const { state, dispatch } = useApp();
   const { language, transactions, isPro, activeWidgets, baseCurrency } = state;
   const [showAddModal, setShowAddModal] = useState(false);
+  
+  // +++ أضيف بناءً على طلبك +++ (Custom Chart State)
+  const [showCustomChartModal, setShowCustomChartModal] = useState(false);
+  const [customChartConfig, setCustomChartConfig] = useState<Partial<CustomWidget>>({
+    title: '',
+    description: '',
+    chartType: 'bar',
+    dataSource: 'expense',
+    groupBy: 'group',
+    colorTheme: 'blue'
+  });
+
+  const handleCreateCustomChart = () => {
+    if (!customChartConfig.title) return;
+    
+    const newWidget: CustomWidget = {
+      id: `custom_${Date.now()}`,
+      title: customChartConfig.title,
+      description: customChartConfig.description || 'Custom User Chart',
+      chartType: customChartConfig.chartType as any,
+      dataSource: customChartConfig.dataSource as any,
+      groupBy: customChartConfig.groupBy as any,
+      colorTheme: customChartConfig.colorTheme as any
+    };
+
+    dispatch.addCustomWidget(newWidget);
+    dispatch.addAnalyticsWidget(newWidget.id);
+    setShowCustomChartModal(false);
+    setShowAddModal(false);
+  };
+  // +++ نهاية الإضافة +++
 
   // --- Total KPI Calculations (Global - not affected by widget filters) ---
-  const totalIncome = transactions.reduce((s, t) => t.type === TransactionType.INCOME ? s + t.amount : s, 0);
-  const totalExpense = transactions.reduce((s, t) => t.type === TransactionType.EXPENSE ? s + t.amount : s, 0);
+  const totalIncome = transactions.reduce((s, t) => isIncomeLike(t) ? s + t.amount : s, 0);
+  const totalExpense = transactions.reduce((s, t) => isExpenseLike(t) ? s + t.amount : s, 0);
   const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome) * 100 : 0;
 
   return (
@@ -983,10 +1220,96 @@ const Analytics: React.FC = () => {
                      </div>
                   </div>
                 )}
+
+                {/* +++ أضيف بناءً على طلبك +++ (Create Custom Chart Button) */}
+                <div className="col-span-full mt-4">
+                   <button 
+                     onClick={() => setShowCustomChartModal(true)}
+                     className="w-full py-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl text-slate-500 hover:text-blue-600 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2"
+                   >
+                     <Plus size={16} />
+                     {language === 'ar' ? 'إنشاء رسم بياني مخصص' : 'Create Custom Chart'}
+                   </button>
+                </div>
+                {/* +++ نهاية الإضافة +++ */}
              </div>
           </div>
         </div>
       )}
+
+      {/* +++ أضيف بناءً على طلبك +++ (Custom Chart Modal) */}
+      {showCustomChartModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setShowCustomChartModal(false)}></div>
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative flex flex-col animate-in zoom-in-95 duration-300">
+             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+               <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase">{language === 'ar' ? 'رسم بياني جديد' : 'New Custom Chart'}</h3>
+               <button onClick={() => setShowCustomChartModal(false)} className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 hover:text-rose-500"><X size={16}/></button>
+             </div>
+             
+             <div className="p-6 space-y-4">
+               <div>
+                 <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">{language === 'ar' ? 'عنوان الرسم' : 'Chart Title'}</label>
+                 <input 
+                   type="text" 
+                   value={customChartConfig.title} 
+                   onChange={e => setCustomChartConfig({...customChartConfig, title: e.target.value})}
+                   className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                   placeholder={language === 'ar' ? 'مثال: مصاريف السفر' : 'e.g., Travel Expenses'}
+                 />
+               </div>
+               
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">{language === 'ar' ? 'نوع الرسم' : 'Chart Type'}</label>
+                   <select 
+                     value={customChartConfig.chartType} 
+                     onChange={e => setCustomChartConfig({...customChartConfig, chartType: e.target.value as any})}
+                     className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none"
+                   >
+                     <option value="bar">{language === 'ar' ? 'أعمدة' : 'Bar Chart'}</option>
+                     <option value="line">{language === 'ar' ? 'خط' : 'Line Chart'}</option>
+                     <option value="pie">{language === 'ar' ? 'دائري' : 'Pie Chart'}</option>
+                   </select>
+                 </div>
+                 <div>
+                   <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">{language === 'ar' ? 'مصدر البيانات' : 'Data Source'}</label>
+                   <select 
+                     value={customChartConfig.dataSource} 
+                     onChange={e => setCustomChartConfig({...customChartConfig, dataSource: e.target.value as any})}
+                     className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none"
+                   >
+                     <option value="expense">{language === 'ar' ? 'المصاريف' : 'Expenses'}</option>
+                     <option value="income">{language === 'ar' ? 'الدخل' : 'Income'}</option>
+                   </select>
+                 </div>
+               </div>
+
+               <div>
+                 <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">{language === 'ar' ? 'تجميع حسب' : 'Group By'}</label>
+                 <select 
+                   value={customChartConfig.groupBy} 
+                   onChange={e => setCustomChartConfig({...customChartConfig, groupBy: e.target.value as any})}
+                   className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none"
+                 >
+                   <option value="group">{language === 'ar' ? 'المجموعة' : 'Category/Group'}</option>
+                   <option value="client">{language === 'ar' ? 'الجهة' : 'Client/Store'}</option>
+                   <option value="date">{language === 'ar' ? 'التاريخ' : 'Date'}</option>
+                 </select>
+               </div>
+
+               <button 
+                 onClick={handleCreateCustomChart}
+                 disabled={!customChartConfig.title}
+                 className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg hover:shadow-xl hover:bg-blue-500 transition-all disabled:opacity-50 mt-4"
+               >
+                 {language === 'ar' ? 'إنشاء وإضافة' : 'Create & Add'}
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
+      {/* +++ نهاية الإضافة +++ */}
 
     </div>
   );

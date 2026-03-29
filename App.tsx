@@ -7,6 +7,7 @@ import Dashboard from './screens/Dashboard';
 import AddFlow from './screens/AddFlow';
 import History from './screens/History';
 import Analytics from './screens/Analytics';
+import GraphMaker from './screens/GraphMaker';
 import AIInsights from './screens/AIInsights';
 import Settings from './screens/Settings';
 import ProUpgrade from './screens/ProUpgrade';
@@ -16,6 +17,7 @@ import { CreditCards } from './screens/CreditCards';
 import Onboarding from './screens/Onboarding';
 import Goals from './screens/Goals';
 import { SmartNotifications } from './components/SmartNotifications';
+import { HelpModal } from './components/HelpModal';
 import { 
   LayoutDashboard, BarChart3, Layers, User, 
   Bell, Plus, History as HistoryIcon,
@@ -415,6 +417,7 @@ const HeaderActions = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false); // +++ أضيف بناءً على طلبك +++
 
   return (
     <>
@@ -442,13 +445,49 @@ const HeaderActions = () => {
             )}
           </div>
 
-          <div className="flex items-center w-10">
-            {/* Empty div for flex balance */}
+          <div className="flex items-center gap-2">
+            {/* +++ أضيف بناءً على طلبك +++ (Sync Status Indicator) */}
+            {state.syncProvider !== 'local' && (
+              <button 
+                onClick={() => navigate('/settings')}
+                className={`flex items-center gap-1 px-2 py-1 rounded-full border ${
+                  state.isSyncing 
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-500' 
+                    : state.isOnline 
+                      ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-500' 
+                      : 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 text-rose-500'
+                } transition-colors`}
+              >
+                {state.isSyncing ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : state.isOnline ? (
+                  <Check size={14} />
+                ) : (
+                  <CloudOff size={14} />
+                )}
+                <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">
+                  {state.isSyncing 
+                    ? (state.language === 'ar' ? 'جاري المزامنة' : 'Syncing') 
+                    : state.isOnline 
+                      ? (state.language === 'ar' ? 'متصل' : 'Synced') 
+                      : (state.language === 'ar' ? 'غير متصل' : 'Offline')}
+                </span>
+              </button>
+            )}
+            
+            <button 
+              onClick={() => setIsHelpOpen(true)}
+              className="p-2 -mr-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+            </button>
+            {/* +++ نهاية الإضافة +++ */}
           </div>
         </div>
       </header>
 
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} /> {/* +++ أضيف بناءً على طلبك +++ */}
     </>
   );
 };
@@ -611,16 +650,25 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const location = useLocation();
   
-  if (!state.userProfile.isAuthenticated && location.pathname !== '/auth') {
+  // +++ أضيف بناءً على طلبك +++ (Bypass Login if no biometrics/lock)
+  useEffect(() => {
+    if (!state.security.biometrics && !state.userProfile.isAuthenticated) {
+      // Auto-login as guest if no security is enabled
+      dispatch.login('guest', 'guest');
+    }
+  }, [state.security.biometrics, state.userProfile.isAuthenticated, dispatch]);
+
+  if (state.security.biometrics && !state.userProfile.isAuthenticated && location.pathname !== '/auth') {
     return <Navigate to="/auth" replace />;
   }
   
   if (state.userProfile.isAuthenticated && location.pathname === '/auth') {
     return <Navigate to="/" replace />;
   }
+  // +++ نهاية الإضافة +++
   
   return <>{children}</>;
 };
@@ -657,11 +705,52 @@ const AutoLock: React.FC = () => {
   return null;
 };
 
+const NetworkStatus: React.FC = () => {
+  const { dispatch } = useApp();
+
+  useEffect(() => {
+    const handleOnline = () => dispatch.setOnlineStatus(true);
+    const handleOffline = () => dispatch.setOnlineStatus(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [dispatch]);
+
+  return null;
+};
+
+const AutoDeleteArchived: React.FC = () => {
+  const { state, dispatch } = useApp();
+
+  useEffect(() => {
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    
+    state.clients.forEach(client => {
+      if (client.isArchived && client.deletedAt) {
+        const deletedTime = new Date(client.deletedAt).getTime();
+        if (now - deletedTime > SEVEN_DAYS_MS) {
+          dispatch.permanentDeleteClient(client.id);
+        }
+      }
+    });
+  }, [state.clients, dispatch]);
+
+  return null;
+};
+
 const App: React.FC = () => {
   return (
     <AppProvider>
       <SmartNotifications />
       <AutoLock />
+      <NetworkStatus />
+      <AutoDeleteArchived />
       <HashRouter>
         <AuthGuard>
           <Layout>
@@ -671,6 +760,7 @@ const App: React.FC = () => {
               <Route path="/add" element={<AddFlow />} />
               <Route path="/history" element={<History />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/graph-maker" element={<GraphMaker />} />
               <Route path="/installments" element={<Installments />} />
               <Route path="/credit-cards" element={<CreditCards />} />
               <Route path="/settings" element={<Settings />} />
