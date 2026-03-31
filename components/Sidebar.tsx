@@ -1,14 +1,15 @@
 import React from 'react';
 import { useApp } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { X, Sun, Moon, Eye, EyeOff, Zap, Crown, Bell, LogIn, Settings, User, Share2, CreditCard, BarChart3 } from 'lucide-react';
+import { X, Sun, Moon, Eye, EyeOff, Zap, Crown, Bell, LogIn, Settings, User, Share2, CreditCard, BarChart3, CalendarClock } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenNotifications?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenNotifications }) => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
 
@@ -157,6 +158,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             </button>
 
             <button 
+              onClick={() => { onClose(); navigate('/subscriptions'); }}
+              className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <CalendarClock size={20} />
+              <span className="text-sm font-bold">{state.language === 'ar' ? 'المعاملات المتكررة' : 'Subscriptions'}</span>
+            </button>
+
+            <button 
               onClick={() => { onClose(); navigate('/graph-maker'); }}
               className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
@@ -189,7 +198,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             </button>
 
             <button 
-              onClick={() => { onClose(); /* Handle notifications logic or navigate to a notifications screen */ }}
+              onClick={() => { onClose(); onOpenNotifications?.(); }}
               className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
               <div className="flex items-center gap-3">

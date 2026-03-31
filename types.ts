@@ -11,6 +11,7 @@ export interface Group {
   id: string;
   name: string;
   icon?: string; 
+  color?: string; // +++ أضيف بناءً على طلبك +++
   monthlyBudget?: number; // New: Budgeting support
   allocatedAmount?: number; // New: Money transferred to this group
   isArchived?: boolean;
@@ -34,6 +35,7 @@ export interface TransactionItem {
   category?: string;
   barcode?: string;
   isSettled?: boolean; // +++ أضيف بناءً على طلبك +++
+  clientId?: string; // +++ أضيف بناءً على طلبك +++
 }
 
 export type PaymentMethod = 'cash' | 'credit';
@@ -61,7 +63,7 @@ export interface Transaction {
   dueDate?: string;
   isSettled?: boolean;
   isDebt?: boolean; // New: Mark transaction as a debt/loan
-  investmentAction?: 'BUY' | 'SELL' | 'RETURN'; // New: Action for investments
+  investmentAction?: 'BUY' | 'SELL' | 'RETURN' | 'FREE_STOCK' | 'DIVIDEND'; // +++ أضيف بناءً على طلبك +++
   debtAction?: 'BORROW' | 'LEND' | 'REPAY_BORROW' | 'REPAY_LEND'; // New: Action for debts
   date: string;
   groupId: string;
@@ -73,6 +75,7 @@ export interface Transaction {
   pricePerShare?: number;
   interestRate?: number;
   duration?: number;
+  returnFrequency?: 'monthly' | 'quarterly' | 'semi-annually' | 'annually'; // +++ أضيف بناءً على طلبك +++
   investmentType?: 'stock' | 'deposit'; // +++ أضيف بناءً على طلبك +++
   stockSymbol?: string; // +++ أضيف بناءً على طلبك +++
 }
@@ -164,6 +167,34 @@ export interface Goal {
   color: string;
 }
 
+export interface SavedGraph {
+  id: string;
+  title: string;
+  chartType: 'bar' | 'line' | 'pie' | 'area' | 'radar' | 'composed';
+  selectedGroups: string[];
+  selectedClients: string[];
+  dateRange: { start: string; end: string };
+  timeGrouping: 'daily' | 'monthly' | 'yearly';
+  dataType: 'expense' | 'income' | 'net' | 'all';
+  showGrid: boolean;
+  showLabels: boolean;
+}
+
+export type RecurrenceInterval = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface RecurringTransaction {
+  id: string;
+  amount: number;
+  type: TransactionType;
+  groupId: string;
+  clientId?: string;
+  title: string;
+  interval: RecurrenceInterval;
+  startDate: string;
+  nextDate: string;
+  isActive: boolean;
+}
+
 export interface AppState {
   walletBalance: number;
   baseCurrency: string;
@@ -173,8 +204,10 @@ export interface AppState {
   transactions: Transaction[];
   clients: Client[];
   installments: Installment[];
-  creditCards: CreditCard[]; // New: Credit Cards support
+  creditCards: CreditCard[];
   goals: Goal[];
+  savedGraphs: SavedGraph[];
+  recurringTransactions: RecurringTransaction[];
   language: 'ar' | 'en';
   isDarkMode: boolean;
   isPro: boolean;

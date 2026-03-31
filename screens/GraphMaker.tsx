@@ -9,14 +9,14 @@ import {
 import { 
   BarChart3, PieChart as PieChartIcon, LineChart as LineChartIcon, 
   Activity, Hexagon, Layers, Filter, Calendar, Users, Folder, 
-  Play, ArrowLeft, Check, X, Download, Type, Grid, Tag
+  Play, ArrowLeft, Check, X, Download, Type, Grid, Tag, Save, Trash2
 } from 'lucide-react';
 import { TransactionType } from '../types';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
 export default function GraphMaker() {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const { language, transactions, groups, clients } = state;
 
@@ -32,6 +32,58 @@ export default function GraphMaker() {
   
   const [generatedData, setGeneratedData] = useState<any[] | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [editingGraphId, setEditingGraphId] = useState<string | null>(null);
+
+  const handleSaveGraph = () => {
+    const graphData = {
+      title: graphTitle || (language === 'ar' ? 'رسم بياني جديد' : 'New Graph'),
+      chartType,
+      selectedGroups,
+      selectedClients,
+      dateRange,
+      timeGrouping,
+      dataType,
+      showGrid,
+      showLabels
+    };
+
+    if (editingGraphId) {
+      dispatch.updateGraph(editingGraphId, graphData);
+    } else {
+      const newId = Date.now().toString();
+      dispatch.saveGraph({ id: newId, ...graphData });
+      setEditingGraphId(newId);
+    }
+  };
+
+  const handleLoadGraph = (graph: import('../types').SavedGraph) => {
+    setEditingGraphId(graph.id);
+    setGraphTitle(graph.title);
+    setChartType(graph.chartType);
+    setSelectedGroups(graph.selectedGroups);
+    setSelectedClients(graph.selectedClients);
+    setDateRange(graph.dateRange);
+    setTimeGrouping(graph.timeGrouping);
+    setDataType(graph.dataType);
+    setShowGrid(graph.showGrid);
+    setShowLabels(graph.showLabels);
+    // Auto generate after loading
+    setTimeout(() => handleGenerate(), 100);
+  };
+
+  const handleNewGraph = () => {
+    setEditingGraphId(null);
+    setGraphTitle('');
+    setChartType('bar');
+    setSelectedGroups([]);
+    setSelectedClients([]);
+    setDateRange({ start: '', end: '' });
+    setTimeGrouping('monthly');
+    setDataType('expense');
+    setShowGrid(true);
+    setShowLabels(false);
+    setGeneratedData(null);
+  };
 
   const toggleSelection = (id: string, list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>) => {
     if (list.includes(id)) {
@@ -326,6 +378,40 @@ export default function GraphMaker() {
         {/* Controls Panel */}
         <div className="lg:col-span-1 space-y-6">
           
+          {/* Saved Graphs */}
+          {state.savedGraphs && state.savedGraphs.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <Folder size={16} /> {language === 'ar' ? 'الرسوم المحفوظة' : 'Saved Graphs'}
+              </h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                {state.savedGraphs.map(graph => (
+                  <div key={graph.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${editingGraphId === graph.id ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-800'}`}>
+                    <button 
+                      onClick={() => handleLoadGraph(graph)}
+                      className="flex-1 text-left flex items-center gap-2"
+                    >
+                      <BarChart3 size={14} className={editingGraphId === graph.id ? 'text-blue-500' : 'text-slate-400'} />
+                      <span className={`text-sm font-bold ${editingGraphId === graph.id ? 'text-blue-700 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'}`}>{graph.title}</span>
+                    </button>
+                    <button 
+                      onClick={() => dispatch.deleteGraph(graph.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button 
+                onClick={handleNewGraph}
+                className="w-full py-2 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors"
+              >
+                {language === 'ar' ? '+ رسم بياني جديد' : '+ New Graph'}
+              </button>
+            </div>
+          )}
+
           {/* Chart Title & Customization */}
           <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4">
             <div>
@@ -471,20 +557,29 @@ export default function GraphMaker() {
             </div>
           </div>
 
-          <button 
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {isGenerating ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                <Play size={18} fill="currentColor" />
-                {language === 'ar' ? 'توليد الجراف' : 'Generate Graph'}
-              </>
-            )}
-          </button>
+          <div className="flex gap-4">
+            <button 
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className="flex-1 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isGenerating ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Play size={18} fill="currentColor" />
+                  {language === 'ar' ? 'توليد' : 'Generate'}
+                </>
+              )}
+            </button>
+            <button 
+              onClick={handleSaveGraph}
+              className="px-6 py-4 bg-white dark:bg-slate-800 text-blue-600 border-2 border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-2xl font-black uppercase tracking-widest text-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              <Save size={18} />
+              {language === 'ar' ? 'حفظ' : 'Save'}
+            </button>
+          </div>
 
         </div>
 

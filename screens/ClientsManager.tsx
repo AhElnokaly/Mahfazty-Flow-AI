@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { useApp } from '../store';
+import { useApp, getClientShare } from '../store';
 import { Users, UserPlus, Search, Phone, Mail, ChevronRight, Layers, Edit2, Trash2, Save, X, GitMerge } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 import ClientEditModal from '../components/ClientEditModal';
@@ -155,11 +155,13 @@ const ClientsManager: React.FC = () => {
                       if (clientDebts.length === 0 && partialPayments.length === 0) return null;
                       
                       let debtBalance = clientDebts.reduce((acc, t) => {
-                        return t.type === 'INCOME' ? acc + t.amount : acc - t.amount;
+                        const share = getClientShare(t, client.id); // +++ أضيف بناءً على طلبك +++
+                        return t.type === 'INCOME' ? acc + share : acc - share; // +++ أضيف بناءً على طلبك +++
                       }, 0);
 
                       partialPayments.forEach(t => {
-                        const remaining = (t.referenceTotal || 0) - t.amount;
+                        const share = getClientShare(t, client.id); // +++ أضيف بناءً على طلبك +++
+                        const remaining = (t.referenceTotal || 0) - share; // +++ أضيف بناءً على طلبك +++
                         if (t.type === 'EXPENSE') debtBalance += remaining;
                         else if (t.type === 'INCOME') debtBalance -= remaining;
                       });

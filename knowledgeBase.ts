@@ -11,6 +11,9 @@ export const getLocalResponse = (message: string, language: 'ar' | 'en'): string
     if (msg.includes('دين') || msg.includes('سلف') || msg.includes('ديون') || msg.includes('استلف')) {
       return "يمكنك تسجيل الديون (سلف أو استدانة) من خلال شاشة الإضافة (+). اختر 'دين' وحدد ما إذا كنت قد اقترضت أم أقرضت شخصاً آخر. سيقوم التطبيق بتتبع المتبقي تلقائياً.";
     }
+    if (msg.includes('استثمار') || msg.includes('اسهم') || msg.includes('استثمارات')) {
+      return "لإضافة استثمار، اذهب إلى شاشة الإضافة (+) واختر 'استثمار'. يمكنك تسجيل شراء أو بيع الأسهم، وتتبع أرباحك وخسائرك في لوحة التحليلات.";
+    }
     if (msg.includes('جمعية') || msg.includes('جمعيات') || msg.includes('قسط') || msg.includes('اقساط')) {
       return "لإضافة قسط أو جمعية، اذهب إلى شاشة 'الأقساط والجمعيات' من القائمة السفلية. يمكنك تحديد المبلغ الإجمالي، القسط الشهري، وعدد الأشهر، وسيقوم التطبيق بتذكيرك وتتبع المدفوعات.";
     }
@@ -31,6 +34,9 @@ export const getLocalResponse = (message: string, language: 'ar' | 'en'): string
     if (msg.includes('debt') || msg.includes('borrow') || msg.includes('lend') || msg.includes('loan')) {
       return "You can record debts from the Add (+) screen. Choose 'Debt' and specify if you borrowed or lent money. The app will track the remaining balance automatically.";
     }
+    if (msg.includes('investment') || msg.includes('stocks') || msg.includes('invest')) {
+      return "To add an investment, go to the Add (+) screen and choose 'Investment'. You can record buying or selling stocks, and track your profits and losses in the Analytics dashboard.";
+    }
     if (msg.includes('installment') || msg.includes('savings') || msg.includes('association')) {
       return "To add an installment or savings association, go to the 'Installments' screen from the bottom menu. Set the total amount, monthly payment, and duration, and the app will track it for you.";
     }
@@ -50,6 +56,7 @@ export const getLocalSuggestions = (language: 'ar' | 'en') => {
       "اشرح لي التطبيق 📱",
       "كيف أضيف كريدت كارد؟ 💳",
       "كيف أسجل دين؟ 🤝",
+      "كيف أضيف استثمار؟ 📈",
       "ما هي مميزات Pro؟ ⭐"
     ];
   } else {
@@ -57,6 +64,7 @@ export const getLocalSuggestions = (language: 'ar' | 'en') => {
       "Explain the app 📱",
       "How to add a credit card? 💳",
       "How to record a debt? 🤝",
+      "How to add an investment? 📈",
       "What are Pro features? ⭐"
     ];
   }

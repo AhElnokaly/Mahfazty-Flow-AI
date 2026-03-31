@@ -1,7 +1,7 @@
 
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { useApp, isIncomeLike, isExpenseLike } from '../store';
+import { useApp, isIncomeLike, isExpenseLike, getClientShare } from '../store';
 import { 
   Plus, MoreHorizontal, ArrowUpRight, Sparkles, Zap, ShieldCheck,
   ArrowDownLeft, ArrowUpLeft, Wallet, ArrowDownRight, TrendingUp, TrendingDown,
@@ -191,6 +191,7 @@ const Dashboard: React.FC = () => {
   }, [transactions]);
 
   const [showBalanceBreakdown, setShowBalanceBreakdown] = useState(false);
+  const [isBalanceExpanded, setIsBalanceExpanded] = useState(false);
   const [balanceAnimation, setBalanceAnimation] = useState<'up' | 'down' | null>(null);
   const [balanceDiff, setBalanceDiff] = useState<number | null>(null);
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
@@ -233,7 +234,55 @@ const Dashboard: React.FC = () => {
     const calculatedBalance = totalIncome - totalExpense - totalInstallmentsPaid;
     const adjustment = walletBalance - calculatedBalance;
 
-    return { totalIncome, totalExpense, totalInstallmentsPaid, calculatedBalance, adjustment };
+    // Calculate Investments
+    const totalInvestments = transactions
+      .filter(t => t.type === TransactionType.INVESTMENT)
+      .reduce((sum, t) => {
+        if (t.investmentAction?.startsWith('BUY_')) return sum + t.amount;
+        if (t.investmentAction?.startsWith('SELL_')) return sum - t.amount;
+        return sum;
+      }, 0);
+
+    // Calculate Debts
+    const debtTransactions = transactions.filter(t => t.isDebt);
+    const partialPayments = transactions.filter(t => t.referenceTotal && t.referenceTotal > t.amount);
+    
+    const clientDebts: Record<string, number> = {};
+    
+    debtTransactions.forEach(t => {
+      const clientsForTx = t.clientIds || [t.clientId];
+      const amountPerClient = t.amount / clientsForTx.length;
+      
+      clientsForTx.forEach(cId => {
+        if (!clientDebts[cId]) clientDebts[cId] = 0;
+        if (t.debtAction === 'BORROW') clientDebts[cId] += amountPerClient;
+        else if (t.debtAction === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
+        else if (t.debtAction === 'LEND') clientDebts[cId] -= amountPerClient;
+        else if (t.debtAction === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
+      });
+    });
+
+    partialPayments.forEach(t => {
+      const clientsForTx = t.clientIds || [t.clientId];
+      const share = t.amount / clientsForTx.length;
+      const refTotalPerClient = (t.referenceTotal || 0) / clientsForTx.length;
+      const remaining = refTotalPerClient - share;
+      
+      clientsForTx.forEach(cId => {
+        if (!clientDebts[cId]) clientDebts[cId] = 0;
+        if (t.type === 'EXPENSE') clientDebts[cId] += remaining;
+        else if (t.type === 'INCOME') clientDebts[cId] -= remaining;
+      });
+    });
+
+    let totalDebtsOwedByMe = 0;
+    let totalDebtsOwedToMe = 0;
+    Object.values(clientDebts).forEach(balance => {
+      if (balance > 0) totalDebtsOwedByMe += balance;
+      else if (balance < 0) totalDebtsOwedToMe += Math.abs(balance);
+    });
+
+    return { totalIncome, totalExpense, totalInstallmentsPaid, calculatedBalance, adjustment, totalInvestments, totalDebtsOwedByMe, totalDebtsOwedToMe };
   }, [transactions, installments, walletBalance]);
 
   // Privacy Blur Helper
@@ -269,17 +318,53 @@ const Dashboard: React.FC = () => {
 
       {/* Total Balance Section */}
       <section 
-        onClick={() => setShowBalanceBreakdown(true)}
+        onClick={() => setIsBalanceExpanded(!isBalanceExpanded)}
         className={`bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden cursor-pointer hover:shadow-md transition-all duration-500 group ${balanceAnimation === 'up' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 scale-[1.02] shadow-[0_0_30px_rgba(16,185,129,0.2)]' : balanceAnimation === 'down' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 scale-[0.98] shadow-[0_0_30px_rgba(244,63,94,0.2)]' : ''}`}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
         <div className="flex items-center gap-2 mb-2">
           <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{language === 'ar' ? 'إجمالي الرصيد' : 'Total Balance'}</p>
-          <Info size={14} className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <button 
+            onClick={(e) => { e.stopPropagation(); setShowBalanceBreakdown(true); }}
+            className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          >
+            <Info size={14} className="text-slate-400" />
+          </button>
         </div>
         <h2 className={`text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tighter transition-all duration-300 ${balanceAnimation === 'up' ? 'text-emerald-500' : balanceAnimation === 'down' ? 'text-rose-500' : ''} ${privacyClass}`}>
           {baseCurrency} {walletBalance.toLocaleString()}
         </h2>
+        
+        {isBalanceExpanded && (
+          <div className="mt-6 w-full max-w-sm space-y-3 animate-in fade-in slide-in-from-top-4 duration-300 border-t border-slate-100 dark:border-slate-800/50 pt-6">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'الكاش' : 'Cash'}</span>
+              <span className={`text-sm font-black ${privacyClass}`}>{baseCurrency} {walletBalance.toLocaleString()}</span>
+            </div>
+            
+            {breakdown.totalDebtsOwedByMe > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'ديون مستحقة عليك' : 'Debts Owed By You'}</span>
+                <span className={`text-sm font-black text-rose-500 ${privacyClass}`}>-{baseCurrency} {breakdown.totalDebtsOwedByMe.toLocaleString()}</span>
+              </div>
+            )}
+            
+            {breakdown.totalDebtsOwedToMe > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'ديون مستحقة لك' : 'Debts Owed To You'}</span>
+                <span className={`text-sm font-black text-emerald-500 ${privacyClass}`}>+{baseCurrency} {breakdown.totalDebtsOwedToMe.toLocaleString()}</span>
+              </div>
+            )}
+            
+            {breakdown.totalInvestments > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'الاستثمارات' : 'Investments'}</span>
+                <span className={`text-sm font-black text-indigo-500 ${privacyClass}`}>{baseCurrency} {breakdown.totalInvestments.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {balanceDiff !== null && (
           <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xl font-black pointer-events-none animate-in slide-in-from-bottom-4 fade-in duration-500 slide-out-to-top-8 fade-out ${balanceDiff > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
             {balanceDiff > 0 ? '+' : ''}{balanceDiff.toLocaleString()}
@@ -681,13 +766,11 @@ const Dashboard: React.FC = () => {
               );
               
               const income = clientTxs.filter(t => isIncomeLike(t)).reduce((s, t) => {
-                const numClients = t.clientIds ? t.clientIds.length : 1;
-                return s + (t.amount / numClients);
+                return s + getClientShare(t, client.id); // +++ أضيف بناءً على طلبك +++
               }, 0);
               
               const expense = clientTxs.filter(t => isExpenseLike(t)).reduce((s, t) => {
-                const numClients = t.clientIds ? t.clientIds.length : 1;
-                return s + (t.amount / numClients);
+                return s + getClientShare(t, client.id); // +++ أضيف بناءً على طلبك +++
               }, 0);
               
               const items = clientTxs.flatMap(t => t.items || []);
@@ -866,7 +949,7 @@ const Dashboard: React.FC = () => {
               const isIncome = isIncomeLike(t);
               const isCredit = t.paymentMethod === 'credit';
               return (
-                <div key={t.id} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer" onClick={() => navigate('/history')}>
+                <div key={t.id} className={`flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer relative overflow-hidden ${group?.color ? group.color.replace('bg-', 'border-l-4 border-l-') : ''}`} onClick={() => navigate('/history')}>
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${isIncome ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' : isCredit ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30'}`}>
                       {group?.icon || '💰'}

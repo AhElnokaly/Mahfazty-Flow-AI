@@ -10,6 +10,19 @@ import { TransactionType } from '../types';
 import ConfirmModal from '../components/ConfirmModal';
 import ClientEditModal from '../components/ClientEditModal';
 
+const GROUP_COLORS = [
+  'bg-slate-400', 'bg-slate-600',
+  'bg-red-400', 'bg-red-600',
+  'bg-orange-400', 'bg-orange-600',
+  'bg-emerald-400', 'bg-emerald-600',
+  'bg-teal-400', 'bg-teal-600',
+  'bg-cyan-400', 'bg-cyan-600',
+  'bg-blue-400', 'bg-blue-600',
+  'bg-indigo-400', 'bg-indigo-600',
+  'bg-violet-400', 'bg-violet-600',
+  'bg-rose-400', 'bg-rose-600'
+]; // +++ أضيف بناءً على طلبك +++
+
 const GroupsManager: React.FC = () => {
   const { state, dispatch } = useApp();
   const { language } = state;
@@ -28,9 +41,10 @@ const GroupsManager: React.FC = () => {
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupIcon, setNewGroupIcon] = useState('📁');
   const [newGroupBudget, setNewGroupBudget] = useState('');
+  const [newGroupColor, setNewGroupColor] = useState(GROUP_COLORS[0]); // +++ أضيف بناءً على طلبك +++
   
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
-  const [editGroupValue, setEditGroupValue] = useState({ name: '', icon: '', monthlyBudget: 0 });
+  const [editGroupValue, setEditGroupValue] = useState({ name: '', icon: '', monthlyBudget: 0, color: '' }); // +++ أضيف بناءً على طلبك +++
 
   const [clientToEdit, setClientToEdit] = useState<any>(null);
 
@@ -55,10 +69,11 @@ const GroupsManager: React.FC = () => {
     e.preventDefault();
     if (!newGroupName.trim()) return;
     vibrate();
-    dispatch.addGroup(newGroupName, newGroupIcon, Number(newGroupBudget) || 0);
+    dispatch.addGroup(newGroupName, newGroupIcon, Number(newGroupBudget) || 0, undefined, newGroupColor); // +++ أضيف بناءً على طلبك +++
     setNewGroupName('');
     setNewGroupIcon('📁');
     setNewGroupBudget('');
+    setNewGroupColor(GROUP_COLORS[0]); // +++ أضيف بناءً على طلبك +++
   };
 
   const handleAddClient = (e: React.FormEvent, groupId: string) => {
@@ -114,12 +129,24 @@ const GroupsManager: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800">
-        <form onSubmit={handleAddGroup} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder={language === 'ar' ? 'اسم المجموعة...' : 'Group name...'} className="md:col-span-2 px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
-          <input type="text" inputMode="decimal" value={newGroupBudget} onChange={(e) => setNewGroupBudget(parseArabicNumber(e.target.value))} placeholder={language === 'ar' ? 'الميزانية...' : 'Budget...'} className="px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
-          <button type="submit" className="bg-blue-600 text-white rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-500/20">
-            {language === 'ar' ? 'إنشاء' : 'Create'}
-          </button>
+        <form onSubmit={handleAddGroup} className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder={language === 'ar' ? 'اسم المجموعة...' : 'Group name...'} className="md:col-span-2 px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
+            <input type="text" inputMode="decimal" value={newGroupBudget} onChange={(e) => setNewGroupBudget(parseArabicNumber(e.target.value))} placeholder={language === 'ar' ? 'الميزانية...' : 'Budget...'} className="px-5 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-[20px] text-xs font-bold text-slate-900 dark:text-white outline-none" />
+            <button type="submit" className="bg-blue-600 text-white rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-500/20 py-4">
+              {language === 'ar' ? 'إنشاء' : 'Create'}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {GROUP_COLORS.map(color => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => setNewGroupColor(color)}
+                className={`w-8 h-8 rounded-full ${color} ${newGroupColor === color ? 'ring-4 ring-blue-500 ring-offset-2 dark:ring-offset-slate-800' : ''}`}
+              />
+            ))}
+          </div>
         </form>
       </div>
 
@@ -170,6 +197,16 @@ const GroupsManager: React.FC = () => {
                          placeholder="Monthly Budget"
                        />
                      </div>
+                     <div className="flex flex-wrap gap-2">
+                       {GROUP_COLORS.map(color => (
+                         <button
+                           key={color}
+                           type="button"
+                           onClick={() => setEditGroupValue({...editGroupValue, color})}
+                           className={`w-6 h-6 rounded-full ${color} ${editGroupValue.color === color ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-slate-800' : ''}`}
+                         />
+                       ))}
+                     </div>
                      <div className="flex justify-end gap-2">
                        <button 
                          onClick={() => setEditingGroupId(null)}
@@ -191,7 +228,7 @@ const GroupsManager: React.FC = () => {
                  ) : (
                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-blue-50 dark:bg-slate-900 text-2xl rounded-2xl flex items-center justify-center">{group.icon || '📁'}</div>
+                        <div className={`w-12 h-12 ${group.color || 'bg-blue-50 dark:bg-slate-900'} text-2xl rounded-2xl flex items-center justify-center`}>{group.icon || '📁'}</div>
                         <div>
                           <h3 className="font-black text-slate-900 dark:text-white text-base">{group.name}</h3>
                           <div className="flex gap-4 mt-1">
@@ -223,7 +260,7 @@ const GroupsManager: React.FC = () => {
                            <button 
                              onClick={() => {
                                setEditingGroupId(group.id);
-                               setEditGroupValue({ name: group.name, icon: group.icon || '📁', monthlyBudget: group.monthlyBudget || 0 });
+                               setEditGroupValue({ name: group.name, icon: group.icon || '📁', monthlyBudget: group.monthlyBudget || 0, color: group.color || '' });
                              }}
                              className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-blue-500"
                            >

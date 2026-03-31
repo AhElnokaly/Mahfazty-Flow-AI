@@ -196,7 +196,7 @@ const AIInsights: React.FC = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
-  const { language, chatHistory, isPro, userProfile } = state;
+  const { language, chatHistory, proChatHistory, isPro, userProfile } = state;
   const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const [showFeatureLibrary, setShowFeatureLibrary] = useState(false);
@@ -211,7 +211,7 @@ const AIInsights: React.FC = () => {
 
   const isConfigured = state.apiKeys?.some(k => k.provider === 'gemini' && k.key && !k.isBlocked); // +++ أضيف بناءً على طلبك +++
 
-  const currentHistory = chatHistory;
+  const currentHistory = isPro ? proChatHistory : chatHistory;
 
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
@@ -481,7 +481,9 @@ const AIInsights: React.FC = () => {
                       { en: "Summarize my spending", ar: "لخص مصاريفي" },
                       { en: "How can I save money?", ar: "كيف يمكنني توفير المال؟" },
                       { en: "Analyze my top categories", ar: "حلل أكثر الفئات استهلاكاً" },
-                      { en: "Predict next month's expenses", ar: "توقع مصاريف الشهر القادم" }
+                      { en: "Predict next month's expenses", ar: "توقع مصاريف الشهر القادم" },
+                      { en: "How is my investment portfolio doing?", ar: "كيف هو أداء محفظتي الاستثمارية؟" },
+                      { en: "What is my total debt?", ar: "ما هو إجمالي الديون علي؟" }
                     ] : getLocalSuggestions(language).map(s => ({ en: s, ar: s }))).map((prompt, i) => (
                       <button
                         key={i}
@@ -574,7 +576,9 @@ const AIInsights: React.FC = () => {
               { en: "Summarize my spending", ar: "لخص مصاريفي" },
               { en: "How can I save money?", ar: "كيف يمكنني توفير المال؟" },
               { en: "Analyze my top categories", ar: "حلل أكثر الفئات استهلاكاً" },
-              { en: "Predict next month's expenses", ar: "توقع مصاريف الشهر القادم" }
+              { en: "Predict next month's expenses", ar: "توقع مصاريف الشهر القادم" },
+              { en: "How is my investment portfolio doing?", ar: "كيف هو أداء محفظتي الاستثمارية؟" },
+              { en: "What is my total debt?", ar: "ما هو إجمالي الديون علي؟" }
             ] : getLocalSuggestions(language).map(s => ({ en: s, ar: s }))).map((prompt, i) => (
               <button
                 key={i}

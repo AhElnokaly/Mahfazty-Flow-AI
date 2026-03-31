@@ -56,6 +56,8 @@ const INITIAL_STATE: AppState = {
   },
   notification: null,
   notificationHistory: [],
+  savedGraphs: [],
+  recurringTransactions: [],
   hasSeenOnboarding: false,
   syncHistory: []
 };
@@ -80,7 +82,7 @@ interface AppContextType {
     updateTransaction: (id: string, t: Partial<Transaction>) => void;
     deleteTransaction: (id: string) => void;
     updateWalletBalance: (amount: number) => void;
-    addGroup: (name: string, icon?: string, budget?: number, id?: string) => void;
+    addGroup: (name: string, icon?: string, budget?: number, id?: string, color?: string) => void;
     updateGroup: (id: string, update: Partial<Group>) => void;
     setGroupBudget: (id: string, amount: number) => void;
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => void;
@@ -136,6 +138,13 @@ interface AppContextType {
     syncWithCloud: () => Promise<void>;
     pullFromCloud: () => Promise<void>;
     unlockAchievement: (achievementId: string) => void;
+    saveGraph: (graph: import('./types').SavedGraph) => void;
+    updateGraph: (id: string, graph: Partial<import('./types').SavedGraph>) => void;
+    deleteGraph: (id: string) => void;
+    addRecurringTransaction: (rt: Omit<import('./types').RecurringTransaction, 'id'>) => void;
+    updateRecurringTransaction: (id: string, update: Partial<import('./types').RecurringTransaction>) => void;
+    deleteRecurringTransaction: (id: string) => void;
+    processRecurringTransactions: () => void;
   };
 }
 
@@ -156,7 +165,7 @@ type Action =
   | { type: 'UPDATE_TRANSACTION'; payload: { id: string; update: Partial<Transaction> } }
   | { type: 'DELETE_TRANSACTION'; payload: string }
   | { type: 'UPDATE_WALLET_BALANCE'; payload: number }
-  | { type: 'ADD_GROUP'; payload: { name: string; icon?: string; budget?: number; id?: string } }
+  | { type: 'ADD_GROUP'; payload: { name: string; icon?: string; budget?: number; id?: string; color?: string } }
   | { type: 'UPDATE_GROUP'; payload: { id: string; update: Partial<Group> } }
   | { type: 'SET_GROUP_BUDGET'; payload: { id: string; amount: number } }
   | { type: 'ADD_INSTALLMENT'; payload: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'> }
@@ -213,11 +222,43 @@ type Action =
   | { type: 'TRANSFER_TO_SAVINGS'; payload: { goalId: string; amount: number } }
   | { type: 'ADD_NOTIFICATION_TO_HISTORY'; payload: AppNotification }
   | { type: 'SET_DECOY_PASSWORD'; payload: string }
+  | { type: 'SAVE_GRAPH'; payload: import('./types').SavedGraph }
+  | { type: 'UPDATE_GRAPH'; payload: { id: string; update: Partial<import('./types').SavedGraph> } }
+  | { type: 'DELETE_GRAPH'; payload: string }
+  | { type: 'ADD_RECURRING_TRANSACTION'; payload: Omit<import('./types').RecurringTransaction, 'id'> }
+  | { type: 'UPDATE_RECURRING_TRANSACTION'; payload: { id: string; update: Partial<import('./types').RecurringTransaction> } }
+  | { type: 'DELETE_RECURRING_TRANSACTION'; payload: string }
+  | { type: 'PROCESS_RECURRING_TRANSACTIONS' }
   | { type: 'DECOY_LOGIN' };
 
 // +++ أضيف بناءً على طلبك +++
-export const isIncomeLike = (t: Transaction) => t.type === TransactionType.INCOME || (t.type === TransactionType.INVESTMENT && (t.investmentAction === 'SELL' || t.investmentAction === 'RETURN'));
-export const isExpenseLike = (t: Transaction) => t.type === TransactionType.EXPENSE || (t.type === TransactionType.INVESTMENT && t.investmentAction !== 'SELL' && t.investmentAction !== 'RETURN');
+export const isIncomeLike = (t: Transaction) => t.type === TransactionType.INCOME || (t.type === TransactionType.INVESTMENT && (t.investmentAction === 'SELL' || t.investmentAction === 'RETURN' || t.investmentAction === 'DIVIDEND'));
+export const isExpenseLike = (t: Transaction) => t.type === TransactionType.EXPENSE || (t.type === TransactionType.INVESTMENT && t.investmentAction !== 'SELL' && t.investmentAction !== 'RETURN' && t.investmentAction !== 'DIVIDEND' && t.investmentAction !== 'FREE_STOCK');
+
+export const getClientShare = (transaction: Transaction, clientId: string): number => {
+  if (transaction.items && transaction.items.length > 0) {
+    const explicitItems = transaction.items.filter(i => i.clientId === clientId);
+    let share = explicitItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    const unassignedItems = transaction.items.filter(i => !i.clientId);
+    if (unassignedItems.length > 0) {
+      const unassignedTotal = unassignedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      if (transaction.clientIds && transaction.clientIds.includes(clientId)) {
+        share += unassignedTotal / transaction.clientIds.length;
+      } else if (!transaction.clientIds && transaction.clientId === clientId) {
+        share += unassignedTotal;
+      }
+    }
+    return share;
+  } else {
+    if (transaction.clientIds && transaction.clientIds.includes(clientId)) {
+      return transaction.amount / transaction.clientIds.length;
+    } else if (!transaction.clientIds && transaction.clientId === clientId) {
+      return transaction.amount;
+    }
+  }
+  return 0;
+};
 
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
@@ -430,7 +471,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
     }
     case 'ADD_GROUP':
-      return { ...state, groups: [...state.groups, { id: action.payload.id || Date.now().toString(), name: action.payload.name, icon: action.payload.icon, monthlyBudget: action.payload.budget }] };
+      return { ...state, groups: [...state.groups, { id: action.payload.id || Date.now().toString(), name: action.payload.name, icon: action.payload.icon, monthlyBudget: action.payload.budget, color: action.payload.color }] };
     case 'TOGGLE_LANGUAGE':
       return { ...state, language: state.language === 'ar' ? 'en' : 'ar' };
     case 'TOGGLE_DARK_MODE':
@@ -756,6 +797,77 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, notificationHistory: state.notificationHistory.map(n => ({ ...n, read: true })) };
     case 'CLEAR_NOTIFICATIONS':
       return { ...state, notificationHistory: [] };
+    case 'SAVE_GRAPH':
+      return { ...state, savedGraphs: [...(state.savedGraphs || []), action.payload] };
+    case 'UPDATE_GRAPH':
+      return {
+        ...state,
+        savedGraphs: (state.savedGraphs || []).map(g => g.id === action.payload.id ? { ...g, ...action.payload.update } : g)
+      };
+    case 'DELETE_GRAPH':
+      return { ...state, savedGraphs: (state.savedGraphs || []).filter(g => g.id !== action.payload) };
+    case 'ADD_RECURRING_TRANSACTION':
+      return { ...state, recurringTransactions: [...(state.recurringTransactions || []), { ...action.payload, id: Date.now().toString() }] };
+    case 'UPDATE_RECURRING_TRANSACTION':
+      return { ...state, recurringTransactions: (state.recurringTransactions || []).map(rt => rt.id === action.payload.id ? { ...rt, ...action.payload.update } : rt) };
+    case 'DELETE_RECURRING_TRANSACTION':
+      return { ...state, recurringTransactions: (state.recurringTransactions || []).filter(rt => rt.id !== action.payload) };
+    case 'PROCESS_RECURRING_TRANSACTIONS': {
+      const today = new Date().toISOString().split('T')[0];
+      let newTransactions = [...state.transactions];
+      let newBalance = state.walletBalance;
+      let updatedRecurring = [...(state.recurringTransactions || [])];
+      let hasChanges = false;
+
+      updatedRecurring = updatedRecurring.map(rt => {
+        if (!rt.isActive) return rt;
+        let currentNextDate = rt.nextDate;
+        let rtChanged = false;
+
+        while (currentNextDate <= today) {
+          hasChanges = true;
+          rtChanged = true;
+          
+          const newTx: Transaction = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            amount: rt.amount,
+            currency: 'EGP',
+            type: rt.type,
+            groupId: rt.groupId,
+            clientId: rt.clientId || '',
+            date: currentNextDate,
+            items: [{ id: Date.now().toString(), name: rt.title, price: rt.amount, quantity: 1 }],
+            isDebt: false
+          };
+          newTransactions.push(newTx);
+          
+          if (isIncomeLike(newTx)) newBalance += rt.amount;
+          else if (isExpenseLike(newTx)) newBalance -= rt.amount;
+
+          const dateObj = new Date(currentNextDate);
+          if (rt.interval === 'daily') dateObj.setDate(dateObj.getDate() + 1);
+          else if (rt.interval === 'weekly') dateObj.setDate(dateObj.getDate() + 7);
+          else if (rt.interval === 'monthly') dateObj.setMonth(dateObj.getMonth() + 1);
+          else if (rt.interval === 'yearly') dateObj.setFullYear(dateObj.getFullYear() + 1);
+          
+          currentNextDate = dateObj.toISOString().split('T')[0];
+        }
+
+        if (rtChanged) {
+          return { ...rt, nextDate: currentNextDate };
+        }
+        return rt;
+      });
+
+      if (!hasChanges) return state;
+
+      return {
+        ...state,
+        transactions: newTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        walletBalance: newBalance,
+        recurringTransactions: updatedRecurring
+      };
+    }
     case 'ADD_NOTIFICATION_TO_HISTORY':
       return { ...state, notificationHistory: [action.payload, ...state.notificationHistory] };
     case 'TOGGLE_AUTO_SYNC':
@@ -1045,7 +1157,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateTransaction: (id: string, t: Partial<Transaction>) => dispatch({ type: 'UPDATE_TRANSACTION', payload: { id, update: t } }),
     deleteTransaction: (id: string) => dispatch({ type: 'DELETE_TRANSACTION', payload: id }),
     updateWalletBalance: (amount: number) => dispatch({ type: 'UPDATE_WALLET_BALANCE', payload: amount }),
-    addGroup: (name: string, icon?: string, budget?: number, id?: string) => dispatch({ type: 'ADD_GROUP', payload: { name, icon, budget, id } }),
+    addGroup: (name: string, icon?: string, budget?: number, id?: string, color?: string) => dispatch({ type: 'ADD_GROUP', payload: { name, icon, budget, id, color } }),
     updateGroup: (id: string, update: Partial<Group>) => dispatch({ type: 'UPDATE_GROUP', payload: { id, update } }),
     setGroupBudget: (id: string, amount: number) => dispatch({ type: 'SET_GROUP_BUDGET', payload: { id, amount } }),
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'>) => dispatch({ type: 'ADD_INSTALLMENT', payload: i }),
@@ -1095,6 +1207,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     importState: (jsonData: string) => dispatch({ type: 'IMPORT_STATE', payload: JSON.parse(jsonData) }),
     markNotificationsRead: () => dispatch({ type: 'MARK_NOTIFICATIONS_READ' }),
     clearNotificationHistory: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
+    saveGraph: (graph: import('./types').SavedGraph) => dispatch({ type: 'SAVE_GRAPH', payload: graph }),
+    updateGraph: (id: string, update: Partial<import('./types').SavedGraph>) => dispatch({ type: 'UPDATE_GRAPH', payload: { id, update } }),
+    deleteGraph: (id: string) => dispatch({ type: 'DELETE_GRAPH', payload: id }),
+    addRecurringTransaction: (rt: Omit<import('./types').RecurringTransaction, 'id'>) => dispatch({ type: 'ADD_RECURRING_TRANSACTION', payload: rt }),
+    updateRecurringTransaction: (id: string, update: Partial<import('./types').RecurringTransaction>) => dispatch({ type: 'UPDATE_RECURRING_TRANSACTION', payload: { id, update } }),
+    deleteRecurringTransaction: (id: string) => dispatch({ type: 'DELETE_RECURRING_TRANSACTION', payload: id }),
+    processRecurringTransactions: () => dispatch({ type: 'PROCESS_RECURRING_TRANSACTIONS' }),
     enableCloudSync: (token: string) => dispatch({ type: 'ENABLE_CLOUD_SYNC', payload: token }),
     disableCloudSync: () => dispatch({ type: 'DISABLE_CLOUD_SYNC' }),
     setCustomDbConfig: (config: AppState['customDbConfig']) => dispatch({ type: 'SET_CUSTOM_DB_CONFIG', payload: config }),

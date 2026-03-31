@@ -620,10 +620,10 @@ const History: React.FC = () => {
                   : client?.name;
                 const group = groups.find(g => g.id === t.groupId);
                 return (
-                  <tr key={t.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10 group transition-colors">
+                  <tr key={t.id} className={`hover:bg-slate-50/30 dark:hover:bg-slate-900/10 group transition-colors relative ${group?.color ? group.color.replace('bg-', 'border-l-4 border-l-') : ''}`}>
                     <td className="px-4 md:px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center text-lg shadow-sm">
+                        <div className={`w-10 h-10 ${group?.color || 'bg-slate-100 dark:bg-slate-900'} rounded-xl flex items-center justify-center text-lg shadow-sm text-white`}>
                           {t.type === TransactionType.TRANSFER ? '💳' : t.groupId === 'system_adjustment' ? '⚖️' : (client?.icon || '👤')}
                         </div>
                         <div className="flex flex-col">
@@ -637,7 +637,14 @@ const History: React.FC = () => {
                                    </span>
                                  )}
                                </span>
-                               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">{new Date(t.date).toLocaleDateString()}</span>
+                               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">
+                                 {new Date(t.date).toLocaleDateString()}
+                                 {t.paymentMethod && (
+                                   <span className="ml-2 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full">
+                                     {t.paymentMethod === 'cash' ? (language === 'ar' ? 'كاش' : 'Cash') : (language === 'ar' ? 'فيزا' : 'Visa')}
+                                   </span>
+                                 )}
+                               </span>
                              </>
                         </div>
                       </div>
@@ -672,17 +679,23 @@ const History: React.FC = () => {
                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 text-left">
                                {language === 'ar' ? 'السلع' : 'Items'} ({t.items.length})
                              </p>
-                             <div className="space-y-1 max-h-20 overflow-y-auto custom-scrollbar">
-                               {t.items.map(item => (
-                                 <div 
-                                   key={item.id} 
-                                   className="flex justify-between items-center text-xs font-bold cursor-pointer hover:text-blue-500 transition-colors"
-                                   onClick={() => setDetailedItem(item.name)}
-                                 >
-                                   <span className="text-slate-600 dark:text-slate-300 truncate max-w-[100px] text-left">{item.quantity}x {item.name}</span>
-                                   <span className="text-slate-500">{item.price.toLocaleString()}</span>
-                                 </div>
-                               ))}
+                             <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                               {t.items.map(item => {
+                                 const itemClient = item.clientId ? clients.find(c => c.id === item.clientId) : null;
+                                 return (
+                                   <div 
+                                     key={item.id} 
+                                     className="flex justify-between items-center text-xs font-bold cursor-pointer hover:text-blue-500 transition-colors"
+                                     onClick={() => setDetailedItem(item.name)}
+                                   >
+                                     <div className="flex flex-col text-left">
+                                       <span className="text-slate-600 dark:text-slate-300 truncate max-w-[100px]">{item.quantity}x {item.name}</span>
+                                       {itemClient && <span className="text-[9px] text-slate-400">{itemClient.name}</span>}
+                                     </div>
+                                     <span className="text-slate-500">{item.price.toLocaleString()}</span>
+                                   </div>
+                                 );
+                               })}
                              </div>
                            </div>
                          )}

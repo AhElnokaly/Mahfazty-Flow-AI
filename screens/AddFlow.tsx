@@ -90,7 +90,7 @@ const AddFlow: React.FC = () => {
   const [isDebt, setIsDebt] = useState(false); // +++ أضيف بناءً على طلبك +++
   const [debtAction, setDebtAction] = useState<'BORROW' | 'LEND' | 'REPAY_BORROW' | 'REPAY_LEND'>('BORROW'); // +++ أضيف بناءً على طلبك +++
   const [investmentType, setInvestmentType] = useState<'stock' | 'deposit'>('stock'); // +++ أضيف بناءً على طلبك +++
-  const [investmentAction, setInvestmentAction] = useState<'BUY' | 'SELL' | 'RETURN'>('BUY'); // +++ أضيف بناءً على طلبك +++
+  const [investmentAction, setInvestmentAction] = useState<'BUY' | 'SELL' | 'RETURN' | 'FREE_STOCK' | 'DIVIDEND'>('BUY'); // +++ أضيف بناءً على طلبك +++
   const [stockSymbol, setStockSymbol] = useState(''); // +++ أضيف بناءً على طلبك +++
   const [shares, setShares] = useState(''); // +++ أضيف بناءً على طلبك +++
   const [pricePerShare, setPricePerShare] = useState(''); // +++ أضيف بناءً على طلبك +++
@@ -963,6 +963,19 @@ const AddFlow: React.FC = () => {
                           </select>
                           <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         </div>
+                        <div className="flex-1 w-full relative">
+                          <select
+                            value={item.clientId || ''}
+                            onChange={(e) => handleUpdateItem(item.id, 'clientId', e.target.value)}
+                            className="w-full px-4 py-3 pl-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500 appearance-none"
+                          >
+                            <option value="">{language === 'ar' ? 'العميل الافتراضي' : 'Default Client'}</option>
+                            {clients.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                          </select>
+                          <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 items-center">
                         <div className="flex-1 w-full relative flex items-center gap-2">
                            <div className="relative flex-1">
                              <input

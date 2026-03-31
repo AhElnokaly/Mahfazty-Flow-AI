@@ -172,6 +172,34 @@ export const SmartNotifications = () => {
           );
         }
       }
+      // 5. Weekly and Monthly Summaries
+      const dayOfWeek = today.getDay(); // 0 is Sunday
+      const dayOfMonth = today.getDate(); // 1 is the first day of the month
+
+      // Weekly Summary (Every Sunday)
+      if (dayOfWeek === 0) {
+        sendNotification(
+          'weekly_summary',
+          state.language === 'ar' ? 'ملخص الأسبوع 📊' : 'Weekly Summary 📊',
+          state.language === 'ar'
+            ? 'اطلع على ملخص مصروفاتك وإيراداتك لهذا الأسبوع.'
+            : 'Check out your expenses and income summary for this week.',
+          'info'
+        );
+      }
+
+      // Monthly Summary (Every 1st of the month)
+      if (dayOfMonth === 1) {
+        sendNotification(
+          'monthly_summary',
+          state.language === 'ar' ? 'ملخص الشهر 📈' : 'Monthly Summary 📈',
+          state.language === 'ar'
+            ? 'شهر جديد! راجع أداءك المالي للشهر الماضي.'
+            : 'New month! Review your financial performance for the past month.',
+          'info'
+        );
+      }
+
     };
 
     // Run checks once on mount or when dependencies change

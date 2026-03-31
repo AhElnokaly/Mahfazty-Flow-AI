@@ -14,6 +14,7 @@ import ProUpgrade from './screens/ProUpgrade';
 import Archive from './screens/Archive';
 import Installments from './screens/Installments';
 import { CreditCards } from './screens/CreditCards';
+import { Subscriptions } from './screens/Subscriptions';
 import Onboarding from './screens/Onboarding';
 import Goals from './screens/Goals';
 import { SmartNotifications } from './components/SmartNotifications';
@@ -412,12 +413,14 @@ const WelcomeScreen = () => {
 };
 
 import { Sidebar } from './components/Sidebar';
+import { NotificationsModal } from './components/NotificationsModal';
 
 const HeaderActions = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false); // +++ أضيف بناءً على طلبك +++
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   return (
     <>
@@ -476,6 +479,16 @@ const HeaderActions = () => {
             )}
             
             <button 
+              onClick={() => setIsNotificationsOpen(true)}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative"
+            >
+              <Bell size={24} />
+              {state.notificationHistory.filter(n => !n.read).length > 0 && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+              )}
+            </button>
+            
+            <button 
               onClick={() => setIsHelpOpen(true)}
               className="p-2 -mr-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
@@ -486,8 +499,9 @@ const HeaderActions = () => {
         </div>
       </header>
 
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onOpenNotifications={() => setIsNotificationsOpen(true)} />
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} /> {/* +++ أضيف بناءً على طلبك +++ */}
+      {isNotificationsOpen && <NotificationsModal onClose={() => setIsNotificationsOpen(false)} />}
     </>
   );
 };
@@ -499,6 +513,10 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [showEidGreeting, setShowEidGreeting] = useState(false);
+
+  useEffect(() => {
+    dispatch.processRecurringTransactions();
+  }, []);
 
   useEffect(() => {
     // Check for Eid greeting (Pro only, once per year during Eid al-Fitr)
@@ -763,6 +781,7 @@ const App: React.FC = () => {
               <Route path="/graph-maker" element={<GraphMaker />} />
               <Route path="/installments" element={<Installments />} />
               <Route path="/credit-cards" element={<CreditCards />} />
+              <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/archive" element={<Archive />} />
               <Route path="/ai" element={<AIInsights />} />
