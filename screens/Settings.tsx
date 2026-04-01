@@ -52,6 +52,23 @@ const Settings: React.FC = () => {
     linkElement.click();
   };
 
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const jsonData = event.target?.result as string;
+          dispatch.importState(jsonData);
+          dispatch.setNotification({ message: language === 'ar' ? 'تم استعادة البيانات بنجاح' : 'Data restored successfully', type: 'success' });
+        } catch (error) {
+          dispatch.setNotification({ message: language === 'ar' ? 'فشل استعادة البيانات' : 'Failed to restore data', type: 'error' });
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   const confirmDeleteKey = () => {
     if (keyToDelete) {
       dispatch.deleteApiKey(keyToDelete);
@@ -529,7 +546,7 @@ const Settings: React.FC = () => {
                    <Trash2 size={24} />
                    <span className="text-[9px] font-black uppercase">{language === 'ar' ? 'مسح البيانات' : 'Delete Data'}</span>
                  </button>
-                 <input type="file" ref={importFileRef} className="hidden" />
+                 <input type="file" ref={importFileRef} onChange={handleImport} accept=".json" className="hidden" />
                </div>
             </div>
           </section>

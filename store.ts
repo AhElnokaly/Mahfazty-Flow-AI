@@ -500,8 +500,28 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
     case 'RESET_DATA':
       return INITIAL_STATE;
-    case 'IMPORT_STATE':
-      return { ...state, ...action.payload };
+    case 'IMPORT_STATE': {
+      const payload = action.payload || {};
+      return { 
+        ...state, 
+        ...payload,
+        transactions: payload.transactions || state.transactions || [],
+        groups: payload.groups || state.groups || [],
+        clients: payload.clients || state.clients || [],
+        installments: payload.installments || state.installments || [],
+        creditCards: payload.creditCards || state.creditCards || [],
+        goals: payload.goals || state.goals || [],
+        apiKeys: payload.apiKeys || state.apiKeys || [],
+        chatHistory: payload.chatHistory || state.chatHistory || [],
+        proChatHistory: payload.proChatHistory || state.proChatHistory || [],
+        activeWidgets: payload.activeWidgets || state.activeWidgets || ['cash_flow', 'lifestyle_radar', 'expense_distribution', 'debt_position', 'investment_portfolio'],
+        customWidgets: payload.customWidgets || state.customWidgets || [],
+        savedGraphs: payload.savedGraphs || state.savedGraphs || [],
+        recurringTransactions: payload.recurringTransactions || state.recurringTransactions || [],
+        notificationHistory: payload.notificationHistory || state.notificationHistory || [],
+        syncHistory: payload.syncHistory || state.syncHistory || []
+      };
+    }
     case 'ADD_INSTALLMENT': {
       const newInstallment = { ...action.payload, id: Date.now().toString(), monthlyAmount: action.payload.totalAmount / action.payload.installmentCount, paidCount: 0, status: 'active' as const };
       
