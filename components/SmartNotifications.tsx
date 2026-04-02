@@ -101,7 +101,7 @@ export const SmartNotifications = () => {
         if (!group.monthlyBudget) return;
         
         const groupExpenses = state.transactions
-          .filter(t => t.groupId === group.id && t.type === TransactionType.EXPENSE)
+          .filter(t => t.groupId === group.id && t.type?.toUpperCase() === 'EXPENSE')
           .filter(t => {
             const tDate = new Date(t.date);
             return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;

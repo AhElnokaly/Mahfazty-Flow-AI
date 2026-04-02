@@ -1,10 +1,12 @@
 import React from 'react';
 import { useApp } from '../store';
 import { X, Bell, CheckCircle2, AlertCircle, Zap, Sparkles, Trash2, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export const NotificationsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { state, dispatch } = useApp();
   const { language, notificationHistory } = state;
+  const navigate = useNavigate();
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -14,6 +16,24 @@ export const NotificationsModal: React.FC<{ onClose: () => void }> = ({ onClose 
       case 'update': return <Sparkles size={20} className="text-yellow-500" />;
       default: return <Bell size={20} className="text-slate-500" />;
     }
+  };
+
+  const handleNotificationClick = (notification: any) => {
+    const text = (notification.title + ' ' + notification.message).toLowerCase();
+    
+    if (text.includes('ملخص') || text.includes('summary') || text.includes('تحليل') || text.includes('analytics') || text.includes('رسم بياني') || text.includes('chart')) {
+      navigate('/analytics');
+    } else if (text.includes('قسط') || text.includes('جمعية') || text.includes('installment') || text.includes('debt')) {
+      navigate('/installments');
+    } else if (text.includes('هدف') || text.includes('أهداف') || text.includes('goal')) {
+      navigate('/goals');
+    } else if (text.includes('معاملة') || text.includes('transaction') || text.includes('سجل') || text.includes('history')) {
+      navigate('/history');
+    } else if (text.includes('ذكاء') || text.includes('ai') || text.includes('مساعد') || text.includes('assistant')) {
+      navigate('/ai');
+    }
+    
+    onClose();
   };
 
   return (
@@ -43,7 +63,8 @@ export const NotificationsModal: React.FC<{ onClose: () => void }> = ({ onClose 
             notificationHistory.map((notification, index) => (
               <div 
                 key={notification.id || index} 
-                className={`p-4 rounded-2xl border ${notification.read ? 'bg-slate-50 border-slate-100 dark:bg-slate-800/50 dark:border-slate-800' : 'bg-white border-blue-100 dark:bg-slate-800 dark:border-blue-900/30 shadow-sm'} flex gap-4 transition-colors`}
+                onClick={() => handleNotificationClick(notification)}
+                className={`p-4 rounded-2xl border cursor-pointer ${notification.read ? 'bg-slate-50 border-slate-100 dark:bg-slate-800/50 dark:border-slate-800' : 'bg-white border-blue-100 dark:bg-slate-800 dark:border-blue-900/30 shadow-sm'} flex gap-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800`}
               >
                 <div className="shrink-0 mt-1">
                   {getIcon(notification.type)}

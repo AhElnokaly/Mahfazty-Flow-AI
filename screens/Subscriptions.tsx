@@ -255,7 +255,7 @@ export const Subscriptions: React.FC = () => {
         {state.recurringTransactions?.map(rt => {
           const group = state.groups.find(g => g.id === rt.groupId);
           const client = state.clients.find(c => c.id === rt.clientId);
-          const isExpense = rt.type === TransactionType.EXPENSE;
+          const isExpense = rt.type?.toUpperCase() === 'EXPENSE';
 
           return (
             <div 

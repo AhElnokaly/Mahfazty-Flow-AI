@@ -164,6 +164,7 @@ type Action =
   | { type: 'ADD_TRANSACTION'; payload: Omit<Transaction, 'id'> }
   | { type: 'UPDATE_TRANSACTION'; payload: { id: string; update: Partial<Transaction> } }
   | { type: 'DELETE_TRANSACTION'; payload: string }
+  | { type: 'EDIT_TRANSACTION'; payload: { id: string; update: Partial<Transaction> } } // +++ أضيف بناءً على طلبك +++
   | { type: 'UPDATE_WALLET_BALANCE'; payload: number }
   | { type: 'ADD_GROUP'; payload: { name: string; icon?: string; budget?: number; id?: string; color?: string } }
   | { type: 'UPDATE_GROUP'; payload: { id: string; update: Partial<Group> } }
@@ -232,8 +233,8 @@ type Action =
   | { type: 'DECOY_LOGIN' };
 
 // +++ أضيف بناءً على طلبك +++
-export const isIncomeLike = (t: Transaction) => t.type === TransactionType.INCOME || (t.type === TransactionType.INVESTMENT && (t.investmentAction === 'SELL' || t.investmentAction === 'RETURN' || t.investmentAction === 'DIVIDEND'));
-export const isExpenseLike = (t: Transaction) => t.type === TransactionType.EXPENSE || (t.type === TransactionType.INVESTMENT && t.investmentAction !== 'SELL' && t.investmentAction !== 'RETURN' && t.investmentAction !== 'DIVIDEND' && t.investmentAction !== 'FREE_STOCK');
+export const isIncomeLike = (t: Transaction) => t.type?.toUpperCase() === 'INCOME' || (t.type?.toUpperCase() === 'INVESTMENT' && (t.investmentAction?.toUpperCase() === 'SELL' || t.investmentAction?.toUpperCase() === 'RETURN' || t.investmentAction?.toUpperCase() === 'DIVIDEND'));
+export const isExpenseLike = (t: Transaction) => t.type?.toUpperCase() === 'EXPENSE' || (t.type?.toUpperCase() === 'INVESTMENT' && t.investmentAction?.toUpperCase() !== 'SELL' && t.investmentAction?.toUpperCase() !== 'RETURN' && t.investmentAction?.toUpperCase() !== 'DIVIDEND' && t.investmentAction?.toUpperCase() !== 'FREE_STOCK');
 
 export const getClientShare = (transaction: Transaction, clientId: string): number => {
   if (transaction.items && transaction.items.length > 0) {
@@ -501,15 +502,77 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'RESET_DATA':
       return INITIAL_STATE;
     case 'IMPORT_STATE': {
-      const payload = action.payload || {};
+      let rawPayload = action.payload || {};
+      
+      if (typeof rawPayload === 'string') {
+        try {
+          rawPayload = JSON.parse(rawPayload);
+        } catch (e) {
+          console.error("Failed to parse string payload in IMPORT_STATE");
+          return state;
+        }
+      }
+      
+      // Handle if the user imported an array of transactions directly
+      if (Array.isArray(rawPayload)) {
+        return {
+          ...state,
+          transactions: rawPayload,
+          walletBalance: rawPayload.reduce((acc, t) => {
+            if (isIncomeLike(t)) return acc + t.amount;
+            if (isExpenseLike(t)) return acc - t.amount;
+            return acc;
+          }, 0)
+        };
+      }
+      
+      // Handle nested state from older versions or different state managers
+      const payload = rawPayload.app || rawPayload.state || rawPayload;
+
+      const newTransactions = payload.transactions || state.transactions || [];
+      const newCreditCards = payload.creditCards || state.creditCards || [];
+
+      // Recalculate wallet balance and credit card balances to ensure accuracy
+      let recalculatedBalance = 0;
+      const cardBalances: Record<string, number> = {};
+      
+      newCreditCards.forEach((card: any) => {
+        cardBalances[card.id] = 0;
+      });
+
+      newTransactions.forEach((t: Transaction) => {
+        if (isIncomeLike(t)) {
+          recalculatedBalance += t.amount;
+        } else if (isExpenseLike(t)) {
+          if (t.paymentMethod === 'credit' && t.creditCardId) {
+            // Paid by credit card, don't deduct from wallet, increase card used balance
+            if (cardBalances[t.creditCardId] !== undefined) {
+              cardBalances[t.creditCardId] += t.amount;
+            }
+          } else {
+            recalculatedBalance -= t.amount;
+          }
+        } else if (t.type === 'TRANSFER' && t.paymentMethod === 'credit' && t.creditCardId) {
+           // Repaying credit card
+           if (cardBalances[t.creditCardId] !== undefined) {
+              cardBalances[t.creditCardId] -= t.amount;
+           }
+        }
+      });
+
+      const updatedCreditCards = newCreditCards.map((card: any) => ({
+        ...card,
+        balance: cardBalances[card.id] !== undefined ? cardBalances[card.id] : card.balance
+      }));
+
       return { 
         ...state, 
         ...payload,
-        transactions: payload.transactions || state.transactions || [],
+        transactions: newTransactions,
         groups: payload.groups || state.groups || [],
         clients: payload.clients || state.clients || [],
         installments: payload.installments || state.installments || [],
-        creditCards: payload.creditCards || state.creditCards || [],
+        creditCards: updatedCreditCards,
         goals: payload.goals || state.goals || [],
         apiKeys: payload.apiKeys || state.apiKeys || [],
         chatHistory: payload.chatHistory || state.chatHistory || [],
@@ -519,7 +582,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
         savedGraphs: payload.savedGraphs || state.savedGraphs || [],
         recurringTransactions: payload.recurringTransactions || state.recurringTransactions || [],
         notificationHistory: payload.notificationHistory || state.notificationHistory || [],
-        syncHistory: payload.syncHistory || state.syncHistory || []
+        syncHistory: payload.syncHistory || state.syncHistory || [],
+        walletBalance: recalculatedBalance
       };
     }
     case 'ADD_INSTALLMENT': {
@@ -676,7 +740,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         } else {
           if (isIncomeLike(t)) newBalance -= t.amount;
           else if (isExpenseLike(t)) newBalance += t.amount;
-          else if (t.type === TransactionType.TRANSFER) {
+          else if (t.type?.toUpperCase() === 'TRANSFER') {
             newBalance += t.amount;
             if (t.creditCardId) {
               updatedCreditCards = updatedCreditCards.map(c => 
@@ -716,7 +780,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         } else {
           if (isIncomeLike(t)) newBalance -= amountPerClient;
           else if (isExpenseLike(t)) newBalance += amountPerClient;
-          else if (t.type === TransactionType.TRANSFER) {
+          else if (t.type?.toUpperCase() === 'TRANSFER') {
             newBalance += amountPerClient;
             if (t.creditCardId) {
               updatedCreditCards = updatedCreditCards.map(c => 
@@ -750,7 +814,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         } else {
           if (isIncomeLike(t)) newBalance += amountPerClient;
           else if (isExpenseLike(t)) newBalance -= amountPerClient;
-          else if (t.type === TransactionType.TRANSFER) {
+          else if (t.type?.toUpperCase() === 'TRANSFER') {
             newBalance -= amountPerClient;
             if (t.creditCardId) {
               updatedCreditCards = updatedCreditCards.map(c => 
@@ -976,7 +1040,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         // If paid by cash/wallet, reverse the wallet balance
         if (isIncomeLike(t)) newBalance -= t.amount; // +++ أضيف بناءً على طلبك +++
         else if (isExpenseLike(t)) newBalance += t.amount; // +++ أضيف بناءً على طلبك +++
-        else if (t.type === TransactionType.TRANSFER) {
+        else if (t.type?.toUpperCase() === 'TRANSFER') {
           newBalance += t.amount;
           // If transfer was to pay a credit card bill, increase the card's used balance back
           if (t.creditCardId) {

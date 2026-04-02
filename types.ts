@@ -36,6 +36,7 @@ export interface TransactionItem {
   barcode?: string;
   isSettled?: boolean; // +++ أضيف بناءً على طلبك +++
   clientId?: string; // +++ أضيف بناءً على طلبك +++
+  isDebt?: boolean; // +++ أضيف بناءً على طلبك +++
 }
 
 export type PaymentMethod = 'cash' | 'credit';
@@ -78,6 +79,7 @@ export interface Transaction {
   returnFrequency?: 'monthly' | 'quarterly' | 'semi-annually' | 'annually'; // +++ أضيف بناءً على طلبك +++
   investmentType?: 'stock' | 'deposit'; // +++ أضيف بناءً على طلبك +++
   stockSymbol?: string; // +++ أضيف بناءً على طلبك +++
+  color?: string; // +++ أضيف بناءً على طلبك +++ (For Editor feature)
 }
 
 export interface UserProfile {

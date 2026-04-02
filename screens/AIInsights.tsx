@@ -245,141 +245,151 @@ const AIInsights: React.FC = () => {
   };
 
   const handleSendMessage = async (overrideMsg?: string) => {
-    const messageToSend = overrideMsg || chatInput;
-    if ((!messageToSend.trim() && !selectedImage) || isChatting) return;
-    vibrate();
-    
-    const userMsg = messageToSend;
-    const currentImageData = selectedImage ? { data: selectedImage.base64, mimeType: selectedImage.file.type } : undefined;
-    const currentSelectedImage = selectedImage;
-    
-    setChatInput('');
-    setSelectedImage(null);
-    setPendingProposal(null); // Clear old proposals
-    setShowFeatureLibrary(false);
-    
-    const isImageEditRequest = currentSelectedImage && /edit|improve|clean|تعديل|تحسين|وضح/i.test(userMsg);
-    const isVideoRequest = /video|فيديو|generate video|انشاء فيديو/i.test(userMsg);
-
-    if (isImageEditRequest) {
-      handleImageEdit(userMsg, currentSelectedImage);
-      return;
-    }
-
-    if (isVideoRequest) {
-      handleGenerateVideo(userMsg);
-      return;
-    }
-
-    dispatch.addChatMessage({ role: 'user', text: userMsg + (currentImageData ? ` [Attached: ${currentSelectedImage?.file.name}]` : ''), timestamp: new Date().toISOString() }, isPro);
-    
-    // +++ أضيف بناءً على طلبك +++ (Offline Smart Commands)
-    const isOfflineCommand = userMsg.startsWith('/') || 
-      /^(اضف|إضافة|add)\s+(\d+)\s+(.+)/i.test(userMsg) ||
-      /^(رصيد|balance|رصيدي)/i.test(userMsg) ||
-      /^(اهداف|أهداف|أهدافي|goals)/i.test(userMsg) ||
-      /^(مساعدة|help)/i.test(userMsg);
-
-    if (isOfflineCommand || !state.apiKeys?.find(k => k.provider === 'gemini' && k.key)) {
-      const cmd = userMsg.toLowerCase().trim();
-      let reply = '';
+    try {
+      const messageToSend = overrideMsg || chatInput;
+      if ((!messageToSend.trim() && !selectedImage) || isChatting) return;
+      vibrate();
       
-      const addMatch = userMsg.match(/^(?:اضف|إضافة|add)\s+(\d+)\s+(.+)/i);
+      const userMsg = messageToSend;
+      const currentImageData = selectedImage ? { data: selectedImage.base64, mimeType: selectedImage.file.type } : undefined;
+      const currentSelectedImage = selectedImage;
       
-      if (cmd === '/help' || cmd === '/faq' || cmd === 'مساعدة' || cmd === 'help') {
-        reply = language === 'ar' 
-          ? 'مرحباً! أنا المساعد الذكي المدمج (يعمل بدون إنترنت).\nالأوامر المتاحة:\n**/balance** أو **رصيدي** - عرض رصيدك الحالي\n**/add [amount] [category]** أو **اضف 500 طعام** - إضافة معاملة سريعة\n**اضف 500 دخل راتب** - لإضافة دخل\n**اضف 500 استثمار اسهم** - لإضافة استثمار\n**/goals** أو **أهدافي** - عرض حالة أهدافك' 
-          : 'Hello! I am the built-in smart assistant (works offline).\nAvailable commands:\n**/balance** or **balance** - Show current balance\n**/add [amount] [category]** or **add 500 food** - Quick add transaction\n**add 500 income salary** - Add income\n**add 500 investment stocks** - Add investment\n**/goals** or **goals** - Show goals status';
-      } else if (cmd === '/balance' || cmd === 'رصيد' || cmd === 'رصيدي' || cmd === 'balance') {
-        reply = language === 'ar' 
-          ? `رصيد محفظتك الحالي هو: **${state.walletBalance}**` 
-          : `Your current wallet balance is: **${state.walletBalance}**`;
-      } else if (cmd.startsWith('/add ') || addMatch) {
-        let amount = 0;
-        let category = '';
-        
-        if (addMatch) {
-          amount = parseFloat(addMatch[1]);
-          category = addMatch[2];
-        } else {
-          const parts = cmd.split(' ');
-          if (parts.length >= 3) {
-            amount = parseFloat(parts[1]);
-            category = parts.slice(2).join(' ');
-          }
-        }
-        
-        if (!isNaN(amount) && amount > 0) {
-          const defaultGroup = state.groups[0]?.id || 'default';
-          const defaultClient = state.clients[0]?.id || 'default';
-          
-          let type: TransactionType = TransactionType.EXPENSE;
-          let typeStr = language === 'ar' ? 'مصروف' : 'expense';
-          
-          if (category.includes('دخل') || category.includes('income')) {
-            type = TransactionType.INCOME;
-            typeStr = language === 'ar' ? 'دخل' : 'income';
-            category = category.replace(/دخل|income/gi, '').trim();
-          } else if (category.includes('استثمار') || category.includes('investment')) {
-            type = TransactionType.INVESTMENT;
-            typeStr = language === 'ar' ? 'استثمار' : 'investment';
-            category = category.replace(/استثمار|investment/gi, '').trim();
-          } else if (category.includes('مصروف') || category.includes('expense')) {
-            type = TransactionType.EXPENSE;
-            typeStr = language === 'ar' ? 'مصروف' : 'expense';
-            category = category.replace(/مصروف|expense/gi, '').trim();
-          }
+      setChatInput('');
+      setSelectedImage(null);
+      setPendingProposal(null); // Clear old proposals
+      setShowFeatureLibrary(false);
+      
+      const isImageEditRequest = currentSelectedImage && /edit|improve|clean|تعديل|تحسين|وضح/i.test(userMsg);
+      const isVideoRequest = /video|فيديو|generate video|انشاء فيديو/i.test(userMsg);
 
-          dispatch.addTransaction({
-            amount,
-            currency: state.baseCurrency,
-            type,
-            date: new Date().toISOString().split('T')[0],
-            groupId: defaultGroup,
-            clientId: defaultClient,
-            clientIds: [defaultClient],
-            note: `Added via Smart Command: ${category || typeStr}`
-          });
-          
-          reply = language === 'ar' ? `تم إضافة ${typeStr} بقيمة **${amount}** لـ **${category || typeStr}** بنجاح.` : `Successfully added ${typeStr} of **${amount}** to **${category || typeStr}**.`;
-        } else {
-          reply = language === 'ar' ? 'صيغة المبلغ غير صحيحة. استخدم: اضف 500 طعام' : 'Invalid amount format. Use: add 500 food';
-        }
-      } else if (cmd === '/goals' || cmd === 'اهداف' || cmd === 'أهداف' || cmd === 'أهدافي' || cmd === 'goals') {
-        const totalGoals = state.goals?.length || 0;
-        const completed = state.goals?.filter(g => g.currentAmount >= g.targetAmount).length || 0;
-        reply = language === 'ar' ? `لديك **${totalGoals}** أهداف إجمالية.\nتم تحقيق **${completed}** منها.` : `You have **${totalGoals}** total goals.\n**${completed}** are completed.`;
-      } else {
-        reply = getLocalResponse(userMsg, language); // +++ أضيف بناءً على طلبك +++
+      if (isImageEditRequest) {
+        handleImageEdit(userMsg, currentSelectedImage);
+        return;
       }
+
+      if (isVideoRequest) {
+        handleGenerateVideo(userMsg);
+        return;
+      }
+
+      dispatch.addChatMessage({ role: 'user', text: userMsg + (currentImageData ? ` [Attached: ${currentSelectedImage?.file.name}]` : ''), timestamp: new Date().toISOString() }, isPro);
       
-      setTimeout(() => {
-        dispatch.addChatMessage({ role: 'model', text: `⚡ **[Offline Smart System]**\n\n${reply}`, timestamp: new Date().toISOString() }, isPro);
-      }, 500);
-      return;
-    }
-    // +++ نهاية الإضافة +++
+      // +++ أضيف بناءً على طلبك +++ (Offline Smart Commands)
+      const isOfflineCommand = userMsg.startsWith('/') || 
+        /^(اضف|إضافة|add)\s+(?:(?:مصروف|دخل|استثمار|expense|income|investment)\s+)?(\d+)\s*(?:(?:مصروف|دخل|استثمار|expense|income|investment)\s+)?(?:ل|الى|لـ|to)?\s*(.+)/i.test(userMsg) ||
+        /^(رصيد|balance|رصيدي)/i.test(userMsg) ||
+        /^(اهداف|أهداف|أهدافي|goals)/i.test(userMsg) ||
+        /^(مساعدة|help)/i.test(userMsg);
 
-    setIsChatting(true);
-    const response = await sendChatMessage(state, dispatch, userMsg, isPro, currentImageData);
-    
-    dispatch.addChatMessage({ role: 'model', text: response.text, timestamp: new Date().toISOString() }, isPro);
+      if (isOfflineCommand || !state.apiKeys?.find(k => k.provider === 'gemini' && k.key)) {
+        const cmd = userMsg.toLowerCase().trim();
+        let reply = '';
+        
+        const addMatch = userMsg.match(/^(?:اضف|إضافة|add)\s+(?:(مصروف|دخل|استثمار|expense|income|investment)\s+)?(\d+)\s*(?:(مصروف|دخل|استثمار|expense|income|investment)\s+)?(?:ل|الى|لـ|to)?\s*(.+)/i);
+        
+        if (cmd === '/help' || cmd === '/faq' || cmd === 'مساعدة' || cmd === 'help') {
+          reply = language === 'ar' 
+            ? 'مرحباً! أنا المساعد الذكي المدمج (يعمل بدون إنترنت).\nالأوامر المتاحة:\n**/balance** أو **رصيدي** - عرض رصيدك الحالي\n**/add [amount] [category]** أو **اضف 500 طعام** - إضافة معاملة سريعة\n**اضف 500 دخل راتب** - لإضافة دخل\n**اضف 500 استثمار اسهم** - لإضافة استثمار\n**/goals** أو **أهدافي** - عرض حالة أهدافك' 
+            : 'Hello! I am the built-in smart assistant (works offline).\nAvailable commands:\n**/balance** or **balance** - Show current balance\n**/add [amount] [category]** or **add 500 food** - Quick add transaction\n**add 500 income salary** - Add income\n**add 500 investment stocks** - Add investment\n**/goals** or **goals** - Show goals status';
+        } else if (cmd === '/balance' || cmd === 'رصيد' || cmd === 'رصيدي' || cmd === 'balance') {
+          reply = language === 'ar' 
+            ? `رصيد محفظتك الحالي هو: **${state.walletBalance}**` 
+            : `Your current wallet balance is: **${state.walletBalance}**`;
+        } else if (cmd.startsWith('/add ') || addMatch) {
+          let amount = 0;
+          let category = '';
+          
+          if (addMatch) {
+            amount = parseFloat(addMatch[2]);
+            const typeStr = addMatch[1] || addMatch[3] || '';
+            category = (typeStr + ' ' + addMatch[4]).trim();
+          } else {
+            const parts = cmd.split(' ');
+            if (parts.length >= 3) {
+              amount = parseFloat(parts[1]);
+              category = parts.slice(2).join(' ');
+            }
+          }
+          
+          if (!isNaN(amount) && amount > 0) {
+            const defaultGroup = state.groups[0]?.id || 'default';
+            const defaultClient = state.clients[0]?.id || 'default';
+            
+            let type: TransactionType = TransactionType.EXPENSE;
+            let typeStr = language === 'ar' ? 'مصروف' : 'expense';
+            
+            if (category.includes('دخل') || category.includes('income')) {
+              type = TransactionType.INCOME;
+              typeStr = language === 'ar' ? 'دخل' : 'income';
+              category = category.replace(/دخل|income/gi, '').trim();
+            } else if (category.includes('استثمار') || category.includes('investment')) {
+              type = TransactionType.INVESTMENT;
+              typeStr = language === 'ar' ? 'استثمار' : 'investment';
+              category = category.replace(/استثمار|investment/gi, '').trim();
+            } else if (category.includes('مصروف') || category.includes('expense')) {
+              type = TransactionType.EXPENSE;
+              typeStr = language === 'ar' ? 'مصروف' : 'expense';
+              category = category.replace(/مصروف|expense/gi, '').trim();
+            }
 
-    // Handle Tool Calls
-    if (response.chartWidget) {
-      dispatch.addCustomWidget(response.chartWidget);
+            dispatch.addTransaction({
+              amount,
+              currency: state.baseCurrency,
+              type,
+              date: new Date().toISOString().split('T')[0],
+              groupId: defaultGroup,
+              clientId: defaultClient,
+              clientIds: [defaultClient],
+              note: `Added via Smart Command: ${category || typeStr}`
+            });
+            
+            reply = language === 'ar' ? `تم إضافة ${typeStr} بقيمة **${amount}** لـ **${category || typeStr}** بنجاح.` : `Successfully added ${typeStr} of **${amount}** to **${category || typeStr}**.`;
+          } else {
+            reply = language === 'ar' ? 'صيغة المبلغ غير صحيحة. استخدم: اضف 500 طعام' : 'Invalid amount format. Use: add 500 food';
+          }
+        } else if (cmd === '/goals' || cmd === 'اهداف' || cmd === 'أهداف' || cmd === 'أهدافي' || cmd === 'goals') {
+          const totalGoals = state.goals?.length || 0;
+          const completed = state.goals?.filter(g => g.currentAmount >= g.targetAmount).length || 0;
+          reply = language === 'ar' ? `لديك **${totalGoals}** أهداف إجمالية.\nتم تحقيق **${completed}** منها.` : `You have **${totalGoals}** total goals.\n**${completed}** are completed.`;
+        } else {
+          reply = getLocalResponse(userMsg, language); // +++ أضيف بناءً على طلبك +++
+        }
+        
+        setTimeout(() => {
+          dispatch.addChatMessage({ role: 'model', text: `⚡ **[Offline Smart System]**\n\n${reply}`, timestamp: new Date().toISOString() }, isPro);
+        }, 500);
+        return;
+      }
+      // +++ نهاية الإضافة +++
+
+      setIsChatting(true);
+      const response = await sendChatMessage(state, dispatch, userMsg, isPro, currentImageData);
+      
+      dispatch.addChatMessage({ role: 'model', text: response.text, timestamp: new Date().toISOString() }, isPro);
+
+      // Handle Tool Calls
+      if (response.chartWidget) {
+        dispatch.addCustomWidget(response.chartWidget);
+        dispatch.setNotification({
+          message: language === 'ar' ? 'تم إنشاء الرسم البياني بنجاح!' : 'Chart created successfully!',
+          type: 'success'
+        });
+        setTimeout(() => navigate('/analytics'), 1500);
+      }
+
+      if (response.toolCall && response.toolCall.name === 'add_installment_plan') {
+         setPendingProposal(response.toolCall.args);
+      }
+
+      setIsChatting(false);
+    } catch (error) {
+      console.error("Chat Error:", error);
+      setIsChatting(false);
       dispatch.setNotification({
-        message: language === 'ar' ? 'تم إنشاء الرسم البياني بنجاح!' : 'Chart created successfully!',
-        type: 'success'
+        message: language === 'ar' ? 'حدث خطأ غير متوقع' : 'An unexpected error occurred',
+        type: 'error'
       });
-      setTimeout(() => navigate('/analytics'), 1500);
     }
-
-    if (response.toolCall && response.toolCall.name === 'add_installment_plan') {
-       setPendingProposal(response.toolCall.args);
-    }
-
-    setIsChatting(false);
   };
 
   const confirmProposal = () => {
@@ -487,7 +497,7 @@ const AIInsights: React.FC = () => {
                     ] : getLocalSuggestions(language).map(s => ({ en: s, ar: s }))).map((prompt, i) => (
                       <button
                         key={i}
-                        onClick={() => setChatInput(language === 'ar' ? prompt.ar : prompt.en)}
+                        onClick={() => handleSendMessage(language === 'ar' ? prompt.ar : prompt.en)}
                         className="px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all border border-blue-100 dark:border-blue-800/30"
                       >
                         {language === 'ar' ? prompt.ar : prompt.en}
@@ -582,7 +592,7 @@ const AIInsights: React.FC = () => {
             ] : getLocalSuggestions(language).map(s => ({ en: s, ar: s }))).map((prompt, i) => (
               <button
                 key={i}
-                onClick={() => setChatInput(language === 'ar' ? prompt.ar : prompt.en)}
+                onClick={() => handleSendMessage(language === 'ar' ? prompt.ar : prompt.en)}
                 className="whitespace-nowrap px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all border border-blue-100 dark:border-blue-800/30"
               >
                 {language === 'ar' ? prompt.ar : prompt.en}

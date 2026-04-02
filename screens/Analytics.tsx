@@ -288,7 +288,7 @@ const ChartWidget: React.FC<{
         }
         else if (customConfig.groupBy === 'date') key = new Date(t.date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { month: 'short', day: 'numeric' });
 
-        const val = (customConfig.dataSource === 'net' && t.type === TransactionType.EXPENSE) ? -t.amount : t.amount;
+        const val = (customConfig.dataSource === 'net' && t.type?.toUpperCase() === 'EXPENSE') ? -t.amount : t.amount;
         dataMap[key] = (dataMap[key] || 0) + val;
       });
       return Object.entries(dataMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
@@ -321,10 +321,10 @@ const ChartWidget: React.FC<{
         let totalDebtsIOwe = 0;
         let totalDebtsOwedToMe = 0;
         debtTransactions.forEach((t: Transaction) => {
-          if (t.debtAction === 'BORROW') totalDebtsIOwe += t.amount;
-          else if (t.debtAction === 'REPAY_BORROW') totalDebtsIOwe -= t.amount;
-          else if (t.debtAction === 'LEND') totalDebtsOwedToMe += t.amount;
-          else if (t.debtAction === 'REPAY_LEND') totalDebtsOwedToMe -= t.amount;
+          if (t.debtAction?.toUpperCase() === 'BORROW') totalDebtsIOwe += t.amount;
+          else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') totalDebtsIOwe -= t.amount;
+          else if (t.debtAction?.toUpperCase() === 'LEND') totalDebtsOwedToMe += t.amount;
+          else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') totalDebtsOwedToMe -= t.amount;
           else {
             // Fallback for old transactions
             if (isIncomeLike(t)) totalDebtsIOwe += t.amount;
@@ -350,12 +350,12 @@ const ChartWidget: React.FC<{
         ].filter(d => d.value > 0);
       }
       case 'investment_portfolio': {
-        const investmentTransactions = filteredTransactions.filter((t: Transaction) => t.type === TransactionType.INVESTMENT);
+        const investmentTransactions = filteredTransactions.filter((t: Transaction) => t.type?.toUpperCase() === 'INVESTMENT');
         const investedCapital = investmentTransactions
-          .filter((t: Transaction) => t.investmentAction !== 'SELL' && t.investmentAction !== 'RETURN')
+          .filter((t: Transaction) => t.investmentAction?.toUpperCase() !== 'SELL' && t.investmentAction?.toUpperCase() !== 'RETURN')
           .reduce((s: number, t: Transaction) => s + t.amount, 0);
         const investmentReturns = investmentTransactions
-          .filter((t: Transaction) => t.investmentAction === 'SELL' || t.investmentAction === 'RETURN')
+          .filter((t: Transaction) => t.investmentAction?.toUpperCase() === 'SELL' || t.investmentAction?.toUpperCase() === 'RETURN')
           .reduce((s: number, t: Transaction) => s + t.amount, 0);
         return [
           { name: language === 'ar' ? 'رأس المال' : 'Capital', value: investedCapital, fill: '#3B82F6' },

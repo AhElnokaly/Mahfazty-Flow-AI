@@ -154,6 +154,9 @@ const WelcomeScreen = () => {
     }, 800);
   };
 
+  const [pin, setPin] = useState('');
+  const [showPinPad, setShowPinPad] = useState(false);
+
   const handleGuest = () => {
     setLoading(true);
     setTimeout(() => {
@@ -161,6 +164,21 @@ const WelcomeScreen = () => {
       setLoading(false);
       navigate('/');
     }, 500);
+  };
+
+  const handlePinEntry = (digit: string) => {
+    if (pin.length < 4) {
+      const newPin = pin + digit;
+      setPin(newPin);
+      if (newPin.length === 4) {
+        setLoading(true);
+        setTimeout(() => {
+          dispatch.biometricLogin(state.userProfile.username!);
+          setLoading(false);
+          navigate('/');
+        }, 500);
+      }
+    }
   };
 
   if (view === 'biometric') {
@@ -180,28 +198,61 @@ const WelcomeScreen = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-center justify-center space-y-8">
-            <button 
-              onClick={() => {
-                setLoading(true);
-                setTimeout(() => {
-                  dispatch.biometricLogin(state.userProfile.username!);
-                  setLoading(false);
-                  navigate('/');
-                }, 800);
-              }}
-              disabled={loading}
-              className="relative group w-32 h-32 flex items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all duration-500"
-            >
-              <div className="absolute inset-0 rounded-full border-2 border-emerald-500/50 animate-ping opacity-20 group-hover:opacity-40"></div>
-              <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(16,185,129,0.4)] group-hover:shadow-[0_0_60px_rgba(16,185,129,0.6)] transition-all duration-500 group-hover:scale-110">
-                <ShieldCheck size={40} className="text-emerald-950" />
+          {!showPinPad ? (
+            <div className="flex flex-col items-center justify-center space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <button 
+                onClick={() => {
+                  setLoading(true);
+                  setTimeout(() => {
+                    dispatch.biometricLogin(state.userProfile.username!);
+                    setLoading(false);
+                    navigate('/');
+                  }, 800);
+                }}
+                disabled={loading}
+                className="relative group w-32 h-32 flex items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all duration-500"
+              >
+                <div className="absolute inset-0 rounded-full border-2 border-emerald-500/50 animate-ping opacity-20 group-hover:opacity-40"></div>
+                <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(16,185,129,0.4)] group-hover:shadow-[0_0_60px_rgba(16,185,129,0.6)] transition-all duration-500 group-hover:scale-110">
+                  <ShieldCheck size={40} className="text-emerald-950" />
+                </div>
+              </button>
+              <div className="flex flex-col gap-3 items-center">
+                <p className="text-emerald-400/80 text-sm font-bold uppercase tracking-widest animate-pulse">
+                  {state.language === 'ar' ? 'اضغط للفتح بالبصمة' : 'Tap to unlock'}
+                </p>
+                <button onClick={() => setShowPinPad(true)} className="text-slate-400 text-xs font-bold uppercase tracking-widest hover:text-white transition-colors">
+                  {state.language === 'ar' ? 'أو استخدم الرمز السري' : 'Or use PIN'}
+                </button>
               </div>
-            </button>
-            <p className="text-emerald-400/80 text-sm font-bold uppercase tracking-widest animate-pulse">
-              {state.language === 'ar' ? 'اضغط للفتح بالبصمة' : 'Tap to unlock'}
-            </p>
-          </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center space-y-6 animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex gap-4 justify-center mb-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className={`w-4 h-4 rounded-full transition-all duration-300 ${i < pin.length ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'bg-slate-800'}`} />
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-4 max-w-[240px] mx-auto">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                  <button key={num} onClick={() => handlePinEntry(num.toString())} className="w-16 h-16 rounded-full bg-slate-800/50 hover:bg-slate-700 flex items-center justify-center text-2xl font-black transition-all active:scale-95">
+                    {num}
+                  </button>
+                ))}
+                <button onClick={() => setShowPinPad(false)} className="w-16 h-16 rounded-full bg-slate-800/50 hover:bg-slate-700 flex items-center justify-center text-sm font-black transition-all active:scale-95 text-slate-400">
+                  {state.language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button onClick={() => handlePinEntry('0')} className="w-16 h-16 rounded-full bg-slate-800/50 hover:bg-slate-700 flex items-center justify-center text-2xl font-black transition-all active:scale-95">
+                  0
+                </button>
+                <button onClick={() => {
+                  setPin(pin.slice(0, -1));
+                }} className="w-16 h-16 rounded-full bg-slate-800/50 hover:bg-slate-700 flex items-center justify-center text-xl font-black transition-all active:scale-95 text-slate-400">
+                  ⌫
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="pt-8">
             <button 

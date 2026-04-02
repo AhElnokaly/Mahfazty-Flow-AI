@@ -59,7 +59,8 @@ const Settings: React.FC = () => {
       reader.onload = (event) => {
         try {
           const jsonData = event.target?.result as string;
-          dispatch.importState(jsonData);
+          const parsedData = JSON.parse(jsonData);
+          dispatch.importState(parsedData);
           dispatch.setNotification({ message: language === 'ar' ? 'تم استعادة البيانات بنجاح' : 'Data restored successfully', type: 'success' });
         } catch (error) {
           dispatch.setNotification({ message: language === 'ar' ? 'فشل استعادة البيانات' : 'Failed to restore data', type: 'error' });

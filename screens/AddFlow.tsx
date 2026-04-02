@@ -128,18 +128,18 @@ const AddFlow: React.FC = () => {
       const tToEdit = state.transactions.find(t => t.id === editTransactionId);
       if (tToEdit) {
         setType(tToEdit.type);
-        if (tToEdit.type === TransactionType.INCOME) setMainTab('income');
-        else if (tToEdit.type === TransactionType.EXPENSE) {
+        if (tToEdit.type?.toUpperCase() === 'INCOME') setMainTab('income');
+        else if (tToEdit.type?.toUpperCase() === 'EXPENSE') {
           if (tToEdit.paymentMethod === 'credit') {
             setMainTab('credit_card');
             setCcAction('purchase');
           } else {
             setMainTab('expense');
           }
-        } else if (tToEdit.type === TransactionType.TRANSFER && tToEdit.creditCardId) {
+        } else if (tToEdit.type?.toUpperCase() === 'TRANSFER' && tToEdit.creditCardId) {
           setMainTab('credit_card');
           setCcAction('repayment');
-        } else if (tToEdit.type === TransactionType.INVESTMENT) {
+        } else if (tToEdit.type?.toUpperCase() === 'INVESTMENT') {
           setMainTab('investment');
         }
         
@@ -149,14 +149,18 @@ const AddFlow: React.FC = () => {
         setClientId(tToEdit.clientId);
         if (tToEdit.clientIds) setClientIds(tToEdit.clientIds); // +++ أضيف بناءً على طلبك +++
         setNote(tToEdit.note || '');
-        setDate(tToEdit.date);
+        try {
+          setDate(new Date(tToEdit.date).toISOString().split('T')[0]);
+        } catch {
+          setDate(tToEdit.date);
+        }
         if (tToEdit.paymentMethod) setPaymentMethod(tToEdit.paymentMethod);
         if (tToEdit.creditCardId) setCreditCardId(tToEdit.creditCardId);
         if (tToEdit.dueDate) setDueDate(tToEdit.dueDate);
         if (tToEdit.isDebt) {
           setMainTab('debt');
           setIsDebt(tToEdit.isDebt); // +++ أضيف بناءً على طلبك +++
-          if (tToEdit.debtAction) setDebtAction(tToEdit.debtAction); // +++ أضيف بناءً على طلبك +++
+          if (tToEdit.debtAction) setDebtAction(tToEdit.debtAction.toUpperCase() as any); // +++ أضيف بناءً على طلبك +++
         }
         if (tToEdit.referenceTotal) {
           setIsPartialPayment(true);
@@ -166,8 +170,8 @@ const AddFlow: React.FC = () => {
           setItems(tToEdit.items);
           setShowItems(true);
         }
-        if (tToEdit.type === TransactionType.INVESTMENT) {
-          if (tToEdit.investmentAction) setInvestmentAction(tToEdit.investmentAction); // +++ أضيف بناءً على طلبك +++
+        if (tToEdit.type?.toUpperCase() === 'INVESTMENT') {
+          if (tToEdit.investmentAction) setInvestmentAction(tToEdit.investmentAction.toUpperCase() as any); // +++ أضيف بناءً على طلبك +++
           if (tToEdit.investmentType) setInvestmentType(tToEdit.investmentType);
           if (tToEdit.stockSymbol) setStockSymbol(tToEdit.stockSymbol);
           if (tToEdit.shares) setShares(tToEdit.shares.toString());
@@ -975,7 +979,23 @@ const AddFlow: React.FC = () => {
                           <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         </div>
                       </div>
-                      <div className="flex flex-col sm:flex-row gap-3 items-center">
+                      {/* +++ أضيف بناءً على طلبك +++ */}
+                      {item.clientId && item.clientId !== (clientIds.length > 0 ? clientIds[0] : clientId) && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <input 
+                            type="checkbox" 
+                            id={`debt-${item.id}`}
+                            checked={item.isDebt || false}
+                            onChange={(e) => handleUpdateItem(item.id, 'isDebt', e.target.checked)}
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <label htmlFor={`debt-${item.id}`} className="text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer">
+                            {language === 'ar' ? 'تسجيل كدين على هذا العميل' : 'Record as debt for this client'}
+                          </label>
+                        </div>
+                      )}
+                      {/* ++++++++++++++++++++++++++++ */}
+                      <div className="flex flex-col sm:flex-row gap-3 items-center mt-3">
                         <div className="flex-1 w-full relative flex items-center gap-2">
                            <div className="relative flex-1">
                              <input

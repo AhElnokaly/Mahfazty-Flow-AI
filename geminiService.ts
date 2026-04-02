@@ -9,6 +9,30 @@ const getWalletContext = (state: AppState) => {
   const groupsSummary = state.groups.map(g => `Group: ${g.name}`).join(' | ');
   const installmentsSummary = state.installments.map(i => `${i.title} (${i.paidCount}/${i.installmentCount} paid)`).join(' | ');
   
+  // Calculate debts
+  const debtTransactions = state.transactions.filter(t => t.isDebt);
+  let totalDebtsIOwe = 0;
+  let totalDebtsOwedToMe = 0;
+  debtTransactions.forEach(t => {
+    if (t.debtAction?.toUpperCase() === 'BORROW') totalDebtsIOwe += t.amount;
+    else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') totalDebtsIOwe -= t.amount;
+    else if (t.debtAction?.toUpperCase() === 'LEND') totalDebtsOwedToMe += t.amount;
+    else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') totalDebtsOwedToMe -= t.amount;
+    else {
+      if (t.type === 'INCOME') totalDebtsIOwe += t.amount;
+      else if (t.type === 'EXPENSE') totalDebtsOwedToMe += t.amount;
+    }
+  });
+
+  // Calculate investments
+  const investmentTransactions = state.transactions.filter(t => t.type === 'INVESTMENT');
+  let totalInvested = 0;
+  let totalSold = 0;
+  investmentTransactions.forEach(t => {
+    if (t.investmentAction?.toUpperCase() === 'BUY') totalInvested += t.amount;
+    else if (t.investmentAction?.toUpperCase() === 'SELL') totalSold += t.amount;
+  });
+
   const transactionsSummary = [...state.transactions]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 40)
@@ -21,6 +45,10 @@ User Profile: ${state.userProfile.name}
 Subscription: ${state.isPro ? 'PRO' : 'Standard'}
 Base Currency: ${state.baseCurrency}
 Total Balance: ${state.walletBalance}
+Total Debts I Owe: ${totalDebtsIOwe}
+Total Debts Owed To Me: ${totalDebtsOwedToMe}
+Total Investments (Bought): ${totalInvested}
+Total Investments (Sold): ${totalSold}
 
 STRUCTURE:
 Groups: ${groupsSummary}
@@ -123,11 +151,11 @@ export const sendChatMessage = async (state: AppState, dispatch: any, message: s
     return { text: isArabic ? `رصيدك الحالي هو ${state.walletBalance.toLocaleString()} ${state.baseCurrency}` : `Your current balance is ${state.walletBalance.toLocaleString()} ${state.baseCurrency}` };
   }
 
-  const addMatch = msg.match(/(اضف|إضافة|add)\s+(مصروف|دخل|expense|income)\s+(\d+)\s*(ل|الى|لـ|to)?\s*(.+)/i);
+  const addMatch = msg.match(/(اضف|إضافة|add)\s+(?:(مصروف|دخل|expense|income)\s+)?(\d+)\s*(?:(مصروف|دخل|expense|income)\s+)?(ل|الى|لـ|to)?\s*(.+)/i);
   if (addMatch) {
-    const typeStr = addMatch[2];
+    const typeStr = addMatch[2] || addMatch[4];
     const amount = parseFloat(addMatch[3]);
-    let targetNameRaw = addMatch[5].trim();
+    let targetNameRaw = addMatch[6].trim();
     
     // Handle Arabic prefix "ل" (e.g., "للمنزل" -> "المنزل")
     if (targetNameRaw.startsWith('ل') && !targetNameRaw.startsWith('لل')) {

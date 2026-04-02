@@ -139,9 +139,9 @@ export default function GraphMaker() {
 
       // Filter by Data Type
       if (dataType === 'expense') {
-        filtered = filtered.filter(t => t.type === TransactionType.EXPENSE);
+        filtered = filtered.filter(t => t.type?.toUpperCase() === 'EXPENSE');
       } else if (dataType === 'income') {
-        filtered = filtered.filter(t => t.type === TransactionType.INCOME);
+        filtered = filtered.filter(t => t.type?.toUpperCase() === 'INCOME');
       }
 
       // Grouping Data
@@ -175,10 +175,10 @@ export default function GraphMaker() {
             acc[dateKey] = { date: dateKey, income: 0, expense: 0, net: 0 };
           }
 
-          if (t.type === TransactionType.INCOME) {
+          if (t.type?.toUpperCase() === 'INCOME') {
             acc[dateKey].income += t.amount;
             acc[dateKey].net += t.amount;
-          } else if (t.type === TransactionType.EXPENSE) {
+          } else if (t.type?.toUpperCase() === 'EXPENSE') {
             acc[dateKey].expense += t.amount;
             acc[dateKey].net -= t.amount;
           }

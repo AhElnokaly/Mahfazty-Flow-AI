@@ -149,21 +149,30 @@ const ClientsManager: React.FC = () => {
                     
                     {/* +++ أضيف بناءً على طلبك +++ */}
                     {(() => {
-                      const clientDebts = state.transactions.filter(t => (t.clientId === client.id || (t.clientIds && t.clientIds.includes(client.id))) && t.isDebt);
+                      const clientDebts = state.transactions.filter(t => 
+                        ((t.clientId === client.id || (t.clientIds && t.clientIds.includes(client.id))) && t.isDebt) ||
+                        (t.items && t.items.some(item => item.isDebt && item.clientId === client.id))
+                      );
                       const partialPayments = state.transactions.filter(t => (t.clientId === client.id || (t.clientIds && t.clientIds.includes(client.id))) && t.referenceTotal && t.referenceTotal > t.amount);
                       
                       if (clientDebts.length === 0 && partialPayments.length === 0) return null;
                       
                       let debtBalance = clientDebts.reduce((acc, t) => {
-                        const share = getClientShare(t, client.id); // +++ أضيف بناءً على طلبك +++
-                        return t.type === 'INCOME' ? acc + share : acc - share; // +++ أضيف بناءً على طلبك +++
+                        let share = 0;
+                        if (t.isDebt && (t.clientId === client.id || (t.clientIds && t.clientIds.includes(client.id)))) {
+                          share = getClientShare(t, client.id);
+                        } else if (t.items) {
+                          const debtItems = t.items.filter(item => item.isDebt && item.clientId === client.id);
+                          share = debtItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                        }
+                        return t.type?.toUpperCase() === 'INCOME' ? acc + share : acc - share;
                       }, 0);
 
                       partialPayments.forEach(t => {
                         const share = getClientShare(t, client.id); // +++ أضيف بناءً على طلبك +++
                         const remaining = (t.referenceTotal || 0) - share; // +++ أضيف بناءً على طلبك +++
-                        if (t.type === 'EXPENSE') debtBalance += remaining;
-                        else if (t.type === 'INCOME') debtBalance -= remaining;
+                        if (t.type?.toUpperCase() === 'EXPENSE') debtBalance += remaining;
+                        else if (t.type?.toUpperCase() === 'INCOME') debtBalance -= remaining;
                       });
 
                       if (debtBalance === 0) return null;

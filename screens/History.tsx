@@ -53,6 +53,9 @@ const History: React.FC = () => {
   // Delete confirmation state
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
+  // Edit Mode state +++ أضيف بناءً على طلبك +++
+  const [isEditMode, setIsEditMode] = useState(false);
+
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
   };
@@ -75,11 +78,16 @@ const History: React.FC = () => {
     const data: Record<string, { income: number, expense: number, count: number }> = {};
     
     transactions.forEach(t => {
-      const tDate = t.date.split('T')[0]; 
-      if (!data[tDate]) data[tDate] = { income: 0, expense: 0, count: 0 };
-      if (isIncomeLike(t)) data[tDate].income += t.amount;
-      else if (isExpenseLike(t)) data[tDate].expense += t.amount;
-      data[tDate].count += 1;
+      if (!t.date) return;
+      try {
+        const tDate = new Date(t.date).toISOString().split('T')[0]; 
+        if (!data[tDate]) data[tDate] = { income: 0, expense: 0, count: 0 };
+        if (isIncomeLike(t)) data[tDate].income += t.amount;
+        else if (isExpenseLike(t)) data[tDate].expense += t.amount;
+        data[tDate].count += 1;
+      } catch (e) {
+        // Ignore invalid dates
+      }
     });
     return data;
   }, [transactions]);
@@ -90,7 +98,13 @@ const History: React.FC = () => {
     let result = [...transactions];
     
     if (viewMode === 'calendar' && selectedDate) {
-       return result.filter(t => t.date.startsWith(selectedDate));
+       return result.filter(t => {
+         try {
+           return new Date(t.date).toISOString().startsWith(selectedDate);
+         } catch {
+           return false;
+         }
+       });
     }
 
     if (searchQuery) {
@@ -106,10 +120,14 @@ const History: React.FC = () => {
     const now = new Date();
     if (viewMode === 'list') {
       if (startDate) {
-        result = result.filter(t => t.date >= startDate);
+        result = result.filter(t => {
+          try { return new Date(t.date).toISOString().split('T')[0] >= startDate; } catch { return false; }
+        });
       }
       if (endDate) {
-        result = result.filter(t => t.date <= endDate);
+        result = result.filter(t => {
+          try { return new Date(t.date).toISOString().split('T')[0] <= endDate; } catch { return false; }
+        });
       }
       if (selectedType !== 'all') {
         if (selectedType === TransactionType.INCOME) {
@@ -117,7 +135,7 @@ const History: React.FC = () => {
         } else if (selectedType === TransactionType.EXPENSE) {
           result = result.filter(t => isExpenseLike(t));
         } else {
-          result = result.filter(t => t.type === selectedType);
+          result = result.filter(t => t.type?.toUpperCase() === selectedType?.toUpperCase());
         }
       }
       if (timeRange !== 'all' && !startDate && !endDate) {
@@ -136,7 +154,9 @@ const History: React.FC = () => {
         const y = currentDate.getFullYear();
         const m = currentDate.getMonth() + 1;
         const mStr = m < 10 ? `0${m}` : `${m}`;
-        result = result.filter(t => t.date.startsWith(`${y}-${mStr}`));
+        result = result.filter(t => {
+          try { return new Date(t.date).toISOString().startsWith(`${y}-${mStr}`); } catch { return false; }
+        });
     }
 
     if (selectedGroupId !== 'all') {
@@ -490,6 +510,15 @@ const History: React.FC = () => {
               ))}
             </div>
             <div className="flex gap-2 w-full md:w-auto">
+              {/* +++ أضيف بناءً على طلبك +++ */}
+              <button 
+                onClick={() => setIsEditMode(!isEditMode)}
+                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform ${isEditMode ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
+              >
+                <Edit3 size={16} />
+                {language === 'ar' ? 'وضع التعديل' : 'Edit Mode'}
+              </button>
+              {/* ++++++++++++++++++++++++++++ */}
               <button 
                 onClick={handleExportCSV}
                 className="flex flex-1 items-center justify-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform"
@@ -620,16 +649,16 @@ const History: React.FC = () => {
                   : client?.name;
                 const group = groups.find(g => g.id === t.groupId);
                 return (
-                  <tr key={t.id} className={`hover:bg-slate-50/30 dark:hover:bg-slate-900/10 group transition-colors relative ${group?.color ? group.color.replace('bg-', 'border-l-4 border-l-') : ''}`}>
+                  <tr key={t.id} className={`hover:bg-slate-50/30 dark:hover:bg-slate-900/10 group transition-colors relative ${t.color ? t.color.replace('bg-', 'border-l-4 border-l-') : (group?.color ? group.color.replace('bg-', 'border-l-4 border-l-') : '')}`}>
                     <td className="px-4 md:px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 ${group?.color || 'bg-slate-100 dark:bg-slate-900'} rounded-xl flex items-center justify-center text-lg shadow-sm text-white`}>
-                          {t.type === TransactionType.TRANSFER ? '💳' : t.groupId === 'system_adjustment' ? '⚖️' : (client?.icon || '👤')}
+                        <div className={`w-10 h-10 ${t.color || group?.color || 'bg-slate-100 dark:bg-slate-900'} rounded-xl flex items-center justify-center text-lg shadow-sm text-white`}>
+                          {t.type?.toUpperCase() === 'TRANSFER' ? '💳' : t.groupId === 'system_adjustment' ? '⚖️' : (client?.icon || '👤')}
                         </div>
                         <div className="flex flex-col">
                              <>
                                <span className="text-xs font-black text-black dark:text-slate-100">
-                                 {t.type === TransactionType.TRANSFER ? (language === 'ar' ? 'تسديد بطاقة ائتمانية' : 'Credit Card Payment') : t.groupId === 'system_adjustment' ? (language === 'ar' ? 'تسوية رصيد' : 'Balance Adjustment') : clientNameDisplay} 
+                                 {t.type?.toUpperCase() === 'TRANSFER' ? (language === 'ar' ? 'تسديد بطاقة ائتمانية' : 'Credit Card Payment') : t.groupId === 'system_adjustment' ? (language === 'ar' ? 'تسوية رصيد' : 'Balance Adjustment') : clientNameDisplay} 
                                  {t.groupId !== 'system_adjustment' && t.type !== TransactionType.TRANSFER && <span className="text-[10px] text-slate-500 ml-1 font-bold">({group?.name})</span>}
                                  {t.isDebt && ( // +++ أضيف بناءً على طلبك +++
                                    <span className="ml-2 px-2 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[10px] rounded-full uppercase tracking-wider">
@@ -654,7 +683,7 @@ const History: React.FC = () => {
                           <span className={`text-sm font-black ${
                             isIncomeLike(t) 
                               ? 'text-emerald-600 dark:text-emerald-500' 
-                              : t.type === TransactionType.TRANSFER
+                              : t.type?.toUpperCase() === 'TRANSFER'
                                 ? 'text-blue-600 dark:text-blue-500'
                                 : t.paymentMethod === 'credit' 
                                   ? 'text-purple-600 dark:text-purple-500' 
@@ -724,7 +753,16 @@ const History: React.FC = () => {
                          )}
                          {/* ++++++++++++++++++++++++++++ */}
                          {/* Secondary hover actions to keep app functional but clean */}
-                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700">
+                         <div className={`flex gap-1 transition-all absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 ${isEditMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                           {/* +++ أضيف بناءً على طلبك +++ */}
+                           {isEditMode && (
+                             <button onClick={() => {
+                               const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-rose-500', 'bg-amber-500', 'bg-purple-500', 'bg-slate-500'];
+                               const nextColor = colors[(colors.indexOf(t.color || '') + 1) % colors.length];
+                               dispatch.updateTransaction(t.id, { color: nextColor });
+                             }} className="p-1.5 text-slate-400 hover:text-amber-500" title="تغيير اللون"><div className="w-3 h-3 rounded-full bg-amber-500"></div></button>
+                           )}
+                           {/* ++++++++++++++++++++++++++++ */}
                            <button onClick={() => { 
                              navigate('/add', { state: { editTransactionId: t.id } });
                            }} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit3 size={14}/></button>

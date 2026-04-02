@@ -43,18 +43,26 @@ const Dashboard: React.FC = () => {
   const lastMonthStr = lastMonthDate.toISOString().slice(0, 7);
 
   const currentMonthIncome = transactions
-    .filter(t => isIncomeLike(t) && t.date && t.date.startsWith(currentMonthStr))
+    .filter(t => {
+      try { return isIncomeLike(t) && t.date && new Date(t.date).toISOString().startsWith(currentMonthStr); } catch { return false; }
+    })
     .reduce((s, t) => s + t.amount, 0);
   const lastMonthIncome = transactions
-    .filter(t => isIncomeLike(t) && t.date && t.date.startsWith(lastMonthStr))
+    .filter(t => {
+      try { return isIncomeLike(t) && t.date && new Date(t.date).toISOString().startsWith(lastMonthStr); } catch { return false; }
+    })
     .reduce((s, t) => s + t.amount, 0);
   const incomeChange = lastMonthIncome === 0 ? 0 : ((currentMonthIncome - lastMonthIncome) / lastMonthIncome) * 100;
 
   const currentMonthExpense = transactions
-    .filter(t => isExpenseLike(t) && t.date && t.date.startsWith(currentMonthStr))
+    .filter(t => {
+      try { return isExpenseLike(t) && t.date && new Date(t.date).toISOString().startsWith(currentMonthStr); } catch { return false; }
+    })
     .reduce((s, t) => s + t.amount, 0);
   const lastMonthExpense = transactions
-    .filter(t => isExpenseLike(t) && t.date && t.date.startsWith(lastMonthStr))
+    .filter(t => {
+      try { return isExpenseLike(t) && t.date && new Date(t.date).toISOString().startsWith(lastMonthStr); } catch { return false; }
+    })
     .reduce((s, t) => s + t.amount, 0);
   const expenseChange = lastMonthExpense === 0 ? 0 : ((currentMonthExpense - lastMonthExpense) / lastMonthExpense) * 100;
 
@@ -76,15 +84,28 @@ const Dashboard: React.FC = () => {
   let totalDebtsOwedToMe = 0;
 
   debtTransactions.forEach(t => {
-    if (t.debtAction === 'BORROW') totalDebtsIOwe += t.amount;
-    else if (t.debtAction === 'REPAY_BORROW') totalDebtsIOwe -= t.amount;
-    else if (t.debtAction === 'LEND') totalDebtsOwedToMe += t.amount;
-    else if (t.debtAction === 'REPAY_LEND') totalDebtsOwedToMe -= t.amount;
+    if (t.debtAction?.toUpperCase() === 'BORROW') totalDebtsIOwe += t.amount;
+    else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') totalDebtsIOwe -= t.amount;
+    else if (t.debtAction?.toUpperCase() === 'LEND') totalDebtsOwedToMe += t.amount;
+    else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') totalDebtsOwedToMe -= t.amount;
     else {
       if (isIncomeLike(t)) totalDebtsIOwe += t.amount;
       else if (isExpenseLike(t)) totalDebtsOwedToMe += t.amount;
     }
   });
+
+  // +++ أضيف بناءً على طلبك +++
+  transactions.forEach(t => {
+    if (t.items) {
+      t.items.forEach(item => {
+        if (item.isDebt) {
+          if (isExpenseLike(t)) totalDebtsOwedToMe += (item.price * item.quantity);
+          else if (isIncomeLike(t)) totalDebtsIOwe += (item.price * item.quantity);
+        }
+      });
+    }
+  });
+  // ++++++++++++++++++++++++++++
 
   partialPayments.forEach(t => {
     const remaining = (t.referenceTotal || 0) - t.amount;
@@ -101,12 +122,12 @@ const Dashboard: React.FC = () => {
   totalDebtsOwedToMe = Math.max(0, totalDebtsOwedToMe);
 
   // --- Investment Portfolio ---
-  const investmentTransactions = transactions.filter(t => t.type === TransactionType.INVESTMENT);
+  const investmentTransactions = transactions.filter(t => t.type?.toUpperCase() === 'INVESTMENT');
   const investedCapital = investmentTransactions
-    .filter(t => t.investmentAction !== 'SELL' && t.investmentAction !== 'RETURN')
+    .filter(t => t.investmentAction?.toUpperCase() !== 'SELL' && t.investmentAction?.toUpperCase() !== 'RETURN')
     .reduce((s, t) => s + t.amount, 0);
   const investmentReturns = investmentTransactions
-    .filter(t => t.investmentAction === 'SELL' || t.investmentAction === 'RETURN')
+    .filter(t => t.investmentAction?.toUpperCase() === 'SELL' || t.investmentAction?.toUpperCase() === 'RETURN')
     .reduce((s, t) => s + t.amount, 0);
 
   const recentTransactions = useMemo(() => {
@@ -159,7 +180,7 @@ const Dashboard: React.FC = () => {
     const data = groups.map(g => ({
       name: g.name,
       value: transactions
-        .filter(t => t.groupId === g.id && t.type === TransactionType.EXPENSE)
+        .filter(t => t.groupId === g.id && t.type?.toUpperCase() === 'EXPENSE')
         .reduce((s, t) => s + t.amount, 0)
     })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
 
@@ -183,7 +204,9 @@ const Dashboard: React.FC = () => {
       d.setDate(d.getDate() - i);
       const dayStr = d.toISOString().split('T')[0];
       const dailyNet = transactions
-        .filter(t => t.date && t.date === dayStr)
+        .filter(t => {
+          try { return t.date && new Date(t.date).toISOString().split('T')[0] === dayStr; } catch { return false; }
+        })
         .reduce((s, t) => isIncomeLike(t) ? s + t.amount : s - t.amount, 0);
       data.push({ name: i, value: Math.abs(dailyNet + (Math.random() * 50)) });
     }
@@ -236,10 +259,10 @@ const Dashboard: React.FC = () => {
 
     // Calculate Investments
     const totalInvestments = transactions
-      .filter(t => t.type === TransactionType.INVESTMENT)
+      .filter(t => t.type?.toUpperCase() === 'INVESTMENT')
       .reduce((sum, t) => {
-        if (t.investmentAction?.startsWith('BUY_')) return sum + t.amount;
-        if (t.investmentAction?.startsWith('SELL_')) return sum - t.amount;
+        if (t.investmentAction?.toUpperCase() === 'BUY' || t.investmentAction?.toUpperCase() === 'FREE_STOCK') return sum + t.amount;
+        if (t.investmentAction?.toUpperCase() === 'SELL' || t.investmentAction?.toUpperCase() === 'RETURN') return sum - t.amount;
         return sum;
       }, 0);
 
@@ -255,12 +278,26 @@ const Dashboard: React.FC = () => {
       
       clientsForTx.forEach(cId => {
         if (!clientDebts[cId]) clientDebts[cId] = 0;
-        if (t.debtAction === 'BORROW') clientDebts[cId] += amountPerClient;
-        else if (t.debtAction === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
-        else if (t.debtAction === 'LEND') clientDebts[cId] -= amountPerClient;
-        else if (t.debtAction === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
+        if (t.debtAction?.toUpperCase() === 'BORROW') clientDebts[cId] += amountPerClient;
+        else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
+        else if (t.debtAction?.toUpperCase() === 'LEND') clientDebts[cId] -= amountPerClient;
+        else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
       });
     });
+
+    // +++ أضيف بناءً على طلبك +++
+    transactions.forEach(t => {
+      if (t.items) {
+        t.items.forEach(item => {
+          if (item.isDebt && item.clientId) {
+            if (!clientDebts[item.clientId]) clientDebts[item.clientId] = 0;
+            if (isExpenseLike(t)) clientDebts[item.clientId] -= (item.price * item.quantity); // They owe me (LEND)
+            else if (isIncomeLike(t)) clientDebts[item.clientId] += (item.price * item.quantity); // I owe them (BORROW)
+          }
+        });
+      }
+    });
+    // ++++++++++++++++++++++++++++
 
     partialPayments.forEach(t => {
       const clientsForTx = t.clientIds || [t.clientId];
@@ -270,8 +307,8 @@ const Dashboard: React.FC = () => {
       
       clientsForTx.forEach(cId => {
         if (!clientDebts[cId]) clientDebts[cId] = 0;
-        if (t.type === 'EXPENSE') clientDebts[cId] += remaining;
-        else if (t.type === 'INCOME') clientDebts[cId] -= remaining;
+        if (t.type?.toUpperCase() === 'EXPENSE') clientDebts[cId] += remaining;
+        else if (t.type?.toUpperCase() === 'INCOME') clientDebts[cId] -= remaining;
       });
     });
 
@@ -448,15 +485,29 @@ const Dashboard: React.FC = () => {
                   
                   clientsForTx.forEach(cId => {
                     if (!clientDebts[cId]) clientDebts[cId] = 0;
-                    if (t.debtAction === 'BORROW') clientDebts[cId] += amountPerClient;
-                    else if (t.debtAction === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
-                    else if (t.debtAction === 'LEND') clientDebts[cId] -= amountPerClient;
-                    else if (t.debtAction === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
+                    if (t.debtAction?.toUpperCase() === 'BORROW') clientDebts[cId] += amountPerClient;
+                    else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
+                    else if (t.debtAction?.toUpperCase() === 'LEND') clientDebts[cId] -= amountPerClient;
+                    else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
                     else {
-                      clientDebts[cId] += t.type === 'INCOME' ? amountPerClient : -amountPerClient;
+                      clientDebts[cId] += t.type?.toUpperCase() === 'INCOME' ? amountPerClient : -amountPerClient;
                     }
                   });
                 });
+
+                // +++ أضيف بناءً على طلبك +++
+                transactions.forEach(t => {
+                  if (t.items) {
+                    t.items.forEach(item => {
+                      if (item.isDebt && item.clientId) {
+                        if (!clientDebts[item.clientId]) clientDebts[item.clientId] = 0;
+                        if (isExpenseLike(t)) clientDebts[item.clientId] -= (item.price * item.quantity);
+                        else if (isIncomeLike(t)) clientDebts[item.clientId] += (item.price * item.quantity);
+                      }
+                    });
+                  }
+                });
+                // ++++++++++++++++++++++++++++
 
                 let totalDebtsIOwe = 0;
                 let totalDebtsOwedToMe = 0;
@@ -468,8 +519,8 @@ const Dashboard: React.FC = () => {
 
                 partialPayments.forEach(t => {
                   const remaining = (t.referenceTotal || 0) - t.amount;
-                  if (t.type === 'EXPENSE') totalDebtsIOwe += remaining;
-                  else if (t.type === 'INCOME') totalDebtsOwedToMe += remaining;
+                  if (t.type?.toUpperCase() === 'EXPENSE') totalDebtsIOwe += remaining;
+                  else if (t.type?.toUpperCase() === 'INCOME') totalDebtsOwedToMe += remaining;
                 });
 
                 if (totalDebtsIOwe === 0 && totalDebtsOwedToMe === 0) return null;
@@ -493,7 +544,7 @@ const Dashboard: React.FC = () => {
               })()}
               
               {(() => {
-                const investmentTransactions = transactions.filter(t => t.type === 'INVESTMENT');
+                const investmentTransactions = transactions.filter(t => t.type?.toUpperCase() === 'INVESTMENT');
                 if (investmentTransactions.length === 0) return null;
 
                 const totalInvestments = investmentTransactions.reduce((acc, t) => acc + t.amount, 0);
@@ -957,7 +1008,7 @@ const Dashboard: React.FC = () => {
                     <div>
                       <p className="text-xs font-bold text-slate-900 dark:text-white">{clientNameDisplay || t.note || 'Transaction'}</p>
                       <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
-                        <span>{t.date}</span>
+                        <span>{new Date(t.date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
                         <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
                         <span>{group?.name}</span>
                       </p>
