@@ -158,6 +158,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenNotific
             </button>
 
             <button 
+              onClick={() => { onClose(); navigate('/investments'); }}
+              className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <BarChart3 size={20} />
+              <span className="text-sm font-bold">{state.language === 'ar' ? 'الاستثمارات والأسهم' : 'Investments'}</span>
+            </button>
+
+            <button 
               onClick={() => { onClose(); navigate('/subscriptions'); }}
               className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >

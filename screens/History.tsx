@@ -46,7 +46,7 @@ const History: React.FC = () => {
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [selectedType, setSelectedType] = useState<'all' | TransactionType>('all');
+  const [selectedType, setSelectedType] = useState<'all' | TransactionType | 'DEBT'>('all');
 
   const [detailedItem, setDetailedItem] = useState<string | null>(null);
   
@@ -134,6 +134,8 @@ const History: React.FC = () => {
           result = result.filter(t => isIncomeLike(t));
         } else if (selectedType === TransactionType.EXPENSE) {
           result = result.filter(t => isExpenseLike(t));
+        } else if ((selectedType as string) === 'DEBT') {
+          result = result.filter(t => t.isDebt || (t.items && t.items.some(item => item.isDebt)));
         } else {
           result = result.filter(t => t.type?.toUpperCase() === selectedType?.toUpperCase());
         }
@@ -167,7 +169,11 @@ const History: React.FC = () => {
       result = result.filter(t => t.clientId === selectedClientId || (t.clientIds && t.clientIds.includes(selectedClientId)));
     }
 
-    return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return result.sort((a, b) => {
+      const timeA = new Date(a.date || 0).getTime();
+      const timeB = new Date(b.date || 0).getTime();
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
   }, [transactions, timeRange, searchQuery, clients, selectedGroupId, selectedClientId, viewMode, currentDate, selectedDate, startDate, endDate, selectedType]);
 
   const totals = useMemo(() => {
@@ -579,6 +585,7 @@ const History: React.FC = () => {
                 <option value="all">{language === 'ar' ? 'كل الأنواع' : 'All Types'}</option>
                 <option value={TransactionType.INCOME}>{language === 'ar' ? 'دخل' : 'Income'}</option>
                 <option value={TransactionType.EXPENSE}>{language === 'ar' ? 'صرف' : 'Expense'}</option>
+                <option value="DEBT">{language === 'ar' ? 'ديون وسلف' : 'Debts & Loans'}</option>
               </select>
             </div>
 

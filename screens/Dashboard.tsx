@@ -77,35 +77,30 @@ const Dashboard: React.FC = () => {
   const savingsRate = currentMonthIncome > 0 ? ((currentMonthIncome - currentMonthExpense) / currentMonthIncome) * 100 : 0;
 
   // --- Debt Position ---
-  const debtTransactions = transactions.filter(t => t.isDebt);
-  const partialPayments = transactions.filter(t => t.referenceTotal && t.referenceTotal > t.amount);
-  
   let totalDebtsIOwe = 0;
   let totalDebtsOwedToMe = 0;
 
-  debtTransactions.forEach(t => {
-    if (t.debtAction?.toUpperCase() === 'BORROW') totalDebtsIOwe += t.amount;
-    else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') totalDebtsIOwe -= t.amount;
-    else if (t.debtAction?.toUpperCase() === 'LEND') totalDebtsOwedToMe += t.amount;
-    else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') totalDebtsOwedToMe -= t.amount;
-    else {
-      if (isIncomeLike(t)) totalDebtsIOwe += t.amount;
-      else if (isExpenseLike(t)) totalDebtsOwedToMe += t.amount;
+  transactions.forEach(t => {
+    if (t.isDebt) {
+       if (t.debtAction?.toUpperCase() === 'BORROW') totalDebtsIOwe += t.amount;
+       else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') totalDebtsIOwe -= t.amount;
+       else if (t.debtAction?.toUpperCase() === 'LEND') totalDebtsOwedToMe += t.amount;
+       else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') totalDebtsOwedToMe -= t.amount;
+       else {
+         if (isIncomeLike(t)) totalDebtsIOwe += t.amount;
+         else if (isExpenseLike(t)) totalDebtsOwedToMe += t.amount;
+       }
+    } else if (t.items) {
+       t.items.forEach(item => {
+         if (item.isDebt) {
+           if (isExpenseLike(t)) totalDebtsOwedToMe += (item.price * item.quantity);
+           else if (isIncomeLike(t)) totalDebtsIOwe += (item.price * item.quantity);
+         }
+       });
     }
   });
 
-  // +++ أضيف بناءً على طلبك +++
-  transactions.forEach(t => {
-    if (t.items) {
-      t.items.forEach(item => {
-        if (item.isDebt) {
-          if (isExpenseLike(t)) totalDebtsOwedToMe += (item.price * item.quantity);
-          else if (isIncomeLike(t)) totalDebtsIOwe += (item.price * item.quantity);
-        }
-      });
-    }
-  });
-  // ++++++++++++++++++++++++++++
+  const partialPayments = transactions.filter(t => t.referenceTotal && t.referenceTotal > t.amount);
 
   partialPayments.forEach(t => {
     const remaining = (t.referenceTotal || 0) - t.amount;
@@ -131,7 +126,11 @@ const Dashboard: React.FC = () => {
     .reduce((s, t) => s + t.amount, 0);
 
   const recentTransactions = useMemo(() => {
-    return [...transactions].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()).slice(0, 5);
+    return [...transactions].sort((a, b) => {
+      const timeA = new Date(a.date || 0).getTime();
+      const timeB = new Date(b.date || 0).getTime();
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    }).slice(0, 5);
   }, [transactions]);
 
   const upcomingInstallments = useMemo(() => {
@@ -267,27 +266,25 @@ const Dashboard: React.FC = () => {
       }, 0);
 
     // Calculate Debts
-    const debtTransactions = transactions.filter(t => t.isDebt);
-    const partialPayments = transactions.filter(t => t.referenceTotal && t.referenceTotal > t.amount);
-    
     const clientDebts: Record<string, number> = {};
     
-    debtTransactions.forEach(t => {
-      const clientsForTx = t.clientIds || [t.clientId];
-      const amountPerClient = t.amount / clientsForTx.length;
-      
-      clientsForTx.forEach(cId => {
-        if (!clientDebts[cId]) clientDebts[cId] = 0;
-        if (t.debtAction?.toUpperCase() === 'BORROW') clientDebts[cId] += amountPerClient;
-        else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
-        else if (t.debtAction?.toUpperCase() === 'LEND') clientDebts[cId] -= amountPerClient;
-        else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
-      });
-    });
-
-    // +++ أضيف بناءً على طلبك +++
     transactions.forEach(t => {
-      if (t.items) {
+      if (t.isDebt) {
+        const clientsForTx = t.clientIds || [t.clientId];
+        const amountPerClient = t.amount / clientsForTx.length;
+        
+        clientsForTx.forEach(cId => {
+          if (!clientDebts[cId]) clientDebts[cId] = 0;
+          if (t.debtAction?.toUpperCase() === 'BORROW') clientDebts[cId] += amountPerClient;
+          else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
+          else if (t.debtAction?.toUpperCase() === 'LEND') clientDebts[cId] -= amountPerClient;
+          else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
+          else {
+            if (isIncomeLike(t)) clientDebts[cId] += amountPerClient;
+            else if (isExpenseLike(t)) clientDebts[cId] -= amountPerClient;
+          }
+        });
+      } else if (t.items) {
         t.items.forEach(item => {
           if (item.isDebt && item.clientId) {
             if (!clientDebts[item.clientId]) clientDebts[item.clientId] = 0;
@@ -297,7 +294,8 @@ const Dashboard: React.FC = () => {
         });
       }
     });
-    // ++++++++++++++++++++++++++++
+
+    const partialPayments = transactions.filter(t => t.referenceTotal && t.referenceTotal > t.amount);
 
     partialPayments.forEach(t => {
       const clientsForTx = t.clientIds || [t.clientId];
@@ -471,33 +469,24 @@ const Dashboard: React.FC = () => {
               </div>
               {/* +++ أضيف بناءً على طلبك +++ */}
               {(() => {
-                const debtTransactions = transactions.filter(t => t.isDebt);
-                const partialPayments = transactions.filter(t => t.referenceTotal && t.referenceTotal > t.amount);
-                
-                if (debtTransactions.length === 0 && partialPayments.length === 0) return null;
-
-                // Calculate net debt per client
                 const clientDebts: Record<string, number> = {};
                 
-                debtTransactions.forEach(t => {
-                  const clientsForTx = t.clientIds || [t.clientId];
-                  const amountPerClient = t.amount / clientsForTx.length;
-                  
-                  clientsForTx.forEach(cId => {
-                    if (!clientDebts[cId]) clientDebts[cId] = 0;
-                    if (t.debtAction?.toUpperCase() === 'BORROW') clientDebts[cId] += amountPerClient;
-                    else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
-                    else if (t.debtAction?.toUpperCase() === 'LEND') clientDebts[cId] -= amountPerClient;
-                    else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
-                    else {
-                      clientDebts[cId] += t.type?.toUpperCase() === 'INCOME' ? amountPerClient : -amountPerClient;
-                    }
-                  });
-                });
-
-                // +++ أضيف بناءً على طلبك +++
                 transactions.forEach(t => {
-                  if (t.items) {
+                  if (t.isDebt) {
+                    const clientsForTx = t.clientIds || [t.clientId];
+                    const amountPerClient = t.amount / clientsForTx.length;
+                    
+                    clientsForTx.forEach(cId => {
+                      if (!clientDebts[cId]) clientDebts[cId] = 0;
+                      if (t.debtAction?.toUpperCase() === 'BORROW') clientDebts[cId] += amountPerClient;
+                      else if (t.debtAction?.toUpperCase() === 'REPAY_BORROW') clientDebts[cId] -= amountPerClient;
+                      else if (t.debtAction?.toUpperCase() === 'LEND') clientDebts[cId] -= amountPerClient;
+                      else if (t.debtAction?.toUpperCase() === 'REPAY_LEND') clientDebts[cId] += amountPerClient;
+                      else {
+                        clientDebts[cId] += t.type?.toUpperCase() === 'INCOME' ? amountPerClient : -amountPerClient;
+                      }
+                    });
+                  } else if (t.items) {
                     t.items.forEach(item => {
                       if (item.isDebt && item.clientId) {
                         if (!clientDebts[item.clientId]) clientDebts[item.clientId] = 0;
@@ -507,7 +496,10 @@ const Dashboard: React.FC = () => {
                     });
                   }
                 });
-                // ++++++++++++++++++++++++++++
+
+                const partialPayments = transactions.filter(t => t.referenceTotal && t.referenceTotal > t.amount);
+                
+                if (Object.keys(clientDebts).length === 0 && partialPayments.length === 0) return null;
 
                 let totalDebtsIOwe = 0;
                 let totalDebtsOwedToMe = 0;

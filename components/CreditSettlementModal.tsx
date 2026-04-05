@@ -151,21 +151,6 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
       adjustmentTransaction
     });
 
-    // Also add the transfer transaction to history
-    dispatch.addTransaction({
-      type: 'TRANSFER' as any,
-      amount,
-      date: new Date().toISOString().split('T')[0],
-      note: language === 'ar' ? `تسديد بطاقة ${card.name}` : `Payment for ${card.name}`,
-      groupId: 'system_adjustment',
-      clientId: 'system',
-      clientIds: ['system'],
-      currency: state.baseCurrency,
-      paymentMethod: 'cash',
-      creditCardId: card.id,
-      items: []
-    });
-
     dispatch.setNotification({ message: language === 'ar' ? 'تم تسديد البطاقة بنجاح' : 'Card paid successfully', type: 'success' });
     onClose();
   };

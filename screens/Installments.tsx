@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../store';
 import { 
   CreditCard, Plus, Calendar, Percent, AlertCircle, 
@@ -13,21 +14,23 @@ import GroupsManager from './GroupsManager';
 
 const Installments: React.FC = () => {
   const { state, dispatch } = useApp();
-  const { language, installments, baseCurrency } = state;
+  const navigate = useNavigate();
+  const { language, installments, transactions, baseCurrency } = state;
   const groups = useMemo(() => state.groups.filter(g => !g.isArchived), [state.groups]);
   const [activeTab, setActiveTab] = useState<'installments' | 'groups'>('installments');
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form State
-  const [formData, setFormData] = useState<Partial<Installment>>({
+  const [formData, setFormData] = useState<Partial<Installment> & { receiveCash?: boolean }>({
     title: '',
     totalAmount: 0,
     interestRate: 0,
     installmentCount: 12,
     type: 'purchase',
     startDate: new Date().toISOString().split('T')[0],
-    linkedGroupId: ''
+    linkedGroupId: '',
+    receiveCash: false
   });
 
   // Pay State
@@ -36,6 +39,7 @@ const Installments: React.FC = () => {
 
   // Delete confirmation state
   const [installmentToDelete, setInstallmentToDelete] = useState<string | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   const vibrate = () => {
     if (navigator.vibrate) navigator.vibrate(15);
@@ -64,6 +68,14 @@ const Installments: React.FC = () => {
       vibrate();
       dispatch.deleteInstallment(installmentToDelete);
       setInstallmentToDelete(null);
+    }
+  };
+
+  const confirmDeleteTransaction = () => {
+    if (transactionToDelete) {
+      vibrate();
+      dispatch.deleteTransaction(transactionToDelete);
+      setTransactionToDelete(null);
     }
   };
 
@@ -98,7 +110,8 @@ const Installments: React.FC = () => {
          startDate: formData.startDate || new Date().toISOString().split('T')[0],
          type: formData.type as any || 'purchase',
          penalty: 0,
-         linkedGroupId: formData.linkedGroupId || undefined
+         linkedGroupId: formData.linkedGroupId || undefined,
+         receiveCash: formData.receiveCash
        });
        if (installments.length === 0) {
          dispatch.unlockAchievement('first_installment');
@@ -107,7 +120,7 @@ const Installments: React.FC = () => {
     }
     
     setShowAdd(false);
-    setFormData({ title: '', totalAmount: 0, interestRate: 0, installmentCount: 12, type: 'purchase', startDate: new Date().toISOString().split('T')[0], linkedGroupId: '' });
+    setFormData({ title: '', totalAmount: 0, interestRate: 0, installmentCount: 12, type: 'purchase', startDate: new Date().toISOString().split('T')[0], linkedGroupId: '', receiveCash: false });
   };
 
   const handlePay = () => {
@@ -122,6 +135,11 @@ const Installments: React.FC = () => {
   // --- CALCULATIONS & STATS ---
   const activeInstallments = installments.filter(i => i.status === 'active');
   const completedInstallments = installments.filter(i => i.status === 'completed');
+  const debtTransactions = useMemo(() => transactions.filter(t => 
+    (t.isDebt || (t.items && t.items.some(item => item.isDebt))) && 
+    !t.note?.startsWith('Installment Payment:') && 
+    !t.note?.startsWith('Loan Received:')
+  ), [transactions]);
 
   const stats = useMemo(() => {
     let totalMonthlyCommitment = 0;
@@ -399,6 +417,35 @@ const Installments: React.FC = () => {
                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                  </select>
               </div>
+
+              <div className="space-y-2">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2">{language === 'ar' ? 'نوع الخطة' : 'Plan Type'}</label>
+                 <select 
+                   value={formData.type} 
+                   onChange={e => setFormData({...formData, type: e.target.value as any})}
+                   className="w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl font-bold text-slate-900 dark:text-white border-none outline-none focus:ring-4 focus:ring-rose-500/10 appearance-none cursor-pointer"
+                 >
+                   <option value="purchase">{language === 'ar' ? 'مشتريات' : 'Purchase'}</option>
+                   <option value="loan">{language === 'ar' ? 'قرض / دين' : 'Loan / Debt'}</option>
+                   <option value="jamiyah">{language === 'ar' ? 'جمعية' : 'Jamiyah'}</option>
+                 </select>
+              </div>
+
+              {(formData.type === 'loan' || formData.type === 'jamiyah') && !editingId && (
+                <div className="space-y-2 md:col-span-2">
+                   <label className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                     <input 
+                       type="checkbox" 
+                       checked={formData.receiveCash || false}
+                       onChange={e => setFormData({...formData, receiveCash: e.target.checked})}
+                       className="w-5 h-5 rounded text-rose-600 focus:ring-rose-500"
+                     />
+                     <span className="font-bold text-sm text-slate-900 dark:text-white">
+                       {language === 'ar' ? 'استلام المبلغ نقداً الآن (سيتم إضافته للرصيد)' : 'Receive amount in cash now (will be added to balance)'}
+                     </span>
+                   </label>
+                </div>
+              )}
            </div>
 
            <div className="mt-8 flex gap-4">
@@ -462,11 +509,52 @@ const Installments: React.FC = () => {
              );
            })}
 
-           {activeInstallments.length === 0 && !showAdd && (
+           {activeInstallments.length === 0 && debtTransactions.length === 0 && !showAdd && (
               <div className="text-center py-20 opacity-40">
                  <CheckCircle2 size={48} className="mx-auto mb-4 text-slate-300" />
                  <p className="text-sm font-black uppercase tracking-[4px]">{language === 'ar' ? 'لا توجد التزامات نشطة' : 'No active liabilities'}</p>
               </div>
+           )}
+
+           {debtTransactions.length > 0 && !showAdd && (
+             <div className="mt-12">
+               <h3 className="text-lg font-black text-slate-900 dark:text-white mb-6 uppercase flex items-center gap-2">
+                  <Wallet className="text-amber-500" /> 
+                  {language === 'ar' ? 'ديون وسلف فردية' : 'Single Debts & Loans'}
+               </h3>
+               <div className="space-y-4">
+                 {debtTransactions.map(t => {
+                   const debtAmount = t.isDebt ? t.amount : (t.items?.filter(i => i.isDebt).reduce((sum, i) => sum + (i.price * i.quantity), 0) || 0);
+                   return (
+                   <div key={t.id} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+                     <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${t.type === 'INCOME' ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-500' : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500'}`}>
+                           {t.type === 'INCOME' ? <TrendingDown size={20} /> : <TrendingUp size={20} />}
+                        </div>
+                        <div>
+                           <h4 className="text-base font-black text-slate-900 dark:text-white">
+                             {t.note || (language === 'ar' ? 'دين' : 'Debt')}
+                           </h4>
+                           <div className="flex items-center gap-2 text-xs font-bold text-slate-500 mt-1">
+                              <span>{new Date(t.date).toLocaleDateString()}</span>
+                              <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                              <span>{t.type === 'INCOME' ? (language === 'ar' ? 'دين عليك' : 'Owed by you') : (language === 'ar' ? 'دين لك' : 'Owed to you')}</span>
+                           </div>
+                        </div>
+                     </div>
+                     <div className="text-right flex flex-col items-end gap-2">
+                        <div className={`text-xl font-black ${t.type === 'INCOME' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                          {t.type === 'INCOME' ? '-' : '+'}{debtAmount.toLocaleString()} {t.currency}
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <button onClick={() => navigate('/add', { state: { editTransactionId: t.id } })} className="p-2 text-slate-400 hover:text-blue-500 bg-slate-50 dark:bg-slate-900 rounded-xl transition-colors"><Edit3 size={16}/></button>
+                           <button onClick={() => setTransactionToDelete(t.id)} className="p-2 text-slate-400 hover:text-rose-500 bg-slate-50 dark:bg-slate-900 rounded-xl transition-colors"><Trash2 size={16}/></button>
+                        </div>
+                     </div>
+                   </div>
+                 )})}
+               </div>
+             </div>
            )}
         </div>
       )}
@@ -510,6 +598,16 @@ const Installments: React.FC = () => {
         onConfirm={confirmDelete}
         title={language === 'ar' ? 'تأكيد المسح' : 'Confirm Delete'}
         message={language === 'ar' ? 'هل أنت متأكد من مسح هذا القسط؟ لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this installment? This action cannot be undone.'}
+        confirmText={language === 'ar' ? 'مسح' : 'Delete'}
+        cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
+      />
+
+      <ConfirmModal
+        isOpen={!!transactionToDelete}
+        onClose={() => setTransactionToDelete(null)}
+        onConfirm={confirmDeleteTransaction}
+        title={language === 'ar' ? 'تأكيد مسح الدين' : 'Confirm Delete Debt'}
+        message={language === 'ar' ? 'هل أنت متأكد من مسح هذا الدين؟ سيتم استرجاع الرصيد.' : 'Are you sure you want to delete this debt? The balance will be restored.'}
         confirmText={language === 'ar' ? 'مسح' : 'Delete'}
         cancelText={language === 'ar' ? 'إلغاء' : 'Cancel'}
       />

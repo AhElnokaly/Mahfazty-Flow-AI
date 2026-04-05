@@ -15,6 +15,7 @@ import Archive from './screens/Archive';
 import Installments from './screens/Installments';
 import { CreditCards } from './screens/CreditCards';
 import { Subscriptions } from './screens/Subscriptions';
+import { Investments } from './screens/Investments';
 import Onboarding from './screens/Onboarding';
 import Goals from './screens/Goals';
 import { SmartNotifications } from './components/SmartNotifications';
@@ -832,6 +833,7 @@ const App: React.FC = () => {
               <Route path="/graph-maker" element={<GraphMaker />} />
               <Route path="/installments" element={<Installments />} />
               <Route path="/credit-cards" element={<CreditCards />} />
+              <Route path="/investments" element={<Investments />} />
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/archive" element={<Archive />} />

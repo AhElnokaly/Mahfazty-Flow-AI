@@ -88,11 +88,17 @@ const Goals: React.FC = () => {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
     const recentIncome = state.transactions
-      .filter(t => t.type?.toUpperCase() === 'INCOME' && new Date(t.date) >= thirtyDaysAgo)
+      .filter(t => {
+        if (t.type?.toUpperCase() !== 'INCOME') return false;
+        try { return new Date(t.date) >= thirtyDaysAgo; } catch(e) { return false; }
+      })
       .reduce((sum, t) => sum + t.amount, 0);
       
     const recentExpense = state.transactions
-      .filter(t => t.type?.toUpperCase() === 'EXPENSE' && new Date(t.date) >= thirtyDaysAgo)
+      .filter(t => {
+        if (t.type?.toUpperCase() !== 'EXPENSE') return false;
+        try { return new Date(t.date) >= thirtyDaysAgo; } catch(e) { return false; }
+      })
       .reduce((sum, t) => sum + t.amount, 0);
     
     const savings = recentIncome - recentExpense;

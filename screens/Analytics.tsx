@@ -222,7 +222,13 @@ const ChartWidget: React.FC<{
       if (timeRange === '1W') cutoff.setDate(now.getDate() - 7);
       if (timeRange === '1M') cutoff.setDate(now.getDate() - 30);
       if (timeRange === '1Y') cutoff.setDate(now.getDate() - 365);
-      txs = txs.filter(t => new Date(t.date) >= cutoff);
+      txs = txs.filter(t => {
+        try {
+          return new Date(t.date) >= cutoff;
+        } catch (e) {
+          return false;
+        }
+      });
     }
 
     // Entity Filter
@@ -314,7 +320,11 @@ const ChartWidget: React.FC<{
             dataMap[key].net -= t.amount;
           }
         });
-        return Object.values(dataMap).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+        return Object.values(dataMap).sort((a, b) => {
+          const timeA = a.dateObj.getTime();
+          const timeB = b.dateObj.getTime();
+          return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
+        });
       }
       case 'debt_position': {
         const debtTransactions = filteredTransactions.filter((t: Transaction) => t.isDebt);
@@ -449,7 +459,11 @@ const ChartWidget: React.FC<{
           });
         });
 
-        return Object.values(chartDataMap).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        return Object.values(chartDataMap).sort((a, b) => {
+          const timeA = new Date(a.date).getTime();
+          const timeB = new Date(b.date).getTime();
+          return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
+        });
       }
       case 'price_comparison': {
         // Find items bought from different stores
@@ -981,7 +995,11 @@ const ChartWidget: React.FC<{
                      note: t.note,
                      clientId: t.clientId
                    };
-                 }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                 }).sort((a: any, b: any) => {
+                   const timeA = new Date(a.date).getTime();
+                   const timeB = new Date(b.date).getTime();
+                   return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+                 });
 
                  if (itemTransactions.length === 0) return null;
 

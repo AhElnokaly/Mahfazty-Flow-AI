@@ -209,10 +209,10 @@ const AddFlow: React.FC = () => {
   };
 
   const handleAddItem = () => {
-    setItems([...items, { id: Date.now().toString(), name: '', price: 0, quantity: 1, category: 'Other' }]);
+    setItems([...items, { id: Date.now().toString() + Math.random().toString(36).substr(2, 9), name: '', price: 0, quantity: 1, category: 'Other' }]);
   };
 
-  const handleUpdateItem = (id: string, field: keyof TransactionItem, value: string | number) => {
+  const handleUpdateItem = (id: string, field: keyof TransactionItem, value: string | number | boolean) => {
     setItems(items.map(item => {
       if (item.id === id) {
         return { ...item, [field]: value };
@@ -619,6 +619,67 @@ const AddFlow: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* +++ أضيف بناءً على طلبك +++ */}
+            {(mainTab === 'income' || mainTab === 'expense') && (
+              <div className="mb-8 md:mb-12 px-2">
+                <div className="flex items-center gap-3 mb-4">
+                  <input 
+                    type="checkbox" 
+                    id="isDebt"
+                    checked={isDebt}
+                    onChange={(e) => {
+                      setIsDebt(e.target.checked);
+                      if (e.target.checked && !debtAction) {
+                        setDebtAction(mainTab === 'income' ? 'BORROW' : 'LEND');
+                      }
+                    }}
+                    className="w-5 h-5 rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="isDebt" className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest cursor-pointer">
+                    {language === 'ar' ? 'تسجيل كدين' : 'Mark as Debt'}
+                  </label>
+                </div>
+
+                {isDebt && (
+                  <div className="flex flex-col gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl animate-in fade-in slide-in-from-top-2">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setDebtAction('BORROW'); setType(TransactionType.INCOME); }}
+                        className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${debtAction === 'BORROW' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                      >
+                        {language === 'ar' ? 'استلفت (أخذت)' : 'Borrowed (Received)'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setDebtAction('LEND'); setType(TransactionType.EXPENSE); }}
+                        className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${debtAction === 'LEND' ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                      >
+                        {language === 'ar' ? 'سلّفت (أعطيت)' : 'Lent (Given)'}
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setDebtAction('REPAY_BORROW'); setType(TransactionType.EXPENSE); }}
+                        className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${debtAction === 'REPAY_BORROW' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                      >
+                        {language === 'ar' ? 'سددت ديني' : 'Repaid my debt'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setDebtAction('REPAY_LEND'); setType(TransactionType.INCOME); }}
+                        className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${debtAction === 'REPAY_LEND' ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                      >
+                        {language === 'ar' ? 'استرددت مالي' : 'Got my money back'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* ++++++++++++++++++++++++++++ */}
 
             {type !== TransactionType.INVESTMENT && (
             <div className="mb-8 md:mb-12">
