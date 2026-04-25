@@ -31,6 +31,21 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
     ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [state.transactions, card.id]);
 
+  // +++ أضيف بناءً على طلبك +++
+  const groupedTransactions = useMemo(() => {
+    const groups: { [key: string]: typeof unsettledTransactions } = {};
+    unsettledTransactions.forEach(tx => {
+      const date = new Date(tx.date);
+      const monthYear = date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      const arMonthYear = date.toLocaleString('ar-EG', { month: 'long', year: 'numeric' });
+      const key = language === 'ar' ? arMonthYear : monthYear;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(tx);
+    });
+    return groups;
+  }, [unsettledTransactions, language]);
+  // ++++++++++++++++++++++++++++
+
   const handleAmountChange = (val: string) => {
     const parsed = parseArabicNumber(val);
     setPaymentAmount(parsed);
@@ -239,9 +254,20 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {unsettledTransactions.map(tx => (
-                  <div key={tx.id} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+              <div className="space-y-6">
+                {Object.entries(groupedTransactions).map(([month, txs]) => (
+                  <div key={month} className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full w-fit">
+                        {month}
+                      </h4>
+                      <div className="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div>
+                      <span className="text-xs font-black text-slate-400">
+                        {txs.reduce((sum, tx) => sum + tx.amount, 0).toLocaleString()} {state.baseCurrency}
+                      </span>
+                    </div>
+                    {txs.map((tx: any) => (
+                  <div key={tx.id} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden ml-2 border-l-4 border-l-purple-500/30">
                     {/* Transaction Header */}
                     <div 
                       className="p-4 flex items-center gap-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -254,7 +280,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
                       )}
                       <div className="flex-1">
                         <p className="text-sm font-bold text-slate-800 dark:text-white">{tx.note || (language === 'ar' ? 'معاملة بدون وصف' : 'Unnamed Transaction')}</p>
-                        <p className="text-xs text-slate-500">{tx.date}</p>
+                        <p className="text-xs text-slate-500">{new Date(tx.date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { day: 'numeric', month: 'short' })}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-black text-slate-800 dark:text-white">{tx.amount.toLocaleString()} {state.baseCurrency}</p>
@@ -264,7 +290,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
                     {/* Transaction Items */}
                     {tx.items && tx.items.length > 0 && (
                       <div className="border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-2 space-y-1">
-                        {tx.items.filter(i => !i.isSettled).map(item => (
+                        {tx.items.filter((i: any) => !i.isSettled).map((item: any) => (
                           <div 
                             key={item.id}
                             className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
@@ -281,6 +307,8 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
                         ))}
                       </div>
                     )}
+                  </div>
+                    ))}
                   </div>
                 ))}
               </div>

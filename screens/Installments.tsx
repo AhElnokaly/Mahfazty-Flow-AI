@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../store';
+import { useApp, isIncomeLike } from '../store';
 import { 
   CreditCard, Plus, Calendar, Percent, AlertCircle, 
   CheckCircle2, Trash2, ArrowRight, DollarSign, Wallet, Layers,
@@ -528,8 +528,8 @@ const Installments: React.FC = () => {
                    return (
                    <div key={t.id} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${t.type === 'INCOME' ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-500' : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500'}`}>
-                           {t.type === 'INCOME' ? <TrendingDown size={20} /> : <TrendingUp size={20} />}
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isIncomeLike(t) ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-500' : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500'}`}>
+                           {isIncomeLike(t) ? <TrendingDown size={20} /> : <TrendingUp size={20} />}
                         </div>
                         <div>
                            <h4 className="text-base font-black text-slate-900 dark:text-white">
@@ -538,13 +538,13 @@ const Installments: React.FC = () => {
                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 mt-1">
                               <span>{new Date(t.date).toLocaleDateString()}</span>
                               <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                              <span>{t.type === 'INCOME' ? (language === 'ar' ? 'دين عليك' : 'Owed by you') : (language === 'ar' ? 'دين لك' : 'Owed to you')}</span>
+                              <span>{isIncomeLike(t) ? (language === 'ar' ? 'دين عليك' : 'Owed by you') : (language === 'ar' ? 'دين لك' : 'Owed to you')}</span>
                            </div>
                         </div>
                      </div>
                      <div className="text-right flex flex-col items-end gap-2">
-                        <div className={`text-xl font-black ${t.type === 'INCOME' ? 'text-rose-500' : 'text-emerald-500'}`}>
-                          {t.type === 'INCOME' ? '-' : '+'}{debtAmount.toLocaleString()} {t.currency}
+                        <div className={`text-xl font-black ${isIncomeLike(t) ? 'text-rose-500' : 'text-emerald-500'}`}>
+                          {isIncomeLike(t) ? '-' : '+'}{debtAmount.toLocaleString()} {t.currency}
                         </div>
                         <div className="flex items-center gap-2">
                            <button onClick={() => navigate('/add', { state: { editTransactionId: t.id } })} className="p-2 text-slate-400 hover:text-blue-500 bg-slate-50 dark:bg-slate-900 rounded-xl transition-colors"><Edit3 size={16}/></button>
