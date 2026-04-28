@@ -31,6 +31,16 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
     ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [state.transactions, card.id]);
 
+  const activeInstallments = useMemo(() => {
+    return (state.installments || []).filter(i => 
+      i.status === 'active' && 
+      i.paymentMethod === 'credit' && 
+      i.creditCardId === card.id
+    );
+  }, [state.installments, card.id]);
+
+  const [selectedInstallmentIds, setSelectedInstallmentIds] = useState<Set<string>>(new Set());
+
   // +++ أضيف بناءً على طلبك +++
   const groupedTransactions = useMemo(() => {
     const groups: { [key: string]: typeof unsettledTransactions } = {};
@@ -55,6 +65,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
     let remaining = amount;
     const newSelectedTx = new Set<string>();
     const newSelectedItems = new Set<string>();
+    const newSelectedInsts = new Set<string>();
     
     for (const tx of unsettledTransactions) {
       if (remaining <= 0) break;
@@ -75,12 +86,20 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
         }
       }
     }
+
+    for (const inst of activeInstallments) {
+      if (remaining >= inst.monthlyAmount) {
+        newSelectedInsts.add(inst.id);
+        remaining -= inst.monthlyAmount;
+      }
+    }
     
     setSelectedTxIds(newSelectedTx);
     setSelectedItemIds(newSelectedItems);
+    setSelectedInstallmentIds(newSelectedInsts);
   };
 
-  const recalculateAmount = (txs: Set<string>, items: Set<string>) => {
+  const recalculateAmount = (txs: Set<string>, items: Set<string>, insts: Set<string>) => {
     let total = 0;
     unsettledTransactions.forEach(tx => {
       if (txs.has(tx.id)) {
@@ -91,6 +110,11 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
         });
       }
     });
+
+    activeInstallments.forEach(inst => {
+      if (insts.has(inst.id)) total += inst.monthlyAmount;
+    });
+
     setPaymentAmount(total.toString());
   };
 
@@ -102,7 +126,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
       newSet.add(txId);
     }
     setSelectedTxIds(newSet);
-    recalculateAmount(newSet, selectedItemIds);
+    recalculateAmount(newSet, selectedItemIds, selectedInstallmentIds);
   };
 
   const handleToggleItem = (itemId: string) => {
@@ -113,7 +137,18 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
       newSet.add(itemId);
     }
     setSelectedItemIds(newSet);
-    recalculateAmount(selectedTxIds, newSet);
+    recalculateAmount(selectedTxIds, newSet, selectedInstallmentIds);
+  };
+
+  const handleToggleInstallment = (instId: string) => {
+    const newSet = new Set(selectedInstallmentIds);
+    if (newSet.has(instId)) {
+      newSet.delete(instId);
+    } else {
+      newSet.add(instId);
+    }
+    setSelectedInstallmentIds(newSet);
+    recalculateAmount(selectedTxIds, selectedItemIds, newSet);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -130,19 +165,19 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
       const difference = bankBal - expectedBalanceAfterPayment;
       
       // If bank balance is higher than expected, it means there are hidden fees/interest
-      if (difference > 0) {
+      if (Math.abs(difference) > 0.01) {
         adjustmentTransaction = {
-          amount: difference,
+          amount: Math.abs(difference),
           currency: state.baseCurrency,
-          type: 'EXPENSE' as any,
+          type: difference > 0 ? 'EXPENSE' as any : 'INCOME' as any,
           paymentMethod: 'credit' as any,
           creditCardId: card.id,
           date: new Date().toISOString().split('T')[0],
           groupId: 'system_adjustment',
           clientId: 'system',
           clientIds: ['system'],
-          note: language === 'ar' ? 'تسوية بنكية (رسوم/فوائد)' : 'Bank Reconciliation (Fees/Interest)',
-          isSettled: true // The fee itself is settled? Or just added to balance. It's added to balance, so it's unsettled until paid. Wait, if it's added to balance, it's an expense on the card.
+          note: language === 'ar' ? 'تسوية بنكية (رسوم/فوائد/استرداد)' : 'Bank Reconciliation (Fees/Interest/Refund)',
+          isSettled: true 
         };
       }
     }
@@ -163,6 +198,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
       paymentAmount: amount,
       settledTransactions: Array.from(selectedTxIds),
       settledItems: settledItemsList,
+      settledInstallments: Array.from(selectedInstallmentIds), // +++ أضيف بناءً على طلبك +++
       adjustmentTransaction
     });
 
@@ -314,6 +350,35 @@ export const CreditSettlementModal: React.FC<Props> = ({ card, onClose }) => {
               </div>
             )}
           </div>
+
+          {activeInstallments.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-black text-rose-500 uppercase tracking-widest">
+                {language === 'ar' ? 'أقساط البطاقة قيد الانتظار' : 'Pending Card Installments'}
+              </h3>
+              <div className="space-y-3">
+                {activeInstallments.map((inst) => (
+                  <div key={inst.id} className="bg-rose-50 dark:bg-rose-900/10 rounded-2xl border border-rose-100 dark:border-rose-900/30 overflow-hidden ml-2 border-l-4 border-l-rose-500/50">
+                    <div 
+                      className="p-4 flex items-center gap-3 cursor-pointer hover:bg-rose-100/50 dark:hover:bg-rose-900/20 transition-colors"
+                      onClick={() => handleToggleInstallment(inst.id)}
+                    >
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${selectedInstallmentIds.has(inst.id) ? 'bg-rose-500 border-rose-500 text-white' : 'border-rose-300 dark:border-rose-700'}`}>
+                        {selectedInstallmentIds.has(inst.id) && <Check size={14} strokeWidth={3} />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-slate-800 dark:text-white">{inst.title}</p>
+                        <p className="text-xs text-rose-500">{language === 'ar' ? `قسط ${inst.paidCount + 1} من ${inst.installmentCount}` : `Installment ${inst.paidCount + 1} of ${inst.installmentCount}`}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-black text-slate-800 dark:text-white">{inst.monthlyAmount.toLocaleString()} {state.baseCurrency}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
 

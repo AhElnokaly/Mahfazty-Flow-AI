@@ -9,8 +9,6 @@ import { CalculatorInput } from '../components/CalculatorInput';
 
 const CURRENCIES = ['EGP', 'USD', 'EUR', 'GBP', 'SAR', 'AED'];
 
-const ITEM_CATEGORIES = ['Groceries', 'Electronics', 'Clothing', 'Home', 'Health', 'Entertainment', 'Transport', 'Other'];
-
 const AddFlow: React.FC = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
@@ -100,6 +98,7 @@ const AddFlow: React.FC = () => {
   const [groupId, setGroupId] = useState(groups[0]?.id || '');
   const [clientId, setClientId] = useState('');
   const [clientIds, setClientIds] = useState<string[]>([]); // +++ أضيف بناءً على طلبك +++
+  const [categoryId, setCategoryId] = useState<string>(''); // +++ أضيف بناءً على طلبك +++
   const [note, setNote] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -147,7 +146,12 @@ const AddFlow: React.FC = () => {
         setCurrency(tToEdit.currency);
         setGroupId(tToEdit.groupId);
         setClientId(tToEdit.clientId);
-        if (tToEdit.clientIds) setClientIds(tToEdit.clientIds); // +++ أضيف بناءً على طلبك +++
+        if (tToEdit.clientIds && tToEdit.clientIds.length > 0) {
+          setClientIds(tToEdit.clientIds); // +++ أضيف بناءً على طلبك +++
+        } else if (tToEdit.clientId) {
+          setClientIds([tToEdit.clientId]);
+        }
+        if (tToEdit.categoryId) setCategoryId(tToEdit.categoryId); // +++ أضيف بناءً على طلبك +++
         setNote(tToEdit.note || '');
         try {
           setDate(new Date(tToEdit.date).toISOString().split('T')[0]);
@@ -213,7 +217,7 @@ const AddFlow: React.FC = () => {
   };
 
   const handleUpdateItem = (id: string, field: keyof TransactionItem, value: string | number | boolean) => {
-    setItems(items.map(item => {
+    setItems(prev => prev.map(item => {
       if (item.id === id) {
         return { ...item, [field]: value };
       }
@@ -389,6 +393,7 @@ const AddFlow: React.FC = () => {
       groupId,
       clientId: clientIds.length > 0 ? clientIds[0] : clientId, // +++ أضيف بناءً على طلبك +++
       clientIds: clientIds.length > 0 ? clientIds : [clientId], // +++ أضيف بناءً على طلبك +++
+      categoryId: categoryId || undefined, // +++ أضيف بناءً على طلبك +++
       note,
       date,
       items: validItems.length > 0 ? validItems : undefined,
@@ -818,6 +823,26 @@ const AddFlow: React.FC = () => {
               </div>
             </div>
 
+            {/* +++ أضيف بناءً على طلبك +++ */}
+            <div className="mt-8 space-y-4">
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-2">
+                <Tag className="inline-block mr-2" size={14} /> {language === 'ar' ? 'التصنيف الأساسي' : 'Primary Category'}
+              </label>
+              <div className="relative">
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="w-full p-4 md:p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-sm font-black text-slate-800 dark:text-white outline-none appearance-none"
+                >
+                  <option value="">{language === 'ar' ? 'بدون تصنيف' : 'No Category'}</option>
+                  {state.categories?.map(c => (
+                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                  ))}
+                </select>
+                <ChevronRight size={20} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
+              </div>
+            </div>
+
             <div className="mt-8 space-y-4">
             </div>
 
@@ -999,8 +1024,9 @@ const AddFlow: React.FC = () => {
                           <div className="w-24">
                             <input
                               type="number"
-                              value={item.price || ''}
-                              onChange={(e) => handleUpdateItem(item.id, 'price', parseFloat(e.target.value) || 0)}
+                              step="any"
+                              value={item.price === 0 ? '' : item.price}
+                              onChange={(e) => handleUpdateItem(item.id, 'price', e.target.value === '' ? '' : Number(e.target.value))}
                               placeholder={language === 'ar' ? 'السعر' : 'Price'}
                               className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
                             />
@@ -1008,8 +1034,9 @@ const AddFlow: React.FC = () => {
                           <div className="w-20">
                             <input
                               type="number"
+                              step="any"
                               value={item.quantity || ''}
-                              onChange={(e) => handleUpdateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
+                              onChange={(e) => handleUpdateItem(item.id, 'quantity', e.target.value === '' ? '' : Number(e.target.value))}
                               placeholder={language === 'ar' ? 'الكمية' : 'Qty'}
                               className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
                             />
@@ -1020,11 +1047,12 @@ const AddFlow: React.FC = () => {
                       <div className="flex flex-col sm:flex-row gap-3 items-center">
                         <div className="flex-1 w-full relative">
                           <select
-                            value={item.category || 'Other'}
+                            value={item.category || ''}
                             onChange={(e) => handleUpdateItem(item.id, 'category', e.target.value)}
                             className="w-full px-4 py-3 pl-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-blue-500 appearance-none"
                           >
-                            {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            <option value="">{language === 'ar' ? 'بدون تصنيف' : 'No Category'}</option>
+                            {state.categories?.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                           </select>
                           <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         </div>

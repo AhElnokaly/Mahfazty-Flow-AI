@@ -16,14 +16,14 @@ export const SmartNotifications = () => {
 
       // Helper to check if we already notified about this today
       const hasNotified = (id: string) => {
-        return state.notificationHistory.some(n => n.id === `${id}_${todayStr}`);
+        return state.notificationHistory.some(n => n.id.startsWith(`${id}_${todayStr}`));
       };
 
       const sendNotification = (id: string, title: string, message: string, type: 'info' | 'success' | 'error' | 'update') => {
         if (hasNotified(id)) return;
         
         const newNotification = {
-          id: `${id}_${todayStr}`,
+          id: `${id}_${todayStr}_${Math.random().toString(36).substr(2,9)}`,
           title,
           message,
           type,

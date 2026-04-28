@@ -14,6 +14,7 @@ export const CreditCards: React.FC = () => {
   
   const [name, setName] = useState('');
   const [limit, setLimit] = useState('');
+  const [balanceInputType, setBalanceInputType] = useState<'spent'|'remaining'>('spent'); // +++ أضيف بناءً على طلبك +++
   const [balance, setBalance] = useState('');
   const [billingDate, setBillingDate] = useState('1');
   const [dueDate, setDueDate] = useState('15');
@@ -26,6 +27,7 @@ export const CreditCards: React.FC = () => {
     setName('');
     setLimit('');
     setBalance('');
+    setBalanceInputType('spent');
     setBillingDate('1');
     setDueDate('15');
     setIsAdding(false);
@@ -40,12 +42,23 @@ export const CreditCards: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !limit) return;
+    
+    const parsedLimit = parseFloat(limit) || 0;
+    const inputValue = parseFloat(balance) || 0;
+    
+    let actualBalance = 0;
+    if (balanceInputType === 'spent') {
+      actualBalance = inputValue;
+    } else {
+      actualBalance = parsedLimit - inputValue;
+    }
+    actualBalance = Math.max(0, actualBalance);
 
     if (editingId) {
       dispatch.updateCreditCard(editingId, {
         name,
-        limit: parseFloat(limit),
-        balance: balance ? parseFloat(balance) : 0,
+        limit: parsedLimit,
+        balance: actualBalance,
         billingDate: parseInt(billingDate),
         dueDate: parseInt(dueDate)
       });
@@ -53,8 +66,8 @@ export const CreditCards: React.FC = () => {
     } else {
       dispatch.addCreditCard({
         name,
-        limit: parseFloat(limit),
-        balance: balance ? parseFloat(balance) : 0,
+        limit: parsedLimit,
+        balance: actualBalance,
         billingDate: parseInt(billingDate),
         dueDate: parseInt(dueDate),
         color: 'bg-slate-800',
@@ -69,6 +82,7 @@ export const CreditCards: React.FC = () => {
     setName(card.name);
     setLimit(card.limit.toString());
     setBalance(card.balance.toString());
+    setBalanceInputType('spent');
     setBillingDate(card.billingDate.toString());
     setDueDate(card.dueDate.toString());
     setEditingId(card.id);
@@ -150,9 +164,19 @@ export const CreditCards: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
-                    {language === 'ar' ? 'الرصيد المستخدم الحالي' : 'Current Used Balance'}
-                  </label>
+                  <div className="flex items-center justify-between mb-2 px-2">
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">
+                      {language === 'ar' ? 'الرصيد' : 'Balance'}
+                    </label>
+                    <select
+                      value={balanceInputType}
+                      onChange={(e) => setBalanceInputType(e.target.value as 'spent' | 'remaining')}
+                      className="text-[10px] font-bold bg-transparent text-purple-600 outline-none cursor-pointer"
+                    >
+                      <option value="spent">{language === 'ar' ? 'المبلغ المصروف' : 'Spent Amount'}</option>
+                      <option value="remaining">{language === 'ar' ? 'المبلغ المتبقي متاح' : 'Remaining Available'}</option>
+                    </select>
+                  </div>
                   <div className="relative">
                     <DollarSign size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input

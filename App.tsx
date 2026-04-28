@@ -14,6 +14,7 @@ import ProUpgrade from './screens/ProUpgrade';
 import Archive from './screens/Archive';
 import Installments from './screens/Installments';
 import { CreditCards } from './screens/CreditCards';
+import { Categories } from './screens/Categories';
 import { Subscriptions } from './screens/Subscriptions';
 import { Investments } from './screens/Investments';
 import Onboarding from './screens/Onboarding';
@@ -833,6 +834,7 @@ const App: React.FC = () => {
               <Route path="/graph-maker" element={<GraphMaker />} />
               <Route path="/installments" element={<Installments />} />
               <Route path="/credit-cards" element={<CreditCards />} />
+              <Route path="/categories" element={<Categories />} />
               <Route path="/investments" element={<Investments />} />
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/settings" element={<Settings />} />

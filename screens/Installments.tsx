@@ -97,7 +97,9 @@ const Installments: React.FC = () => {
          installmentCount: Number(formData.installmentCount),
          startDate: formData.startDate,
          type: formData.type as any,
-         linkedGroupId: formData.linkedGroupId || undefined
+         linkedGroupId: formData.linkedGroupId || undefined,
+         paymentMethod: formData.paymentMethod,
+         creditCardId: formData.creditCardId
        });
        dispatch.setNotification({ message: language === 'ar' ? 'تم تحديث القسط' : 'Installment updated', type: 'success' });
        setEditingId(null);
@@ -111,7 +113,9 @@ const Installments: React.FC = () => {
          type: formData.type as any || 'purchase',
          penalty: 0,
          linkedGroupId: formData.linkedGroupId || undefined,
-         receiveCash: formData.receiveCash
+         receiveCash: formData.receiveCash,
+         paymentMethod: formData.paymentMethod,
+         creditCardId: formData.creditCardId
        });
        if (installments.length === 0) {
          dispatch.unlockAchievement('first_installment');
@@ -430,6 +434,33 @@ const Installments: React.FC = () => {
                    <option value="jamiyah">{language === 'ar' ? 'جمعية' : 'Jamiyah'}</option>
                  </select>
               </div>
+
+              <div className="space-y-2">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2">{language === 'ar' ? 'طريقة الدفع التلقائية' : 'Auto Payment Method'}</label>
+                 <select 
+                   value={formData.paymentMethod || 'cash'} 
+                   onChange={e => setFormData({...formData, paymentMethod: e.target.value as any, creditCardId: ''})}
+                   className="w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl font-bold text-slate-900 dark:text-white border-none outline-none focus:ring-4 focus:ring-rose-500/10 appearance-none cursor-pointer"
+                 >
+                   <option value="cash">{language === 'ar' ? 'نقدي / المحفظة' : 'Cash / Wallet'}</option>
+                   <option value="credit">{language === 'ar' ? 'بطاقة ائتمان (فيزا)' : 'Credit Card (Visa)'}</option>
+                 </select>
+              </div>
+
+              {formData.paymentMethod === 'credit' && (
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2">{language === 'ar' ? 'بطاقة الائتمان' : 'Credit Card'}</label>
+                   <select 
+                     required
+                     value={formData.creditCardId || ''} 
+                     onChange={e => setFormData({...formData, creditCardId: e.target.value})}
+                     className="w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl font-bold text-slate-900 dark:text-white border-none outline-none focus:ring-4 focus:ring-rose-500/10 appearance-none cursor-pointer"
+                   >
+                     <option value="" disabled>{language === 'ar' ? 'اختر البطاقة...' : 'Select card...'}</option>
+                     {state.creditCards?.filter(c => !c.isArchived).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                   </select>
+                </div>
+              )}
 
               {(formData.type === 'loan' || formData.type === 'jamiyah') && !editingId && (
                 <div className="space-y-2 md:col-span-2">

@@ -23,6 +23,7 @@ export default function GraphMaker() {
   const [chartType, setChartType] = useState<'bar' | 'line' | 'pie' | 'area' | 'radar' | 'composed'>('bar');
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]); // +++ أضيف بناءً على طلبك +++
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [timeGrouping, setTimeGrouping] = useState<'daily' | 'monthly' | 'yearly'>('monthly');
   const [dataType, setDataType] = useState<'expense' | 'income' | 'net' | 'all'>('expense');
@@ -40,6 +41,7 @@ export default function GraphMaker() {
       chartType,
       selectedGroups,
       selectedClients,
+      selectedCategories, // +++ أضيف بناءً على طلبك +++
       dateRange,
       timeGrouping,
       dataType,
@@ -62,6 +64,7 @@ export default function GraphMaker() {
     setChartType(graph.chartType);
     setSelectedGroups(graph.selectedGroups);
     setSelectedClients(graph.selectedClients);
+    setSelectedCategories(graph.selectedCategories || []); // +++ أضيف بناءً على طلبك +++
     setDateRange(graph.dateRange);
     setTimeGrouping(graph.timeGrouping);
     setDataType(graph.dataType);
@@ -77,6 +80,7 @@ export default function GraphMaker() {
     setChartType('bar');
     setSelectedGroups([]);
     setSelectedClients([]);
+    setSelectedCategories([]); // +++ أضيف بناءً على طلبك +++
     setDateRange({ start: '', end: '' });
     setTimeGrouping('monthly');
     setDataType('expense');
@@ -137,6 +141,11 @@ export default function GraphMaker() {
         filtered = filtered.filter(t => selectedClients.includes(t.clientId) || (t.clientIds && t.clientIds.some(cId => selectedClients.includes(cId))));
       }
 
+      // Filter by Category // +++ أضيف بناءً على طلبك +++
+      if (selectedCategories.length > 0) {
+        filtered = filtered.filter(t => t.categoryId && selectedCategories.includes(t.categoryId));
+      }
+
       // Filter by Data Type
       if (dataType === 'expense') {
         filtered = filtered.filter(t => t.type?.toUpperCase() === 'EXPENSE');
@@ -150,7 +159,12 @@ export default function GraphMaker() {
       if (chartType === 'pie' || chartType === 'radar') {
         // Group by Category/Group for Pie/Radar
         const grouped = filtered.reduce((acc, t) => {
-          const key = groups.find(g => g.id === t.groupId)?.name || 'Unknown';
+          let key;
+          if (t.categoryId) {
+            key = state.categories?.find(c => c.id === t.categoryId)?.name || 'Unknown';
+          } else {
+            key = groups.find(g => g.id === t.groupId)?.name || 'Unknown';
+          }
           if (!acc[key]) acc[key] = 0;
           acc[key] += t.amount;
           return acc;
@@ -535,6 +549,26 @@ export default function GraphMaker() {
                 ))}
               </div>
             </div>
+
+            {/* +++ أضيف بناءً على طلبك +++ */}
+            {state.categories && state.categories.length > 0 && (
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                  <Tag size={16} /> {language === 'ar' ? 'تصفية بالتصنيفات' : 'Filter by Categories'}
+                </h3>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar">
+                  {state.categories.map(cat => (
+                    <button
+                      key={cat.id}
+                      onClick={() => toggleSelection(cat.id, selectedCategories, setSelectedCategories)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${selectedCategories.includes(cat.id) ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 border-purple-200 dark:border-purple-800' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 border-slate-100 dark:border-slate-800 hover:border-slate-300'}`}
+                    >
+                      {cat.icon} {cat.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">

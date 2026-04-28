@@ -70,6 +70,7 @@ export interface Transaction {
   groupId: string;
   clientId: string;
   clientIds?: string[]; // +++ أضيف بناءً على طلبك +++
+  categoryId?: string; // +++ أضيف بناءً على طلبك +++
   note?: string;
   items?: TransactionItem[]; // New: Support for itemized transactions
   shares?: number;
@@ -111,6 +112,8 @@ export interface Installment {
   lastPaymentDate?: string;
   linkedGroupId?: string;
   penalty?: number;
+  paymentMethod?: 'cash' | 'credit'; // +++ أضيف بناءً على طلبك +++
+  creditCardId?: string; // +++ أضيف بناءً على طلبك +++
 }
 
 export interface ChatMessage {
@@ -175,6 +178,7 @@ export interface SavedGraph {
   chartType: 'bar' | 'line' | 'pie' | 'area' | 'radar' | 'composed';
   selectedGroups: string[];
   selectedClients: string[];
+  selectedCategories?: string[]; // +++ أضيف بناءً على طلبك +++
   dateRange: { start: string; end: string };
   timeGrouping: 'daily' | 'monthly' | 'yearly';
   dataType: 'expense' | 'income' | 'net' | 'all';
@@ -197,6 +201,13 @@ export interface RecurringTransaction {
   isActive: boolean;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+}
+
 export interface AppState {
   walletBalance: number;
   baseCurrency: string;
@@ -207,6 +218,7 @@ export interface AppState {
   clients: Client[];
   installments: Installment[];
   creditCards: CreditCard[];
+  categories: Category[];
   goals: Goal[];
   savedGraphs: SavedGraph[];
   recurringTransactions: RecurringTransaction[];

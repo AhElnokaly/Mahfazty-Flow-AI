@@ -1,7 +1,7 @@
 
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { useApp, isIncomeLike, isExpenseLike, getClientShare } from '../store';
+import { useApp, isIncomeLike, isExpenseLike, getClientShare, isTxRelatedToGroup, isTxRelatedToClient } from '../store';
 import { 
   Plus, MoreHorizontal, ArrowUpRight, Sparkles, Zap, ShieldCheck,
   ArrowDownLeft, ArrowUpLeft, Wallet, ArrowDownRight, TrendingUp, TrendingDown,
@@ -148,15 +148,15 @@ const Dashboard: React.FC = () => {
     ];
 
     return groups.map((group, index) => {
-      const groupTransactions = transactions.filter(t => t.groupId === group.id);
+      const groupTransactions = transactions.filter(t => isTxRelatedToGroup(t, group.id, clients));
       
       const income = groupTransactions
         .filter(t => isIncomeLike(t))
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + clients.filter(c => c.groupId === group.id).reduce((s, c) => s + getClientShare(t, c.id), 0), 0);
         
       const expense = groupTransactions
         .filter(t => isExpenseLike(t))
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + clients.filter(c => c.groupId === group.id).reduce((s, c) => s + getClientShare(t, c.id), 0), 0);
 
       const balance = income - expense;
       
@@ -176,12 +176,19 @@ const Dashboard: React.FC = () => {
   }, [groups, transactions]);
 
   const expenseBreakdown = useMemo(() => {
-    const data = groups.map(g => ({
-      name: g.name,
-      value: transactions
-        .filter(t => t.groupId === g.id && t.type?.toUpperCase() === 'EXPENSE')
-        .reduce((s, t) => s + t.amount, 0)
-    })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
+    // Collect categories including an Uncategorized one if needed
+    const catsAndUncat = [...(state.categories || []), { id: 'uncategorized', name: language === 'ar' ? 'غير مصنف' : 'Uncategorized', color: '#94A3B8' }];
+    
+    const data = catsAndUncat.map(cat => {
+      const isUncat = cat.id === 'uncategorized';
+      return {
+        name: cat.name,
+        color: cat.color || '#94A3B8',
+        value: transactions
+          .filter(t => t.type?.toUpperCase() === 'EXPENSE' && (isUncat ? !t.categoryId : t.categoryId === cat.id))
+          .reduce((s, t) => s + t.amount, 0)
+      };
+    }).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
 
     if (data.length === 0) return [];
     
@@ -189,10 +196,10 @@ const Dashboard: React.FC = () => {
     const otherTotal = data.slice(1).reduce((s, i) => s + i.value, 0);
     
     return [
-      { name: topCategory.name, value: topCategory.value, color: '#F43F5E' }, 
-      { name: 'Other', value: otherTotal, color: '#E2E8F0' } 
+      { name: topCategory.name, value: topCategory.value, color: topCategory.color }, 
+      { name: language === 'ar' ? 'أخرى' : 'Other', value: otherTotal, color: '#E2E8F0' } 
     ];
-  }, [groups, transactions]);
+  }, [state.categories, transactions, language]);
 
   const topExpenseCategory = expenseBreakdown.length > 0 ? expenseBreakdown[0] : null;
 
@@ -803,10 +810,7 @@ const Dashboard: React.FC = () => {
             const groupClients = clients.filter(c => c.groupId === account.id);
             const clientStats = groupClients.map(client => {
               // Find transactions where this client is involved (either as primary clientId or in clientIds array)
-              const clientTxs = transactions.filter(t => 
-                t.groupId === account.id && 
-                (t.clientId === client.id || (t.clientIds && t.clientIds.includes(client.id)))
-              );
+              const clientTxs = transactions.filter(t => isTxRelatedToClient(t, client.id));
               
               const income = clientTxs.filter(t => isIncomeLike(t)).reduce((s, t) => {
                 return s + getClientShare(t, client.id); // +++ أضيف بناءً على طلبك +++

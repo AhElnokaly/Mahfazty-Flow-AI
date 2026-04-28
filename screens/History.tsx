@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { useApp, isIncomeLike, isExpenseLike } from '../store';
+import { useApp, isIncomeLike, isExpenseLike, getClientShare, isTxRelatedToGroup, isTxRelatedToClient } from '../store';
 import { TransactionType, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -162,11 +162,11 @@ const History: React.FC = () => {
     }
 
     if (selectedGroupId !== 'all') {
-      result = result.filter(t => t.groupId === selectedGroupId);
+      result = result.filter(t => isTxRelatedToGroup(t, selectedGroupId, clients));
     }
 
     if (selectedClientId !== 'all') {
-      result = result.filter(t => t.clientId === selectedClientId || (t.clientIds && t.clientIds.includes(selectedClientId)));
+      result = result.filter(t => isTxRelatedToClient(t, selectedClientId));
     }
 
     return result.sort((a, b) => {
@@ -178,11 +178,18 @@ const History: React.FC = () => {
 
   const totals = useMemo(() => {
     return filteredTransactions.reduce((acc, t) => {
-      if (isIncomeLike(t)) acc.income += t.amount;
-      else if (isExpenseLike(t)) acc.expense += t.amount;
+      let amount = t.amount;
+      if (selectedClientId !== 'all') {
+        amount = getClientShare(t, selectedClientId);
+      } else if (selectedGroupId !== 'all') {
+        amount = clients.filter(c => c.groupId === selectedGroupId).reduce((s, c) => s + getClientShare(t, c.id), 0);
+      }
+      
+      if (isIncomeLike(t)) acc.income += amount;
+      else if (isExpenseLike(t)) acc.expense += amount;
       return acc;
     }, { income: 0, expense: 0 });
-  }, [filteredTransactions]);
+  }, [filteredTransactions, selectedClientId, selectedGroupId, clients]);
 
   const handleDelete = (id: string) => {
     setItemToDelete(id);
@@ -877,6 +884,7 @@ const History: React.FC = () => {
                                <th className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wide">{language === 'ar' ? 'التاريخ' : 'Date'}</th>
                                <th className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wide">{language === 'ar' ? 'السعر' : 'Price'}</th>
                                <th className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wide">{language === 'ar' ? 'الكمية' : 'Qty'}</th>
+                               <th className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wide">{language === 'ar' ? 'التصنيف' : 'Category'}</th>
                                <th className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wide">{language === 'ar' ? 'المتجر/العميل' : 'Store/Client'}</th>
                              </tr>
                            </thead>
@@ -887,6 +895,7 @@ const History: React.FC = () => {
                              const clientNameDisplay = t.clientIds && t.clientIds.length > 1 
                                ? `${client?.name} +${t.clientIds.length - 1}` 
                                : client?.name;
+                             const matchedCat = (state.categories || []).find(c => c.id === t.category);
                              return (
                                <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                                  <td className="px-4 md:px-6 py-4 text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -897,6 +906,16 @@ const History: React.FC = () => {
                                  </td>
                                  <td className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500">
                                    {t.quantity}
+                                 </td>
+                                 <td className="px-4 md:px-6 py-4">
+                                   {matchedCat ? (
+                                     <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                                       <span>{matchedCat.icon}</span>
+                                       <span>{matchedCat.name}</span>
+                                     </div>
+                                   ) : (
+                                     <span className="text-xs text-slate-400">-</span>
+                                   )}
                                  </td>
                                  <td className="px-4 md:px-6 py-4">
                                    <div className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { AppState, Group, Transaction, TransactionType, Client, UserProfile, AppNotification, ChatMessage, CustomWidget, Installment, SyncLogEntry } from './types';
+import { AppState, Group, Transaction, TransactionType, Client, UserProfile, AppNotification, ChatMessage, CustomWidget, Installment, SyncLogEntry, Category } from './types';
 import { cloudService } from './services/cloud';
 import { cryptoUtils } from './utils/crypto';
 
@@ -24,6 +24,16 @@ const INITIAL_STATE: AppState = {
   ],
   clients: [
     { id: 'c1', name: 'الشركة الهندسية', groupId: 'g2', icon: '🏢' },
+  ],
+  categories: [
+    { id: 'cat_groceries', name: 'بقالة', icon: '🛒', color: '#10B981' },
+    { id: 'cat_electronics', name: 'إلكترونيات', icon: '📱', color: '#3B82F6' },
+    { id: 'cat_clothing', name: 'ملابس', icon: '👕', color: '#F43F5E' },
+    { id: 'cat_home', name: 'منزل', icon: '🏠', color: '#F59E0B' },
+    { id: 'cat_health', name: 'صحة', icon: '💊', color: '#06B6D4' },
+    { id: 'cat_entertainment', name: 'ترفيه', icon: '🎮', color: '#8B5CF6' },
+    { id: 'cat_transport', name: 'مواصلات', icon: '🚗', color: '#64748B' },
+    { id: 'cat_other', name: 'أخرى', icon: '📦', color: '#94A3B8' }
   ],
   transactions: [],
   installments: [], 
@@ -85,12 +95,15 @@ interface AppContextType {
     addGroup: (name: string, icon?: string, budget?: number, id?: string, color?: string) => void;
     updateGroup: (id: string, update: Partial<Group>) => void;
     setGroupBudget: (id: string, amount: number) => void;
+    addCategory: (category: Omit<import('./types').Category, 'id'>) => void;
+    updateCategory: (id: string, update: Partial<import('./types').Category>) => void;
+    deleteCategory: (id: string) => void;
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'> & { receiveCash?: boolean }) => void;
     payInstallment: (id: string, penalty?: number) => void;
     addCreditCard: (card: Omit<import('./types').CreditCard, 'id'>) => void;
     updateCreditCard: (id: string, update: Partial<import('./types').CreditCard>) => void;
     deleteCreditCard: (id: string) => void;
-    settleCreditCard: (payload: { creditCardId: string; paymentAmount: number; settledTransactions: string[]; settledItems: { transactionId: string, itemId: string }[]; adjustmentTransaction?: Omit<Transaction, 'id'> }) => void;
+    settleCreditCard: (payload: { creditCardId: string; paymentAmount: number; settledTransactions: string[]; settledItems: { transactionId: string, itemId: string }[]; settledInstallments?: string[]; adjustmentTransaction?: Omit<Transaction, 'id'> }) => void;
     setPro: (val: boolean) => void;
     addChatMessage: (msg: ChatMessage, isProChat?: boolean) => void;
     updateProfile: (profile: UserProfile) => void;
@@ -164,6 +177,9 @@ type Action =
   | { type: 'ADD_TRANSACTION'; payload: Omit<Transaction, 'id'> }
   | { type: 'UPDATE_TRANSACTION'; payload: { id: string; update: Partial<Transaction> } }
   | { type: 'DELETE_TRANSACTION'; payload: string }
+  | { type: 'ADD_CATEGORY'; payload: Omit<Category, 'id'> & { id?: string } }
+  | { type: 'UPDATE_CATEGORY'; payload: { id: string; update: Partial<Category> } }
+  | { type: 'DELETE_CATEGORY'; payload: string }
   | { type: 'EDIT_TRANSACTION'; payload: { id: string; update: Partial<Transaction> } } // +++ أضيف بناءً على طلبك +++
   | { type: 'UPDATE_WALLET_BALANCE'; payload: number }
   | { type: 'ADD_GROUP'; payload: { name: string; icon?: string; budget?: number; id?: string; color?: string } }
@@ -174,7 +190,7 @@ type Action =
   | { type: 'ADD_CREDIT_CARD'; payload: Omit<import('./types').CreditCard, 'id'> }
   | { type: 'UPDATE_CREDIT_CARD'; payload: { id: string; update: Partial<import('./types').CreditCard> } }
   | { type: 'DELETE_CREDIT_CARD'; payload: string }
-  | { type: 'SETTLE_CREDIT_CARD'; payload: { creditCardId: string; paymentAmount: number; settledTransactions: string[]; settledItems: { transactionId: string, itemId: string }[]; adjustmentTransaction?: Omit<Transaction, 'id'> } }
+  | { type: 'SETTLE_CREDIT_CARD'; payload: { creditCardId: string; paymentAmount: number; settledTransactions: string[]; settledItems: { transactionId: string, itemId: string }[]; settledInstallments?: string[]; adjustmentTransaction?: Omit<Transaction, 'id'> } }
   | { type: 'SET_PRO'; payload: boolean }
   | { type: 'ADD_CHAT_MESSAGE'; payload: { msg: ChatMessage; isProChat: boolean } }
   | { type: 'TOGGLE_LANGUAGE' }
@@ -236,26 +252,42 @@ type Action =
 export const isIncomeLike = (t: Transaction) => t.type?.toUpperCase() === 'INCOME' || (t.type?.toUpperCase() === 'INVESTMENT' && (t.investmentAction?.toUpperCase() === 'SELL' || t.investmentAction?.toUpperCase() === 'RETURN' || t.investmentAction?.toUpperCase() === 'DIVIDEND'));
 export const isExpenseLike = (t: Transaction) => t.type?.toUpperCase() === 'EXPENSE' || (t.type?.toUpperCase() === 'INVESTMENT' && t.investmentAction?.toUpperCase() !== 'SELL' && t.investmentAction?.toUpperCase() !== 'RETURN' && t.investmentAction?.toUpperCase() !== 'DIVIDEND' && t.investmentAction?.toUpperCase() !== 'FREE_STOCK');
 
+export const isTxRelatedToClient = (t: Transaction, clientId: string) => {
+  return t.clientId === clientId || (t.clientIds && t.clientIds.includes(clientId)) || (t.items && t.items.some(i => i.clientId === clientId));
+};
+
+export const isTxRelatedToGroup = (t: Transaction, groupId: string, clients: any[]) => {
+  if (t.groupId === groupId) return true;
+  if (t.items && t.items.some(i => i.clientId)) {
+    const groupClientIds = clients.filter(c => c.groupId === groupId).map(c => c.id);
+    return t.items.some(i => i.clientId && groupClientIds.includes(i.clientId));
+  }
+  return false;
+};
+
 export const getClientShare = (transaction: Transaction, clientId: string): number => {
+  const isPrimary = transaction.clientId === clientId || (transaction.clientIds && transaction.clientIds.includes(clientId));
+  let share = 0;
+  
   if (transaction.items && transaction.items.length > 0) {
     const explicitItems = transaction.items.filter(i => i.clientId === clientId);
-    let share = explicitItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    share += explicitItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
-    const unassignedItems = transaction.items.filter(i => !i.clientId);
-    if (unassignedItems.length > 0) {
-      const unassignedTotal = unassignedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-      if (transaction.clientIds && transaction.clientIds.includes(clientId)) {
-        share += unassignedTotal / transaction.clientIds.length;
-      } else if (!transaction.clientIds && transaction.clientId === clientId) {
-        share += unassignedTotal;
+    if (isPrimary) {
+      const explicitToOthersTotal = transaction.items
+        .filter(i => i.clientId && i.clientId !== clientId && i.clientId !== 'none')
+        .reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      
+      const numPrimary = transaction.clientIds?.length || 1;
+      const remainingAmount = transaction.amount - explicitToOthersTotal;
+      if (remainingAmount > 0) {
+        share += remainingAmount / numPrimary;
       }
     }
     return share;
   } else {
-    if (transaction.clientIds && transaction.clientIds.includes(clientId)) {
-      return transaction.amount / transaction.clientIds.length;
-    } else if (!transaction.clientIds && transaction.clientId === clientId) {
-      return transaction.amount;
+    if (isPrimary) {
+      return transaction.amount / (transaction.clientIds?.length || 1);
     }
   }
   return 0;
@@ -285,7 +317,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       
       const hasSeenUpdate = state.notificationHistory.some(n => n.message === updateMessage);
       const updateNotification = {
-        id: Date.now().toString(),
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         title: state.language === 'ar' ? '✨ تحديث جديد' : '✨ New Update',
         message: updateMessage,
         type: 'update' as const,
@@ -336,7 +368,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       
       const hasSeenUpdate = state.notificationHistory.some(n => n.message === updateMessage);
       const updateNotification = {
-        id: Date.now().toString(),
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         title: state.language === 'ar' ? '✨ تحديث جديد' : '✨ New Update',
         message: updateMessage,
         type: 'update' as const,
@@ -393,7 +425,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
     case 'ADD_API_KEY': {
       const newKey: import('./types').ApiKey = {
-        id: Date.now().toString(),
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         name: action.payload.name,
         key: action.payload.key,
         provider: (action.payload.provider as import('./types').AIProvider) || 'gemini',
@@ -425,6 +457,12 @@ const appReducer = (state: AppState, action: Action): AppState => {
         ...state,
         apiKeys: state.apiKeys.map(k => k.id === action.payload ? { ...k, isBlocked: true } : k)
       };
+    case 'ADD_CATEGORY':
+      return { ...state, categories: [...(state.categories || []), { ...action.payload, id: action.payload.id || Date.now().toString() + Math.random().toString(36).substr(2, 9) }] };
+    case 'UPDATE_CATEGORY':
+      return { ...state, categories: (state.categories || []).map(c => c.id === action.payload.id ? { ...c, ...action.payload.update } : c) };
+    case 'DELETE_CATEGORY':
+      return { ...state, categories: (state.categories || []).filter(c => c.id !== action.payload) };
     case 'ADD_TRANSACTION': {
       const newTransaction = { ...action.payload, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
       let newBalance = state.walletBalance;
@@ -488,7 +526,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'SET_NOTIFICATION': {
       if (action.payload && action.payload.type === 'update') {
         const newNotification = {
-          id: Date.now().toString(),
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
           title: action.payload.title || '',
           message: action.payload.message,
           type: 'update' as const,
@@ -687,9 +725,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
       if (adjustmentTransaction) {
         const newTx = { ...adjustmentTransaction, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
         updatedTransactions = [newTx, ...updatedTransactions];
-        // The adjustment transaction (fees) is added to the credit card balance
+        // The adjustment transaction (fees) is added to the credit card balance, refund/income is subtracted
+        const amountChange = adjustmentTransaction.type === 'EXPENSE' ? adjustmentTransaction.amount : -adjustmentTransaction.amount;
         updatedCreditCards = updatedCreditCards.map(c => 
-          c.id === creditCardId ? { ...c, balance: c.balance + adjustmentTransaction.amount } : c
+          c.id === creditCardId ? { ...c, balance: Math.max(0, c.balance + amountChange) } : c
         );
       }
 
@@ -714,11 +753,28 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
       updatedTransactions = [transferTx, ...updatedTransactions];
       
+      // Mark installments as paid
+      let updatedInstallments = [...state.installments];
+      const selectedInsts = action.payload.settledInstallments || [];
+      selectedInsts.forEach(instId => {
+         const iIndex = updatedInstallments.findIndex(i => i.id === instId);
+         if (iIndex !== -1) {
+           const i = updatedInstallments[iIndex];
+           updatedInstallments[iIndex] = {
+             ...i,
+             paidCount: i.paidCount + 1,
+             status: i.paidCount + 1 >= i.installmentCount ? 'completed' : 'active',
+             lastPaymentDate: new Date().toISOString()
+           };
+         }
+      });
+      
       return {
         ...state,
         walletBalance: newBalance,
         creditCards: updatedCreditCards,
-        transactions: updatedTransactions
+        transactions: updatedTransactions,
+        installments: updatedInstallments
       };
     }
     case 'SET_PRO':
@@ -1294,6 +1350,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addGroup: (name: string, icon?: string, budget?: number, id?: string, color?: string) => dispatch({ type: 'ADD_GROUP', payload: { name, icon, budget, id, color } }),
     updateGroup: (id: string, update: Partial<Group>) => dispatch({ type: 'UPDATE_GROUP', payload: { id, update } }),
     setGroupBudget: (id: string, amount: number) => dispatch({ type: 'SET_GROUP_BUDGET', payload: { id, amount } }),
+    addCategory: (category: Omit<import('./types').Category, 'id'>) => dispatch({ type: 'ADD_CATEGORY', payload: category }),
+    updateCategory: (id: string, update: Partial<import('./types').Category>) => dispatch({ type: 'UPDATE_CATEGORY', payload: { id, update } }),
+    deleteCategory: (id: string) => dispatch({ type: 'DELETE_CATEGORY', payload: id }),
     addInstallment: (i: Omit<Installment, 'id' | 'monthlyAmount' | 'paidCount' | 'status'> & { receiveCash?: boolean }) => dispatch({ type: 'ADD_INSTALLMENT', payload: i }),
     payInstallment: (id: string, penalty?: number) => dispatch({ type: 'PAY_INSTALLMENT', payload: { id, penalty: penalty || 0 } }),
     addCreditCard: (card: Omit<import('./types').CreditCard, 'id'>) => dispatch({ type: 'ADD_CREDIT_CARD', payload: card }),
@@ -1378,14 +1437,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dispatch({ type: 'SYNC_SUCCESS', payload: timestamp });
         dispatch({ 
           type: 'ADD_SYNC_LOG', 
-          payload: { id: Date.now().toString(), type: 'push', status: 'success', timestamp, details: 'Encrypted push successful' } 
+          payload: { id: Date.now().toString() + Math.random().toString(36).substr(2, 9), type: 'push', status: 'success', timestamp, details: 'Encrypted push successful' } 
         });
       } catch (e: any) {
         console.error('Sync failed:', e);
         dispatch({ type: 'SET_NOTIFICATION', payload: { message: 'Cloud sync failed', type: 'error' } });
         dispatch({ 
           type: 'ADD_SYNC_LOG', 
-          payload: { id: Date.now().toString(), type: 'push', status: 'error', timestamp: new Date().toISOString(), details: e.message } 
+          payload: { id: Date.now().toString() + Math.random().toString(36).substr(2, 9), type: 'push', status: 'error', timestamp: new Date().toISOString(), details: e.message } 
         });
       }
     },
@@ -1408,7 +1467,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           dispatch({ type: 'SET_NOTIFICATION', payload: { message: 'Data synced from cloud', type: 'success' } });
           dispatch({ 
             type: 'ADD_SYNC_LOG', 
-            payload: { id: Date.now().toString(), type: 'pull', status: 'success', timestamp, details: 'Encrypted pull successful' } 
+            payload: { id: Date.now().toString() + Math.random().toString(36).substr(2, 9), type: 'pull', status: 'success', timestamp, details: 'Encrypted pull successful' } 
           });
         }
       } catch (e: any) {
@@ -1416,7 +1475,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dispatch({ type: 'SET_NOTIFICATION', payload: { message: 'Failed to pull data', type: 'error' } });
         dispatch({ 
           type: 'ADD_SYNC_LOG', 
-          payload: { id: Date.now().toString(), type: 'pull', status: 'error', timestamp: new Date().toISOString(), details: e.message } 
+          payload: { id: Date.now().toString() + Math.random().toString(36).substr(2, 9), type: 'pull', status: 'error', timestamp: new Date().toISOString(), details: e.message } 
         });
       }
     }
