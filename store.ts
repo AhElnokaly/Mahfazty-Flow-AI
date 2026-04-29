@@ -671,7 +671,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         date: new Date().toISOString().split('T')[0],
         groupId: state.groups[0]?.id || 'default',
         clientId: state.clients[0]?.id || 'default',
-        note: `Installment Payment: ${installment.title}${action.payload.penalty > 0 ? ` (+${action.payload.penalty} penalty)` : ''}`,
+        note: `Installment Payment: ${installment.title}${action.payload.penalty > 0 ? ` (+${action.payload.penalty} penalty)` : ''}${installment.creditCardId ? ' (Credit Card)' : ''}`,
         isDebt: true,
         debtAction: 'REPAY_BORROW'
       };
@@ -680,6 +680,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         ...state, 
         installments: state.installments.map(i => i.id === action.payload.id ? { ...i, paidCount: i.paidCount + 1, status: i.paidCount + 1 >= i.installmentCount ? 'completed' : 'active', lastPaymentDate: new Date().toISOString() } : i),
         walletBalance: state.walletBalance - paymentAmount,
+        creditCards: installment.creditCardId ? (state.creditCards || []).map(c => c.id === installment.creditCardId ? { ...c, balance: Math.max(0, c.balance - paymentAmount) } : c) : state.creditCards,
         transactions: [newTransaction, ...state.transactions]
       };
     }

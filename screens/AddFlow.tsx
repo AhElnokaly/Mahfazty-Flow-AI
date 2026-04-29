@@ -31,7 +31,7 @@ const AddFlow: React.FC = () => {
     location.state?.type === 'investment' ? 'investment' : 
     'expense'
   );
-  const [ccAction, setCcAction] = useState<'purchase' | 'repayment'>('purchase');
+  const [ccAction, setCcAction] = useState<'purchase' | 'repayment' | 'installment'>('purchase');
 
   const handleMainTabChange = (tab: 'expense' | 'income' | 'credit_card' | 'debt' | 'investment') => {
     setMainTab(tab);
@@ -45,7 +45,7 @@ const AddFlow: React.FC = () => {
       setIsDebt(false);
     } else if (tab === 'credit_card') {
       setIsDebt(false);
-      if (ccAction === 'purchase') {
+      if (ccAction === 'purchase' || ccAction === 'installment') {
         setType(TransactionType.EXPENSE);
         setPaymentMethod('credit');
       } else {
@@ -63,9 +63,9 @@ const AddFlow: React.FC = () => {
     }
   };
 
-  const handleCcActionChange = (action: 'purchase' | 'repayment') => {
+  const handleCcActionChange = (action: 'purchase' | 'repayment' | 'installment') => {
     setCcAction(action);
-    if (action === 'purchase') {
+    if (action === 'purchase' || action === 'installment') {
       setType(TransactionType.EXPENSE);
       setPaymentMethod('credit');
     } else {
@@ -386,8 +386,8 @@ const AddFlow: React.FC = () => {
       type,
       paymentMethod,
       creditCardId: mainTab === 'credit_card' ? creditCardId : undefined,
-      dueDate: mainTab === 'credit_card' && ccAction === 'purchase' ? dueDate : undefined,
-      isSettled: mainTab === 'credit_card' && ccAction === 'purchase' ? false : undefined,
+      dueDate: mainTab === 'credit_card' && (ccAction === 'purchase' || ccAction === 'installment') ? dueDate : undefined,
+      isSettled: mainTab === 'credit_card' && (ccAction === 'purchase' || ccAction === 'installment') ? false : undefined,
       isDebt: isDebt, // +++ أضيف بناءً على طلبك +++
       debtAction: isDebt ? debtAction : undefined, // +++ أضيف بناءً على طلبك +++
       groupId,
@@ -417,6 +417,25 @@ const AddFlow: React.FC = () => {
       dispatch.updateTransaction(editTransactionId, transactionData);
       dispatch.setNotification({ message: language === 'ar' ? 'تم تحديث المعاملة بنجاح' : 'Transaction updated successfully', type: 'success' });
     } else {
+      // Check if it is a credit card installment
+      if (mainTab === 'credit_card' && ccAction === 'installment') {
+        const totalInterest = parseFloat(interestRate) || 0;
+        const totalWithInterest = transactionData.amount * (1 + totalInterest / 100);
+        const installmentMonths = parseInt(duration) || 12;
+        
+        dispatch.addInstallment({
+          title: note || (language === 'ar' ? 'شراء بالفيزا (تقسيط)' : 'Credit Card Installment'),
+          totalAmount: totalWithInterest,
+          interestRate: totalInterest,
+          installmentCount: installmentMonths,
+          startDate: date,
+          type: 'purchase',
+          creditCardId: creditCardId
+        });
+        
+        // Modify the transaction to be the principal amount, the installment total will be paid later, but credit card balance increases right away.
+        transactionData.amount = totalWithInterest;
+      }
       dispatch.addTransaction(transactionData);
       if (transactions.length === 0) {
         dispatch.unlockAchievement('first_transaction');
@@ -506,20 +525,27 @@ const AddFlow: React.FC = () => {
 
             {mainTab === 'credit_card' && (
               <div className="mb-8 md:mb-12 animate-in fade-in slide-in-from-top-4">
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl mb-6">
+                <div className="flex flex-col sm:flex-row bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl mb-6 gap-1 sm:gap-0">
                   <button
                     type="button"
                     onClick={() => handleCcActionChange('purchase')}
-                    className={`flex-1 py-3 text-sm font-black uppercase tracking-widest rounded-xl transition-all ${ccAction === 'purchase' ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    className={`flex-1 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${ccAction === 'purchase' ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                   >
                     {language === 'ar' ? 'شراء' : 'Purchase'}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleCcActionChange('repayment')}
-                    className={`flex-1 py-3 text-sm font-black uppercase tracking-widest rounded-xl transition-all ${ccAction === 'repayment' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    className={`flex-1 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${ccAction === 'repayment' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                   >
                     {language === 'ar' ? 'تسديد' : 'Repayment'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCcActionChange('installment')}
+                    className={`flex-1 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${ccAction === 'installment' ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >
+                    {language === 'ar' ? 'تقسيط' : 'Installment'}
                   </button>
                 </div>
                 
@@ -546,7 +572,7 @@ const AddFlow: React.FC = () => {
                   </div>
                 )}
                 
-                {ccAction === 'purchase' && (
+                {(ccAction === 'purchase' || ccAction === 'installment') && (
                   <div className="mt-4">
                     <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
                       {language === 'ar' ? 'تاريخ الاستحقاق (للتذكير)' : 'Due Date (For Reminder)'}
@@ -557,6 +583,35 @@ const AddFlow: React.FC = () => {
                       onChange={(e) => setDueDate(e.target.value)}
                       className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-lg font-black text-slate-800 dark:text-white outline-none"
                     />
+                  </div>
+                )}
+
+                {ccAction === 'installment' && (
+                  <div className="mt-4 grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                    <div>
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
+                        {language === 'ar' ? 'عدد الأشهر' : 'Months'}
+                      </label>
+                      <input
+                        type="number"
+                        value={duration}
+                        onChange={(e) => setDuration(e.target.value)}
+                        placeholder="12"
+                        className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-lg font-black text-slate-800 dark:text-white outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">
+                        {language === 'ar' ? 'فائدة الكلية %' : 'Total Interest %'}
+                      </label>
+                      <input
+                        type="number"
+                        value={interestRate}
+                        onChange={(e) => setInterestRate(e.target.value)}
+                        placeholder="0"
+                        className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-lg font-black text-slate-800 dark:text-white outline-none"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
