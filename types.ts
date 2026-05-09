@@ -81,6 +81,7 @@ export interface Transaction {
   investmentType?: 'stock' | 'deposit'; // +++ أضيف بناءً على طلبك +++
   stockSymbol?: string; // +++ أضيف بناءً على طلبك +++
   color?: string; // +++ أضيف بناءً على طلبك +++ (For Editor feature)
+  recurringTransactionId?: string;
 }
 
 export interface UserProfile {
@@ -179,6 +180,8 @@ export interface SavedGraph {
   selectedGroups: string[];
   selectedClients: string[];
   selectedCategories?: string[]; // +++ أضيف بناءً على طلبك +++
+  groupBy?: 'time' | 'category' | 'client' | 'group'; // +++ أضيف بناءً على طلبك +++
+  limitTop?: number | 'all'; // +++ أضيف بناءً على طلبك +++
   dateRange: { start: string; end: string };
   timeGrouping: 'daily' | 'monthly' | 'yearly';
   dataType: 'expense' | 'income' | 'net' | 'all';
@@ -199,6 +202,7 @@ export interface RecurringTransaction {
   startDate: string;
   nextDate: string;
   isActive: boolean;
+  isFixedDate?: boolean;
 }
 
 export interface Category {

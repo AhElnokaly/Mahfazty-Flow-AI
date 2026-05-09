@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../store';
 import { Plus, Trash2, CalendarClock, Edit2, X, Check, ArrowRight, ArrowLeft } from 'lucide-react';
 import { RecurrenceInterval, RecurringTransaction, TransactionType } from '../types';
@@ -7,7 +7,9 @@ export const Subscriptions: React.FC = () => {
   const { state, dispatch } = useApp();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  
+  const [paidIds, setPaidIds] = useState<string[]>([]);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   const [formData, setFormData] = useState<Partial<RecurringTransaction>>({
     title: '',
     amount: 0,
@@ -16,7 +18,8 @@ export const Subscriptions: React.FC = () => {
     clientId: '',
     interval: 'monthly',
     startDate: new Date().toISOString().split('T')[0],
-    isActive: true
+    isActive: true,
+    isFixedDate: true
   });
 
   const handleSave = () => {
@@ -50,7 +53,8 @@ export const Subscriptions: React.FC = () => {
       clientId: '',
       interval: 'monthly',
       startDate: new Date().toISOString().split('T')[0],
-      isActive: true
+      isActive: true,
+      isFixedDate: true
     });
   };
 
@@ -214,7 +218,7 @@ export const Subscriptions: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center mt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-6 mt-6">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -224,6 +228,18 @@ export const Subscriptions: React.FC = () => {
                 />
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   {state.language === 'ar' ? 'مفعل' : 'Active'}
+                </span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isFixedDate !== false} // default true
+                  onChange={(e) => setFormData({ ...formData, isFixedDate: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {state.language === 'ar' ? 'تاريخ دفع ثابت' : 'Fixed Payment Date'}
                 </span>
               </label>
             </div>
@@ -287,13 +303,17 @@ export const Subscriptions: React.FC = () => {
                   </button>
                   <button 
                     onClick={() => {
-                      if (confirm(state.language === 'ar' ? 'هل أنت متأكد من حذف هذه المعاملة المتكررة؟' : 'Are you sure you want to delete this recurring transaction?')) {
+                      if (deleteConfirmId === rt.id) {
                         dispatch.deleteRecurringTransaction(rt.id);
+                        setDeleteConfirmId(null);
+                      } else {
+                        setDeleteConfirmId(rt.id);
+                        setTimeout(() => setDeleteConfirmId(null), 3000);
                       }
                     }}
-                    className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors"
+                    className={`p-2 transition-all duration-300 rounded-lg ${deleteConfirmId === rt.id ? 'bg-rose-500 text-white shadow-md' : 'text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20'}`}
                   >
-                    <Trash2 size={16} />
+                    {deleteConfirmId === rt.id ? <Check size={16} /> : <Trash2 size={16} />}
                   </button>
                 </div>
               </div>
@@ -312,7 +332,7 @@ export const Subscriptions: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-500 dark:text-slate-400">{state.language === 'ar' ? 'تاريخ الاستحقاق القادم' : 'Next Due Date'}</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">{state.language === 'ar' ? 'تاريخ الاستحقاق' : 'Next Due Date'}</span>
                   <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
                     {new Date(rt.nextDate).toLocaleDateString(state.language === 'ar' ? 'ar-EG' : 'en-US')}
                   </span>
@@ -326,6 +346,39 @@ export const Subscriptions: React.FC = () => {
                   </span>
                 </div>
               )}
+              
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/50">
+                <button
+                  onClick={() => {
+                    setPaidIds(prev => [...prev, rt.id]);
+                    dispatch.payRecurringTransactionNow(rt.id);
+                    if (dispatch.setNotification) {
+                      dispatch.setNotification({ message: state.language === 'ar' ? 'تم التسجيل' : 'Paid and next due date updated', type: 'success' });
+                    }
+                    setTimeout(() => {
+                      setPaidIds(prev => prev.filter(id => id !== rt.id));
+                    }, 2000);
+                  }}
+                  disabled={paidIds.includes(rt.id)}
+                  className={`relative w-full overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-[1.25rem] font-bold transition-all duration-500 active:scale-95 group ${
+                    paidIds.includes(rt.id)
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/30'
+                      : 'bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/40 dark:to-blue-900/20 text-indigo-700 dark:text-indigo-300 hover:shadow-md hover:from-indigo-100 hover:to-blue-100 dark:hover:from-indigo-900/60 dark:hover:to-blue-900/40'
+                  }`}
+                >
+                  <div className="absolute inset-0 bg-white/30 -translate-x-[150%] skew-x-[30deg] group-hover:translate-x-[150%] transition-transform duration-1000 ease-out" />
+                  
+                  <div className={`relative z-10 flex items-center gap-2 transition-all duration-500 ${paidIds.includes(rt.id) ? 'scale-105' : 'scale-100'}`}>
+                    <Check size={paidIds.includes(rt.id) ? 20 : 18} className={`transition-all duration-300 ${paidIds.includes(rt.id) ? 'stroke-[3]' : 'stroke-2'}`} />
+                    <span>
+                      {paidIds.includes(rt.id)
+                        ? (state.language === 'ar' ? 'تم التسجيل بنجاح' : 'Payment Recorded')
+                        : (state.language === 'ar' ? 'تسجيل كعملية دفع' : 'Pay Now')
+                      }
+                    </span>
+                  </div>
+                </button>
+              </div>
             </div>
           );
         })}

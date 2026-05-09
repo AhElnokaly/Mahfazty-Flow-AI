@@ -62,7 +62,7 @@ export const NotificationsModal: React.FC<{ onClose: () => void }> = ({ onClose 
           ) : (
             notificationHistory.map((notification, index) => (
               <div 
-                key={notification.id || index} 
+                key={`${notification.id || ''}-${index}`}
                 onClick={() => handleNotificationClick(notification)}
                 className={`p-4 rounded-2xl border cursor-pointer ${notification.read ? 'bg-slate-50 border-slate-100 dark:bg-slate-800/50 dark:border-slate-800' : 'bg-white border-blue-100 dark:bg-slate-800 dark:border-blue-900/30 shadow-sm'} flex gap-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800`}
               >

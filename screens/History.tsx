@@ -3,11 +3,12 @@ import React, { useState, useMemo } from 'react';
 import { useApp, isIncomeLike, isExpenseLike, getClientShare, isTxRelatedToGroup, isTxRelatedToClient } from '../store';
 import { TransactionType, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { 
   Search, Download, History as HistoryIcon,
   Filter, Check, Trash2, Edit3, X, Layers, Users,
   ArrowUpRight, ArrowDownRight, Calendar as CalendarIcon, 
-  List, ChevronLeft, ChevronRight, Calculator, PieChart, LayoutList, Tag, FileText
+  List, ChevronLeft, ChevronRight, ChevronDown, Calculator, PieChart, LayoutList, Tag, FileText
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 import jsPDF from 'jspdf';
@@ -38,6 +39,7 @@ const History: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [currentDate, setCurrentDate] = useState(new Date()); 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showChart, setShowChart] = useState(false); // +++ optional feature 3 +++
 
   // Filter State
   const [timeRange, setTimeRange] = useState<TimeRange>('monthly');
@@ -46,10 +48,21 @@ const History: React.FC = () => {
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(''); // +++ أضيف بناءً على طلبك +++
   const [selectedType, setSelectedType] = useState<'all' | TransactionType | 'DEBT'>('all');
 
   const [detailedItem, setDetailedItem] = useState<string | null>(null);
+  const [expandedTransactionId, setExpandedTransactionId] = useState<string | null>(null); // +++ أضيف بناءً على طلبك +++
   
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+    transactions.forEach(t => {
+      if (t.date) months.add(t.date.slice(0, 7));
+    });
+    const currentM = new Date().toISOString().slice(0, 7);
+    months.add(currentM);
+    return Array.from(months).sort((a, b) => b.localeCompare(a));
+  }, [transactions]);
   // Delete confirmation state
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
@@ -111,23 +124,34 @@ const History: React.FC = () => {
       result = result.filter(t => {
         const clientsForTx = t.clientIds && t.clientIds.length > 0 ? t.clientIds : [t.clientId];
         const clientNames = clientsForTx.map(cId => clients.find(c => c.id === cId)?.name || '').join(' ');
+        const groupName = t.groupId ? groups.find(g => g.id === t.groupId)?.name || '' : '';
+        const itemsNames = t.items ? t.items.map(i => i.name).join(' ') : '';
+        const amountStr = t.amount.toString();
+        const lowerQ = searchQuery.toLowerCase();
         
-        return (t.note || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-               clientNames.toLowerCase().includes(searchQuery.toLowerCase());
+        return (t.note || '').toLowerCase().includes(lowerQ) ||
+               clientNames.toLowerCase().includes(lowerQ) ||
+               groupName.toLowerCase().includes(lowerQ) ||
+               itemsNames.toLowerCase().includes(lowerQ) ||
+               amountStr.includes(lowerQ);
       });
     }
 
     const now = new Date();
     if (viewMode === 'list') {
-      if (startDate) {
-        result = result.filter(t => {
-          try { return new Date(t.date).toISOString().split('T')[0] >= startDate; } catch { return false; }
-        });
-      }
-      if (endDate) {
-        result = result.filter(t => {
-          try { return new Date(t.date).toISOString().split('T')[0] <= endDate; } catch { return false; }
-        });
+      if (selectedMonth) {
+        result = result.filter(t => t.date.startsWith(selectedMonth));
+      } else {
+        if (startDate) {
+          result = result.filter(t => {
+            try { return new Date(t.date).toISOString().split('T')[0] >= startDate; } catch { return false; }
+          });
+        }
+        if (endDate) {
+          result = result.filter(t => {
+            try { return new Date(t.date).toISOString().split('T')[0] <= endDate; } catch { return false; }
+          });
+        }
       }
       if (selectedType !== 'all') {
         if (selectedType === TransactionType.INCOME) {
@@ -174,7 +198,7 @@ const History: React.FC = () => {
       const timeB = new Date(b.date || 0).getTime();
       return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
     });
-  }, [transactions, timeRange, searchQuery, clients, selectedGroupId, selectedClientId, viewMode, currentDate, selectedDate, startDate, endDate, selectedType]);
+  }, [transactions, timeRange, searchQuery, clients, groups, selectedGroupId, selectedClientId, viewMode, currentDate, selectedDate, startDate, endDate, selectedMonth, selectedType]);
 
   const totals = useMemo(() => {
     return filteredTransactions.reduce((acc, t) => {
@@ -190,6 +214,29 @@ const History: React.FC = () => {
       return acc;
     }, { income: 0, expense: 0 });
   }, [filteredTransactions, selectedClientId, selectedGroupId, clients]);
+
+  const chartData = useMemo(() => {
+    if (!showChart) return [];
+    
+    const data: Record<string, { date: string; raw: string; income: number; expense: number }> = {};
+    
+    filteredTransactions.forEach(t => {
+      let amount = t.amount;
+      if (selectedClientId !== 'all') amount = getClientShare(t, selectedClientId);
+      else if (selectedGroupId !== 'all') amount = clients.filter(c => c.groupId === selectedGroupId).reduce((s, c) => s + getClientShare(t, c.id), 0);
+      
+      const parts = t.date.split('-');
+      const displayDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : t.date;
+      const rawDate = t.date;
+      
+      if (!data[rawDate]) data[rawDate] = { date: displayDate, raw: rawDate, income: 0, expense: 0 };
+      
+      if (isIncomeLike(t)) data[rawDate].income += amount;
+      else if (isExpenseLike(t)) data[rawDate].expense += amount;
+    });
+    
+    return Object.values(data).sort((a,b) => a.raw.localeCompare(b.raw));
+  }, [filteredTransactions, showChart, selectedClientId, selectedGroupId, clients]);
 
   const handleDelete = (id: string) => {
     setItemToDelete(id);
@@ -236,7 +283,8 @@ const History: React.FC = () => {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `transactions_${new Date().toISOString().split('T')[0]}.csv`);
+    const fileName = selectedMonth ? `transactions_${selectedMonth}.csv` : `transactions_${new Date().toISOString().split('T')[0]}.csv`;
+    link.setAttribute('download', fileName);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -286,7 +334,8 @@ const History: React.FC = () => {
       headStyles: { fillColor: [59, 130, 246] }
     });
 
-    doc.save(`transactions_${new Date().toISOString().split('T')[0]}.pdf`);
+    const fileName = selectedMonth ? `transactions_${selectedMonth}.pdf` : `transactions_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
     dispatch.setNotification({ message: language === 'ar' ? 'تم تصدير التقرير بنجاح' : 'Report exported successfully', type: 'success' });
   };
   // ++++++++++++++++++++++++++++
@@ -511,108 +560,179 @@ const History: React.FC = () => {
         </div>
       )}
 
-      {/* --- LIST VIEW FILTERS (Only visible in List Mode) --- */}
+      {/* --- LIST VIEW FILTERS --- */}
       {viewMode === 'list' && (
-        <div className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800 space-y-6">
-          <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-            <div className="flex flex-wrap gap-2 p-1.5 bg-slate-50 dark:bg-slate-900 rounded-2xl w-full md:w-auto flex-1">
-              {(['weekly', 'monthly', 'yearly', 'all'] as const).map(range => (
-                <button key={range} onClick={() => setTimeRange(range)} className={`flex-1 py-2 px-4 text-xs font-bold uppercase tracking-wide rounded-xl transition-all ${timeRange === range ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>
-                  {language === 'ar' ? (range === 'weekly' ? 'أسبوع' : range === 'monthly' ? 'شهر' : range === 'yearly' ? 'سنة' : 'الكل') : range}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2 w-full md:w-auto">
-              {/* +++ أضيف بناءً على طلبك +++ */}
-              <button 
-                onClick={() => setIsEditMode(!isEditMode)}
-                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform ${isEditMode ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-              >
-                <Edit3 size={16} />
-                {language === 'ar' ? 'وضع التعديل' : 'Edit Mode'}
-              </button>
-              {/* ++++++++++++++++++++++++++++ */}
-              <button 
-                onClick={handleExportCSV}
-                className="flex flex-1 items-center justify-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform"
-              >
-                <Download size={16} />
-                {language === 'ar' ? 'تصدير CSV' : 'Export CSV'}
-              </button>
-              {/* +++ أضيف بناءً على طلبك +++ */}
-              <button 
-                onClick={handleExportPDF}
-                className="flex flex-1 items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-wide shadow-lg hover:scale-105 transition-transform"
-              >
-                <FileText size={16} />
-                {language === 'ar' ? 'تصدير PDF' : 'Export PDF'}
-              </button>
-              {/* ++++++++++++++++++++++++++++ */}
-            </div>
+        <div className="bg-slate-100 dark:bg-slate-800/50 p-4 md:p-6 rounded-[2rem] space-y-6">
+          
+          <div className="flex justify-between items-center px-2">
+             <div className="flex items-center gap-2 text-slate-500">
+               <button onClick={() => { setTimeRange('all'); setSelectedMonth(''); setStartDate(''); setEndDate(''); setSelectedGroupId('all'); setSelectedClientId('all'); setSelectedType('all'); setSearchQuery(''); }} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
+                 <X size={20} />
+               </button>
+             </div>
+             <div className="flex items-center gap-2 select-none">
+               <span className="font-bold text-lg text-slate-900 dark:text-white">{language === 'ar' ? 'الفلاتر' : 'Filters'}</span>
+               <Filter size={20} className="text-slate-900 dark:text-white" />
+             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
-                type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} 
-                placeholder={language === 'ar' ? 'بحث...' : 'Search records...'} 
-                className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400" 
-              />
-            </div>
-            
-            <div className="relative">
-              <Layers size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="flex gap-2 w-full justify-end">
+              <button 
+                onClick={() => setShowChart(!showChart)}
+                className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-3xl font-black text-sm shadow-sm hover:scale-[1.02] transition-transform ${showChart ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
+              >
+                <PieChart size={18} />
+                {language === 'ar' ? 'مخطط التحليل' : 'Analysis Chart'}
+              </button>
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} 
+              placeholder={language === 'ar' ? 'بحث...' : 'Search records...'} 
+              className="w-full pr-12 pl-4 py-4 bg-white dark:bg-slate-800 border-none rounded-3xl text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-400 shadow-sm text-right focus:ring-2 focus:ring-blue-500" 
+              dir={language === 'ar' ? 'rtl' : 'ltr'}
+            />
+          </div>
+
+          {/* Period selector */}
+          <div className="space-y-3">
+             <div className="flex justify-end px-2">
+                <span className="font-bold text-sm text-slate-900 dark:text-white">{language === 'ar' ? 'الفترة' : 'Period'}</span>
+             </div>
+             <div className="flex items-center bg-white dark:bg-slate-800 p-2 rounded-full shadow-sm gap-2">
+                <button 
+                  onClick={() => {
+                    const currentObj = selectedMonth ? new Date(selectedMonth + '-01') : new Date();
+                    currentObj.setMonth(currentObj.getMonth() - 1);
+                    setSelectedMonth(currentObj.toISOString().slice(0, 7));
+                    setStartDate(''); setEndDate(''); setTimeRange('all');
+                  }}
+                  className="p-3 text-slate-400 hover:text-blue-500 transition-colors"
+                >
+                  {language === 'ar' ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+                </button>
+                <div className="flex-1 relative flex justify-center">
+                  <select
+                    value={selectedMonth || new Date().toISOString().slice(0, 7)}
+                    onChange={(e) => {
+                      setSelectedMonth(e.target.value);
+                      setStartDate(''); setEndDate(''); setTimeRange('all');
+                    }}
+                    className="w-full appearance-none bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-full font-bold border border-blue-100 dark:border-blue-800/50 py-2 px-8 text-center cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
+                    dir={language === 'ar' ? 'rtl' : 'ltr'}
+                  >
+                    {availableMonths.map(m => {
+                      const isCurrent = m === new Date().toISOString().slice(0, 7);
+                      const displayDate = new Date(m + '-01').toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { month: 'long', year: 'numeric' });
+                      return (
+                        <option key={m} value={m}>
+                          {isCurrent ? (language === 'ar' ? `الشهر الحالي (${displayDate})` : `Current Month (${displayDate})`) : displayDate}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <ChevronDown size={14} className={`absolute ${language === 'ar' ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 text-blue-500 pointer-events-none`} />
+                </div>
+                <button 
+                  onClick={() => {
+                    const currentObj = selectedMonth ? new Date(selectedMonth + '-01') : new Date();
+                    currentObj.setMonth(currentObj.getMonth() + 1);
+                    setSelectedMonth(currentObj.toISOString().slice(0, 7));
+                    setStartDate(''); setEndDate(''); setTimeRange('all');
+                  }}
+                  className="p-3 text-slate-400 hover:text-blue-500 transition-colors"
+                >
+                  {language === 'ar' ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+                </button>
+             </div>
+          </div>
+
+          {/* Selects */}
+          <div className="space-y-3">
+            <div className="relative group bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800 flex items-center hover:border-blue-200 transition-colors">
               <select 
                 value={selectedGroupId} onChange={(e) => { setSelectedGroupId(e.target.value); setSelectedClientId('all'); }} 
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-xs font-bold text-slate-900 dark:text-white appearance-none cursor-pointer"
+                className="w-full flex-1 appearance-none bg-transparent py-4 pl-4 pr-12 text-sm font-bold text-slate-900 dark:text-white cursor-pointer outline-none"
+                dir={language === 'ar' ? 'rtl' : 'ltr'}
               >
                 <option value="all">{language === 'ar' ? 'كل المجموعات' : 'All Groups'}</option>
                 {groups.map(g => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
               </select>
+              <Users size={18} className="absolute right-4 text-slate-400 pointer-events-none" />
+              <ChevronDown size={16} className="absolute left-4 text-slate-400 pointer-events-none" />
             </div>
 
-            <div className="relative">
-              <Users size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="relative group bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800 flex items-center hover:border-blue-200 transition-colors">
               <select 
                 value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} 
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-xs font-bold text-slate-900 dark:text-white appearance-none cursor-pointer"
+                className="w-full flex-1 appearance-none bg-transparent py-4 pl-4 pr-12 text-sm font-bold text-slate-900 dark:text-white cursor-pointer outline-none"
+                dir={language === 'ar' ? 'rtl' : 'ltr'}
               >
                 <option value="all">{language === 'ar' ? 'كل العملاء' : 'All Clients'}</option>
                 {filteredClients.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
               </select>
+              <Users size={18} className="absolute right-4 text-slate-400 pointer-events-none" />
+              <ChevronDown size={16} className="absolute left-4 text-slate-400 pointer-events-none" />
             </div>
 
-            <div className="relative">
-              <Filter size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="relative group bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800 flex items-center hover:border-blue-200 transition-colors">
               <select 
                 value={selectedType} onChange={(e) => setSelectedType(e.target.value as any)} 
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-xs font-bold text-slate-900 dark:text-white appearance-none cursor-pointer"
+                className="w-full flex-1 appearance-none bg-transparent py-4 pl-4 pr-12 text-sm font-bold text-slate-900 dark:text-white cursor-pointer outline-none"
+                dir={language === 'ar' ? 'rtl' : 'ltr'}
               >
-                <option value="all">{language === 'ar' ? 'كل الأنواع' : 'All Types'}</option>
+                <option value="all">{language === 'ar' ? 'كل الأصناف' : 'All Types'}</option>
                 <option value={TransactionType.INCOME}>{language === 'ar' ? 'دخل' : 'Income'}</option>
                 <option value={TransactionType.EXPENSE}>{language === 'ar' ? 'صرف' : 'Expense'}</option>
                 <option value="DEBT">{language === 'ar' ? 'ديون وسلف' : 'Debts & Loans'}</option>
               </select>
+              <Tag size={18} className="absolute right-4 text-slate-400 pointer-events-none" />
+              <ChevronDown size={16} className="absolute left-4 text-slate-400 pointer-events-none" />
             </div>
+          </div>
 
-            <div className="relative">
-              <CalendarIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setTimeRange('all'); }} 
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-xs font-bold text-slate-900 dark:text-white"
-                title={language === 'ar' ? 'تاريخ البداية' : 'Start Date'}
-              />
-            </div>
+          <div className="flex justify-end items-center px-4 mt-2">
+            <button 
+                onClick={() => { setTimeRange('all'); setSelectedMonth(''); setStartDate(''); setEndDate(''); setSelectedGroupId('all'); setSelectedClientId('all'); setSelectedType('all'); setSearchQuery(''); }}
+                className="text-slate-400 font-bold text-sm flex items-center gap-2 hover:text-slate-700 transition"
+            >
+                {language === 'ar' ? 'مسح الفلاتر' : 'Clear Filters'}
+                <Trash2 size={16} />
+            </button>
+          </div>
 
-            <div className="relative">
-              <CalendarIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setTimeRange('all'); }} 
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl text-xs font-bold text-slate-900 dark:text-white"
-                title={language === 'ar' ? 'تاريخ النهاية' : 'End Date'}
-              />
-            </div>
+          {/* Action Buttons */}
+          <div className="flex gap-4 pt-2">
+              <button 
+                onClick={() => setIsEditMode(!isEditMode)}
+                className={`flex-1 flex flex-row-reverse items-center justify-center gap-2 py-4 rounded-[1.5rem] font-bold text-lg transition-transform border-[1.5px] ${isEditMode ? 'border-amber-500 bg-amber-50 text-amber-600' : 'border-blue-600 bg-transparent text-blue-600 hover:bg-blue-50'}`}
+              >
+                <Edit3 size={20} />
+                {language === 'ar' ? 'تعديل' : 'Edit'}
+              </button>
+              
+              <div className="flex-1 relative group z-10">
+                  <button 
+                    className="w-full flex flex-row-reverse items-center justify-center gap-2 py-4 bg-blue-600 outline outline-[1.5px] outline-blue-600 text-white rounded-[1.5rem] font-bold text-lg shadow-sm hover:bg-blue-700 transition-colors"
+                  >
+                    <ChevronDown size={20} />
+                    {language === 'ar' ? 'تصدير' : 'Export'}
+                    <Download size={20} />
+                  </button>
+                  <div className="absolute bottom-full mb-2 right-0 w-full bg-white dark:bg-slate-800 rounded-[1.5rem] shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all flex flex-col">
+                      <button onClick={handleExportCSV} className="px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 text-right flex items-center justify-between transition-colors">
+                          <span className="bg-emerald-100 text-emerald-600 p-2 rounded-xl"><Download size={16} /></span>
+                          {language === 'ar' ? 'تصدير CSV' : 'Export CSV'}
+                      </button>
+                      <button onClick={handleExportPDF} className="px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 border-t border-slate-100 dark:border-slate-700 text-right flex items-center justify-between transition-colors">
+                          <span className="bg-rose-100 text-rose-600 p-2 rounded-xl"><FileText size={16} /></span>
+                          {language === 'ar' ? 'تصدير PDF' : 'Export PDF'}
+                      </button>
+                  </div>
+              </div>
           </div>
         </div>
       )}
@@ -643,166 +763,200 @@ const History: React.FC = () => {
         </div>
       )}
 
-      {/* Transactions Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-50 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-50 dark:border-slate-800">
-                <th className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{language === 'ar' ? 'التفاصيل' : 'Details'}</th>
-                <th className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-right">{language === 'ar' ? 'المبلغ' : 'Amount'}</th>
-                <th className="px-4 md:px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-right">{language === 'ar' ? 'الملاحظة' : 'Note'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-              {filteredTransactions.map(t => {
-                const primaryClientId = t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId;
-                const client = clients.find(c => c.id === primaryClientId);
-                const clientNameDisplay = t.clientIds && t.clientIds.length > 1 
-                  ? `${client?.name} +${t.clientIds.length - 1}` 
-                  : client?.name;
-                const group = groups.find(g => g.id === t.groupId);
-                return (
-                  <tr key={t.id} className={`hover:bg-slate-50/30 dark:hover:bg-slate-900/10 group transition-colors relative ${t.color ? t.color.replace('bg-', 'border-l-4 border-l-') : (group?.color ? group.color.replace('bg-', 'border-l-4 border-l-') : '')}`}>
-                    <td className="px-4 md:px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 ${t.color || group?.color || 'bg-slate-100 dark:bg-slate-900'} rounded-xl flex items-center justify-center text-lg shadow-sm text-white`}>
-                          {t.type?.toUpperCase() === 'TRANSFER' ? '💳' : t.groupId === 'system_adjustment' ? '⚖️' : (client?.icon || '👤')}
-                        </div>
-                        <div className="flex flex-col">
-                             <>
-                               <span className="text-xs font-black text-black dark:text-slate-100">
-                                 {t.type?.toUpperCase() === 'TRANSFER' ? (language === 'ar' ? 'تسديد بطاقة ائتمانية' : 'Credit Card Payment') : t.groupId === 'system_adjustment' ? (language === 'ar' ? 'تسوية رصيد' : 'Balance Adjustment') : clientNameDisplay} 
-                                 {t.groupId !== 'system_adjustment' && t.type !== TransactionType.TRANSFER && <span className="text-[10px] text-slate-500 ml-1 font-bold">({group?.name})</span>}
-                                 {t.isDebt && ( // +++ أضيف بناءً على طلبك +++
-                                   <span className="ml-2 px-2 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[10px] rounded-full uppercase tracking-wider">
-                                     {language === 'ar' ? 'دين' : 'Debt'}
-                                   </span>
-                                 )}
-                               </span>
-                               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">
-                                 {new Date(t.date).toLocaleDateString()}
-                                 {t.paymentMethod && (
-                                   <span className="ml-2 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full">
-                                     {t.paymentMethod === 'cash' ? (language === 'ar' ? 'كاش' : 'Cash') : (language === 'ar' ? 'فيزا' : 'Visa')}
-                                   </span>
-                                 )}
-                               </span>
-                             </>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 md:px-6 py-4 text-right">
-                        <div className="flex flex-col items-end">
-                          <span className={`text-sm font-black ${
-                            isIncomeLike(t) 
-                              ? 'text-emerald-600 dark:text-emerald-500' 
-                              : t.type?.toUpperCase() === 'TRANSFER'
-                                ? 'text-blue-600 dark:text-blue-500'
-                                : t.paymentMethod === 'credit' 
-                                  ? 'text-purple-600 dark:text-purple-500' 
-                                  : 'text-rose-600 dark:text-rose-500'
-                          }`}>
-                            {isIncomeLike(t) ? '+' : '-'}${t.amount.toLocaleString()}
-                          </span>
-                          {t.referenceTotal && (
-                            <span className="text-[10px] text-slate-400 font-bold mt-0.5">
-                              {language === 'ar' ? 'من أصل' : 'out of'} ${t.referenceTotal.toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                    </td>
-                    <td className="px-4 md:px-6 py-4 text-right relative">
-                       <div className="flex flex-col items-end">
-                           <span className="text-xs font-bold text-slate-500 dark:text-slate-400 max-w-[150px] truncate" title={t.note}>
-                             {t.note || (language === 'ar' ? '-' : '-')}
-                           </span>
-                         {t.items && t.items.length > 0 && (
-                           <div className="mt-2 w-full max-w-[200px] bg-slate-50 dark:bg-slate-900/50 rounded-xl p-2 border border-slate-100 dark:border-slate-800">
-                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 text-left">
-                               {language === 'ar' ? 'السلع' : 'Items'} ({t.items.length})
-                             </p>
-                             <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
-                               {t.items.map(item => {
-                                 const itemClient = item.clientId ? clients.find(c => c.id === item.clientId) : null;
-                                 return (
-                                   <div 
-                                     key={item.id} 
-                                     className="flex justify-between items-center text-xs font-bold cursor-pointer hover:text-blue-500 transition-colors"
-                                     onClick={() => setDetailedItem(item.name)}
-                                   >
-                                     <div className="flex flex-col text-left">
-                                       <span className="text-slate-600 dark:text-slate-300 truncate max-w-[100px]">{item.quantity}x {item.name}</span>
-                                       {itemClient && <span className="text-[9px] text-slate-400">{itemClient.name}</span>}
-                                     </div>
-                                     <span className="text-slate-500">{item.price.toLocaleString()}</span>
-                                   </div>
-                                 );
-                               })}
-                             </div>
-                           </div>
-                         )}
-                         {/* +++ أضيف بناءً على طلبك: تفاصيل الأسهم والودائع في السجل +++ */}
-                         {(t.shares || t.pricePerShare) && (
-                           <div className="mt-2 w-full max-w-[200px] bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-2 border border-indigo-100 dark:border-indigo-800/30 text-left">
-                             <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide mb-1">
-                               {language === 'ar' ? 'تفاصيل السهم' : 'Stock Details'}
-                             </p>
-                             <div className="flex justify-between items-center text-xs font-bold text-indigo-700 dark:text-indigo-300">
-                               <span>{t.shares} {language === 'ar' ? 'سهم' : 'Shares'}</span>
-                               <span>× ${t.pricePerShare}</span>
-                             </div>
-                           </div>
-                         )}
-                         {(t.interestRate || t.duration) && (
-                           <div className="mt-2 w-full max-w-[200px] bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-2 border border-emerald-100 dark:border-emerald-800/30 text-left">
-                             <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide mb-1">
-                               {language === 'ar' ? 'تفاصيل الوديعة' : 'Deposit Details'}
-                             </p>
-                             <div className="flex justify-between items-center text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                               <span>{t.interestRate}%</span>
-                               <span>{t.duration} {language === 'ar' ? 'شهر' : 'Mo'}</span>
-                             </div>
-                           </div>
-                         )}
-                         {/* ++++++++++++++++++++++++++++ */}
-                         {/* Secondary hover actions to keep app functional but clean */}
-                         <div className={`flex gap-1 transition-all absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 ${isEditMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                           {/* +++ أضيف بناءً على طلبك +++ */}
-                           {isEditMode && (
-                             <button onClick={() => {
-                               const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-rose-500', 'bg-amber-500', 'bg-purple-500', 'bg-slate-500'];
-                               const nextColor = colors[(colors.indexOf(t.color || '') + 1) % colors.length];
-                               dispatch.updateTransaction(t.id, { color: nextColor });
-                             }} className="p-1.5 text-slate-400 hover:text-amber-500" title="تغيير اللون"><div className="w-3 h-3 rounded-full bg-amber-500"></div></button>
+      {/* Optional Chart View */}
+      {viewMode === 'list' && showChart && chartData.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-50 dark:border-slate-800 h-80 px-2 mx-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.5} />
+              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} tickFormatter={(val) => `${val / 1000}k`} />
+              <Tooltip 
+                cursor={{ fill: 'transparent' }}
+                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+              />
+              <Bar dataKey="income" name={language === 'ar' ? 'دخل' : 'Income'} fill="#10B981" radius={[4, 4, 0, 0]} barSize={12} />
+              <Bar dataKey="expense" name={language === 'ar' ? 'صرف' : 'Expense'} fill="#F43F5E" radius={[4, 4, 0, 0]} barSize={12} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Transactions List */}
+      <div className="space-y-2.5">
+        {filteredTransactions.map(t => {
+          const primaryClientId = t.clientIds && t.clientIds.length > 0 ? t.clientIds[0] : t.clientId;
+          const client = clients.find(c => c.id === primaryClientId);
+          const clientNameDisplay = t.clientIds && t.clientIds.length > 1 
+            ? `${client?.name} +${t.clientIds.length - 1}` 
+            : client?.name;
+          const group = groups.find(g => g.id === t.groupId);
+          const isExpanded = expandedTransactionId === t.id;
+          
+          const iconDisplay = t.type?.toUpperCase() === 'TRANSFER' ? '💳' : t.groupId === 'system_adjustment' ? '⚖️' : (client?.icon || '👤');
+          const titleDisplay = t.type?.toUpperCase() === 'TRANSFER' ? (language === 'ar' ? 'تسديد بطاقة ائتمانية' : 'Credit Card Payment') : t.groupId === 'system_adjustment' ? (language === 'ar' ? 'تسوية رصيد' : 'Balance Adjustment') : clientNameDisplay;
+          
+          const groupColor = group?.color || 'bg-slate-100';
+          const baseColor = t.color ? t.color : groupColor;
+
+          return (
+            <div 
+               key={t.id} 
+               onClick={() => setExpandedTransactionId(isExpanded ? null : t.id)}
+               className={`bg-white dark:bg-slate-800 rounded-2xl p-3 md:p-4 shadow-sm border border-slate-50 dark:border-slate-800 cursor-pointer overflow-hidden relative group transition-all duration-300 hover:shadow-md ${isExpanded ? 'ring-1 ring-offset-1 dark:ring-offset-slate-900 ' + baseColor.replace('bg-', 'ring-') : ''}`}
+            >
+               {/* Color Accent Line */}
+               <div className={`absolute top-0 bottom-0 ${language === 'ar' ? 'right-0' : 'left-0'} w-1.5 ${baseColor}`}></div>
+
+               <div className="flex justify-between items-center px-1">
+                  <div className="flex items-center gap-3 z-10 pl-2">
+                     <div className={`w-10 h-10 rounded-[0.85rem] flex flex-col items-center justify-center text-lg shadow-sm border border-white/20 text-white ${baseColor} transform group-hover:scale-105 transition-transform`}>
+                        {iconDisplay}
+                     </div>
+                     <div className="flex flex-col text-left">
+                        <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                           {titleDisplay}
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                           {t.groupId !== 'system_adjustment' && t.type !== TransactionType.TRANSFER && (
+                             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${baseColor.replace('bg-', 'text-')} bg-slate-50 dark:bg-slate-900`}>
+                               {group?.name || ''}
+                             </span>
                            )}
-                           {/* ++++++++++++++++++++++++++++ */}
-                           <button onClick={() => { 
-                             navigate('/add', { state: { editTransactionId: t.id } });
-                           }} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit3 size={14}/></button>
-                           <button onClick={() => handleDelete(t.id)} className="p-1.5 text-slate-400 hover:text-rose-500"><Trash2 size={14}/></button>
+                           {t.isDebt && (
+                             <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 text-[9px] rounded font-bold uppercase tracking-wider">
+                               {language === 'ar' ? 'دين' : 'Debt'}
+                             </span>
+                           )}
+                           {t.paymentMethod && (
+                             <span className="px-1.5 py-0.5 bg-slate-50 dark:bg-slate-800 text-slate-500 text-[9px] rounded font-bold">
+                               {t.paymentMethod === 'cash' ? (language === 'ar' ? 'كاش' : 'Cash') : (language === 'ar' ? 'فيزا' : 'Visa')}
+                             </span>
+                           )}
+                        </div>
+                     </div>
+                  </div>
+                  <div className="flex flex-col items-end z-10">
+                     <span className={`text-base font-black ${
+                        isIncomeLike(t) 
+                          ? 'text-emerald-500 dark:text-emerald-400' 
+                          : t.type?.toUpperCase() === 'TRANSFER'
+                            ? 'text-blue-500 dark:text-blue-400'
+                            : t.paymentMethod === 'credit' 
+                              ? 'text-purple-500 dark:text-purple-400' 
+                              : 'text-slate-800 dark:text-slate-200'
+                      }`}>
+                        {isIncomeLike(t) ? '+' : '-'}${t.amount.toLocaleString()}
+                     </span>
+                     {t.referenceTotal && (
+                        <span className="text-[9px] text-slate-400 font-bold mt-0.5">
+                          {language === 'ar' ? 'من أصل' : 'out of'} ${t.referenceTotal.toLocaleString()}
+                        </span>
+                     )}
+                     <span className="text-[10px] text-slate-400 font-bold mt-0.5 uppercase">
+                        {new Date(t.date).toLocaleDateString()}
+                     </span>
+                  </div>
+               </div>
+               
+               {isExpanded && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-col gap-3 animate-in fade-in slide-in-from-top-1 z-10 relative px-1">
+                     
+                     {t.note && (
+                       <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg text-left border border-slate-100 dark:border-slate-800">
+                          <p className="text-xs font-medium text-slate-600 dark:text-slate-300">{t.note}</p>
+                       </div>
+                     )}
+                     
+                     {t.items && t.items.length > 0 && (
+                       <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 text-left">
+                           {language === 'ar' ? 'السلع' : 'Items'} ({t.items.length})
+                         </p>
+                         <div className="space-y-1.5">
+                           {t.items.map(item => {
+                             const itemClient = item.clientId ? clients.find(c => c.id === item.clientId) : null;
+                             return (
+                               <div 
+                                 key={item.id} 
+                                 className="flex justify-between items-center text-xs font-bold bg-white dark:bg-slate-800 p-2.5 rounded-lg cursor-pointer hover:shadow hover:text-blue-500 transition-all border border-slate-100 dark:border-slate-700"
+                                 onClick={(e) => { e.stopPropagation(); setDetailedItem(item.name); }}
+                               >
+                                 <div className="flex flex-col text-left">
+                                   <span className="text-slate-700 dark:text-slate-200">{item.quantity}x {item.name}</span>
+                                   {itemClient && <span className="text-[9px] text-slate-400">{itemClient.name}</span>}
+                                 </div>
+                                 <span className="text-slate-500">${item.price.toLocaleString()}</span>
+                               </div>
+                             );
+                           })}
                          </div>
                        </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filteredTransactions.length === 0 && (
-            <div className="py-20 flex flex-col items-center justify-center text-center">
-              <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-300 dark:text-slate-600 mb-6">
-                <Search size={40} />
-              </div>
-              <p className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-wide mb-2">
-                {language === 'ar' ? 'لا توجد نتائج' : 'No Results Found'}
-              </p>
-              <p className="text-sm text-slate-500 font-medium max-w-sm">
-                {language === 'ar' ? 'لم نتمكن من العثور على أي معاملات تطابق معايير البحث الخاصة بك.' : 'We couldn\'t find any transactions matching your search criteria.'}
-              </p>
+                     )}
+
+                     {(t.shares || t.pricePerShare) && (
+                       <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800/30 text-left">
+                         <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-wide mb-1.5">
+                           {language === 'ar' ? 'تفاصيل السهم' : 'Stock Details'}
+                         </p>
+                         <div className="flex justify-between items-center text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                           <span>{t.shares} {language === 'ar' ? 'سهم' : 'Shares'}</span>
+                           <span>× ${t.pricePerShare}</span>
+                         </div>
+                       </div>
+                     )}
+
+                     {(t.interestRate || t.duration) && (
+                       <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-lg border border-emerald-100 dark:border-emerald-800/30 text-left">
+                         <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-wide mb-1.5">
+                           {language === 'ar' ? 'تفاصيل الوديعة' : 'Deposit Details'}
+                         </p>
+                         <div className="flex justify-between items-center text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                           <span>{t.interestRate}%</span>
+                           <span>{t.duration} {language === 'ar' ? 'شهر' : 'Mo'}</span>
+                         </div>
+                       </div>
+                     )}
+                     
+                     <div className="flex gap-2 justify-end mt-1">
+                        {isEditMode && (
+                          <button onClick={(e) => {
+                            e.stopPropagation();
+                            const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-rose-500', 'bg-amber-500', 'bg-purple-500', 'bg-slate-500'];
+                            const nextColor = colors[(colors.indexOf(t.color || '') + 1) % colors.length];
+                            dispatch.updateTransaction(t.id, { color: nextColor });
+                          }} className="w-10 h-10 bg-slate-50 dark:bg-slate-800 text-slate-500 rounded-lg hover:text-amber-500 flex items-center justify-center border border-slate-100 dark:border-slate-700">
+                            <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                          </button>
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); navigate('/add', { state: { editTransactionId: t.id } }); }} className="flex-1 flex justify-center items-center gap-1.5 p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg font-black text-xs tracking-wide transition-colors hover:bg-blue-100 dark:hover:bg-blue-900/40">
+                           <Edit3 size={14} />
+                           {language === 'ar' ? 'تعديل' : 'Edit'}
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }} className="flex-1 flex justify-center items-center gap-1.5 p-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-lg font-black text-xs tracking-wide transition-colors hover:bg-rose-100 dark:hover:bg-rose-900/40">
+                           <Trash2 size={14} />
+                           {language === 'ar' ? 'مسح' : 'Delete'}
+                        </button>
+                     </div>
+                  </div>
+               )}
             </div>
-          )}
-        </div>
+          );
+        })}
+
+        {filteredTransactions.length === 0 && (
+          <div className="py-20 flex flex-col items-center justify-center text-center">
+            <div className="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-300 dark:text-slate-600 mb-6 border-4 border-white dark:border-slate-900 shadow-sm">
+              <Search size={40} />
+            </div>
+            <p className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">
+              {language === 'ar' ? 'لا توجد نتائج' : 'No Results Found'}
+            </p>
+            <p className="text-sm text-slate-500 font-medium max-w-sm">
+              {language === 'ar' ? 'لم نتمكن من العثور على أي معاملات تطابق معايير البحث الخاصة بك.' : 'We couldn\'t find any transactions matching your search criteria.'}
+            </p>
+          </div>
+        )}
       </div>
 
        {/* Detailed Item Modal */}

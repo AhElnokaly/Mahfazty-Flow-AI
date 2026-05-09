@@ -1,0 +1,376 @@
+
+--- START OF src/components/worklog/WalletView.tsx ---
+
+import React, { useMemo, useState } from 'react';
+import { Card } from '../ui/card';
+import { Wallet, TrendingUp, DollarSign, Briefcase, ChevronLeft, Target, FileText, X, BarChart2 } from 'lucide-react';
+import { useWorkLog } from '../../contexts/WorkLogContext';
+import { format, isSameMonth } from 'date-fns';
+import { ar } from 'date-fns/locale';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, Tooltip, CartesianGrid } from 'recharts';
+import { useLanguage } from "@/contexts/LanguageContext";
+
+export default function WalletView() {
+    const { t, lang } = useLanguage();
+  const { sessions, projects, settings, updateSettings } = useWorkLog();
+  const now = new Date();
+  
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [tempGoal, setTempGoal] = useState((settings.monthlyFinancialTarget || 15000).toString());
+
+  // Basic Filtering for Current Month
+  const currentMonthSessions = sessions.filter(s => isSameMonth(new Date(s.startTime), now) && !s.isArchived);
+
+  // Financial calculations
+  const { totalEstimatedRevenue, projectsRevenue } = useMemo(() => {
+    let _total = 0;
+    const _projectsObj: Record<string, { duration: number, revenue: number, name: string }> = {};
+
+    currentMonthSessions.forEach(session => {
+       if (session.projectId) {
+          const project = projects.find(p => p.id === session.projectId);
+          if (project && project.hourlyRate) {
+             const hours = (session.duration || 0) / 60;
+             const sessionRev = hours * project.hourlyRate;
+             _total += sessionRev;
+             
+             if (!_projectsObj[project.id]) {
+                _projectsObj[project.id] = { duration: 0, revenue: 0, name: project.name };
+             }
+             _projectsObj[project.id].duration += hours;
+             _projectsObj[project.id].revenue += sessionRev;
+          }
+       }
+    });
+
+    return {
+       totalEstimatedRevenue: _total,
+       projectsRevenue: Object.values(_projectsObj).sort((a,b) => b.revenue - a.revenue)
+    };
+  }, [currentMonthSessions, projects]);
+
+  const handleSaveGoal = () => {
+     updateSettings({ ...settings, monthlyFinancialTarget: Number(tempGoal) || 0 });
+     setGoalModalOpen(false);
+  };
+
+  const handleExportInvoice = () => {
+    // Generate a simple print layout for invoice
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const htmlContent = `
+      <html dir="rtl">
+        <head>
+          <title>فاتورة مبدئية - ${format(now, 'MMMM yyyy', {locale: ar})}</title>
+          <style>
+             body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
+             h1 { color: #10b981; }
+             table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+             th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: right; }
+             th { background-color: #f9fafb; font-weight: bold; }
+             .total { font-size: 1.5rem; font-weight: bold; margin-top: 20px; text-align: left; }
+             @media print { button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <h1>فاتورة خدمات (مستقل)</h1>
+          <p>التاريخ: ${format(now, 'yyyy/MM/dd')}</p>
+          <p>بيان أعمال شهر: ${format(now, 'MMMM yyyy', {locale: ar})}</p>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>المشروع / العمل</th>
+                <th>إجمالي الساعات</th>
+                <th>المبلغ المستحق (ج.م)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${projectsRevenue.map(p => `
+                <tr>
+                  <td>${p.name}</td>
+                  <td>${p.duration.toFixed(1)}</td>
+                  <td>${p.revenue.toLocaleString()}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="total">
+            الإجمالي النهائي: ${totalEstimatedRevenue.toLocaleString()} ج.م
+          </div>
+          
+          <p style="margin-top: 50px; font-size: 0.9rem; color: #666;">تم إنشاء هذه الفاتورة تلقائياً عبر نظام LifeCompanion.</p>
+          <button onclick="window.print()" style="margin-top:20px; padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 5px; cursor: pointer;">طباعة / حفظ كـ PDF</button>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
+  const targetGoal = settings.monthlyFinancialTarget || 15000;
+  const progressPercent = Math.min((totalEstimatedRevenue / targetGoal) * 100, 100);
+  const strokeDasharray = 283; // 2 * pi * 45
+  const strokeDashoffset = strokeDasharray - (strokeDasharray * progressPercent) / 100;
+
+  return (
+    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-screen pb-20 px-2 pt-4" dir="rtl">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+            <Wallet className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">{t('t_auto_493')}</h2>
+            <p className="text-muted-foreground text-sm">{t('t_auto_494')}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-tr from-emerald-600 to-emerald-400 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden shrink-0">
+         <div className="absolute top-0 left-0 w-full h-full bg-black/10 backdrop-blur-sm pointer-events-none" />
+         
+         {/* Circular Progress Background Effect */}
+         <div className="absolute top-[-20%] left-[-10%] opacity-20 pointer-events-none w-64 h-64">
+           <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+             <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="8" opacity="0.3" />
+             <circle 
+               cx="50" cy="50" r="45" 
+               fill="none" 
+               stroke="currentColor" 
+               strokeWidth="8" 
+               strokeDasharray={strokeDasharray} 
+               strokeDashoffset={strokeDashoffset} 
+               className="transition-all duration-1000 ease-out" 
+               strokeLinecap="round" 
+             />
+           </svg>
+         </div>
+
+         <div className="relative z-10 flex flex-col gap-6">
+            <div className="flex justify-between items-center">
+               <span className="opacity-80 text-sm font-medium">{t('t_auto_495')}</span>
+               <div className="flex gap-2">
+                 <button onClick={() => setGoalModalOpen(true)} className="text-xs bg-black/20 hover:bg-black/30 transition px-3 py-1 rounded-full flex items-center gap-1 backdrop-blur-md">
+                    <Target className="w-3 h-3" />
+                    {t('t_auto_496')} {targetGoal.toLocaleString()}
+                 </button>
+                 <span className="text-xs bg-white/20 px-2 py-1 rounded-full">{format(now, 'MMMM yyyy', {locale: ar})}</span>
+               </div>
+            </div>
+            
+            <div className="flex items-end gap-2">
+               <span className="text-5xl font-black">{totalEstimatedRevenue.toLocaleString()}</span>
+               <span className="text-lg font-bold opacity-80 mb-1">{t('t_auto_497')}</span>
+            </div>
+            
+            <div className="flex items-center justify-between mt-2 text-xs">
+               <span className="opacity-80">{t('t_auto_498')}</span>
+               <div className="bg-white/20 px-2 py-1 rounded-md font-bold text-white flex items-center gap-1 backdrop-blur-sm">
+                  {progressPercent.toFixed(0)}{t('t_auto_499')}
+                                         </div>
+            </div>
+         </div>
+      </div>
+
+      {settings.system !== 'freelance' && (
+         <Card className="p-4 bg-card border-white/5 rounded-2xl flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+               <DollarSign className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1">
+               <h3 className="font-bold text-sm">{t('t_auto_500')}</h3>
+               <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                 {t('t_auto_501')}
+                                         </p>
+            </div>
+         </Card>
+      )}
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="font-bold text-lg flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-emerald-500" /> 
+              {t('t_auto_502')}
+                                </h3>
+          <Button variant="outline" size="sm" className="h-8 rounded-xl font-bold bg-card" onClick={handleExportInvoice}>
+            <FileText className="w-4 h-4 ml-1.5 text-emerald-500" />
+            {t('t_auto_503')}
+                                </Button>
+        </div>
+        
+        <div className="flex flex-col gap-3">
+           {projectsRevenue.length > 0 ? (
+              projectsRevenue.map((proj, idx) => (
+                 <Card key={idx} className="p-4 bg-card border-white/5 rounded-2xl flex items-center justify-between hover:bg-secondary/20 transition-colors">
+                    <div className="flex flex-col gap-1">
+                       <span className="font-bold text-sm">{proj.name}</span>
+                       <span className="text-[10px] text-muted-foreground">
+                          {proj.duration.toFixed(1)} {t('t_auto_504')}
+                                                     </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                       <span className="font-bold text-emerald-500">{proj.revenue.toLocaleString()} {t('t_auto_204')}</span>
+                       <ChevronLeft className="w-4 h-4 text-muted-foreground opacity-50" />
+                    </div>
+                 </Card>
+              ))
+           ) : (
+              <div className="text-center py-10 text-muted-foreground bg-secondary/5 rounded-3xl border border-white/5 border-dashed">
+                 {t('t_auto_505')}
+                                            </div>
+           )}
+        </div>
+      </div>
+
+      <Dialog open={goalModalOpen} onOpenChange={setGoalModalOpen}>
+        <DialogContent className="sm:max-w-md w-[90vw] rounded-[2rem]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>{t('t_auto_506')}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              {t('t_auto_507')}
+                                      </p>
+            <div className="flex items-center gap-2">
+               <Input 
+                 type="number" 
+                 className="h-12 bg-secondary/50 border-white/10 rounded-xl font-bold text-lg"
+                 value={tempGoal} 
+                 onChange={(e) => setTempGoal(e.target.value)} 
+               />
+               <span className="font-bold text-muted-foreground">{t('t_auto_497')}</span>
+            </div>
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            <Button variant="ghost" onClick={() => setGoalModalOpen(false)} className="flex-1 rounded-xl">{t('t_auto_305')}</Button>
+            <Button onClick={handleSaveGoal} className="flex-1 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white">{t('t_auto_508')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="space-y-4 pt-4">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="font-bold text-lg flex items-center gap-2">
+              <BarChart2 className="w-5 h-5 text-indigo-500" /> 
+              {t('t_auto_509')}
+                                </h3>
+        </div>
+        
+        <div className="flex flex-col gap-3">
+           {settings.savedCharts && settings.savedCharts.length > 0 ? (
+              settings.savedCharts.map((chart: any, idx: number) => (
+                 <Card key={idx} className="p-4 bg-card border-white/5 rounded-2xl flex justify-between items-center hover:bg-secondary/20 transition-colors">
+                    <div className="flex flex-col gap-1">
+                       <span className="font-bold text-sm">{chart.name}</span>
+                       <span className="text-[10px] text-muted-foreground flex gap-1">
+                          {t('t_auto_510')} {chart.chartType} {t('t_auto_511')} {chart.metric} {t('t_auto_512')} {chart.groupBy} {t('t_auto_513')} {chart.timeRange}
+                       </span>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => {
+                        const updated = settings.savedCharts!.filter((_, i) => i !== idx);
+                        updateSettings({ ...settings, savedCharts: updated });
+                    }} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 w-8 rounded-xl">
+                       <X className="w-4 h-4" />
+                    </Button>
+                 </Card>
+              ))
+           ) : (
+              <div className="text-center py-6 text-muted-foreground bg-secondary/5 rounded-3xl border border-white/5 border-dashed">
+                 {t('t_auto_514')}
+                                            </div>
+           )}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+
+--- END OF src/components/worklog/WalletView.tsx ---
+
+
+--- START OF src/components/Dashboard.tsx ---
+
+import React from 'react';
+import { useWorkLog } from '../contexts/WorkLogContext';
+import { useLanguage } from '../contexts/LanguageContext';
+import HomeView from './worklog/HomeView';
+import CalendarView from './worklog/CalendarView';
+import ProjectsView from './worklog/ProjectsView';
+import ReportsView from './worklog/ReportsView';
+import SettingsView from './worklog/SettingsView';
+import JobsShiftsView from './worklog/JobsShiftsView';
+import SupportQAView from './worklog/SupportQAView';
+import ArchiveView from './worklog/ArchiveView';
+import WalletView from './worklog/WalletView';
+import SmartPageView from './worklog/SmartPageView';
+import AlarmsView from './worklog/AlarmsView';
+import ChartMakerView from './worklog/ChartMakerView';
+import AICore from './aicore/AICore';
+import ThemesModes from './themes/ThemesModes';
+
+export default function Dashboard({ activeTab, setActiveTab }: { activeTab: string, setActiveTab: (tab: string) => void }) {
+  const { settings } = useWorkLog();
+  const { t, lang } = useLanguage();
+  const showShiftsModule = settings.modules?.shifts;
+
+  return (
+    <div className="h-full w-full max-w-7xl mx-auto">
+      {activeTab === 'home' && <HomeView />}
+      {activeTab === 'week' && <CalendarView />}
+      {activeTab === 'projects' && <ProjectsView />}
+      {activeTab === 'reports' && <ReportsView />}
+      {activeTab === 'wallet' && <WalletView />}
+      {activeTab === 'settings' && <SettingsView />}
+      {activeTab === 'workspace' && <JobsShiftsView />}
+      {activeTab === 'support' && <SupportQAView />}
+      {activeTab === 'archive' && <ArchiveView />}
+      {activeTab === 'smartpage' && <SmartPageView />}
+      {activeTab === 'alarms' && <AlarmsView />}
+      {activeTab === 'chart_maker' && <ChartMakerView />}
+      {activeTab === 'aicore' && <AICore />}
+      {activeTab === 'themes' && <ThemesModes />}
+      {activeTab === 'more' && (
+        <div className={`flex flex-col gap-4 animate-in fade-in duration-300 pb-20 pt-4 px-2 ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+          <h2 className="text-2xl font-bold mb-4">{t('dash.more_options')}</h2>
+          <OptionsCard title={t('dash.my_page')} desc={t('dash.my_page_desc')} id="smartpage" onClick={() => setActiveTab('smartpage')} lang={lang} />
+          <OptionsCard title={t('layout.chart_maker')} desc={t('dash.chart_maker_desc')} id="chart_maker" onClick={() => setActiveTab('chart_maker')} lang={lang} />
+          <OptionsCard title={t('layout.my_wallet')} desc={t('dash.wallet_desc')} id="wallet" onClick={() => setActiveTab('wallet')} lang={lang} />
+          <OptionsCard title={t('dash.archive')} desc={t('dash.archive_desc')} id="archive" onClick={() => setActiveTab('archive')} lang={lang} />
+          <OptionsCard title={t('dash.work_settings')} desc={t('dash.work_settings_desc')} id="settings" onClick={() => setActiveTab('settings')} lang={lang} />
+          <div className="border-t border-border/40 my-2"></div>
+          <OptionsCard title={t('layout.ai_core')} desc={t('dash.ai_core_desc')} id="aicore" onClick={() => setActiveTab('aicore')} lang={lang} />
+          <OptionsCard title={t('dash.themes')} desc={t('dash.themes_desc')} id="themes" onClick={() => setActiveTab('themes')} lang={lang} />
+          <div className="border-t border-border/40 my-2"></div>
+          <OptionsCard title={t('dash.support')} desc={t('dash.support_desc')} id="support" onClick={() => setActiveTab('support')} lang={lang} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OptionsCard({ title, desc, id, onClick, lang }: { title: string, desc: string, id: string, onClick: () => void, lang: string }) {
+  return (
+    <div 
+      onClick={onClick}
+      className={`p-5 border border-white/5 rounded-2xl flex flex-col gap-1 bg-card hover:bg-secondary/40 cursor-pointer transition-colors ${lang === 'ar' ? 'rtl' : 'ltr'}`}
+      dir={lang === 'ar' ? 'rtl' : 'ltr'}
+    >
+      <h3 className="font-bold text-lg">{title}</h3>
+      <p className="text-muted-foreground text-sm">{desc}</p>
+    </div>
+  );
+}
+
+
+--- END OF src/components/Dashboard.tsx ---
+

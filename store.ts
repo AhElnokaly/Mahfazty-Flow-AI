@@ -157,6 +157,7 @@ interface AppContextType {
     addRecurringTransaction: (rt: Omit<import('./types').RecurringTransaction, 'id'>) => void;
     updateRecurringTransaction: (id: string, update: Partial<import('./types').RecurringTransaction>) => void;
     deleteRecurringTransaction: (id: string) => void;
+  payRecurringTransactionNow: (id: string) => void;
     processRecurringTransactions: () => void;
   };
 }
@@ -245,6 +246,7 @@ type Action =
   | { type: 'ADD_RECURRING_TRANSACTION'; payload: Omit<import('./types').RecurringTransaction, 'id'> }
   | { type: 'UPDATE_RECURRING_TRANSACTION'; payload: { id: string; update: Partial<import('./types').RecurringTransaction> } }
   | { type: 'DELETE_RECURRING_TRANSACTION'; payload: string }
+  | { type: 'PAY_RECURRING_TRANSACTION_NOW'; payload: { id: string } }
   | { type: 'PROCESS_RECURRING_TRANSACTIONS' }
   | { type: 'DECOY_LOGIN' };
 
@@ -985,6 +987,45 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, recurringTransactions: (state.recurringTransactions || []).map(rt => rt.id === action.payload.id ? { ...rt, ...action.payload.update } : rt) };
     case 'DELETE_RECURRING_TRANSACTION':
       return { ...state, recurringTransactions: (state.recurringTransactions || []).filter(rt => rt.id !== action.payload) };
+    case 'PAY_RECURRING_TRANSACTION_NOW': {
+      const rt = state.recurringTransactions?.find(r => r.id === action.payload.id);
+      if (!rt) return state;
+
+      const today = new Date().toISOString().split('T')[0];
+      const newTx = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        amount: rt.amount,
+        currency: state.baseCurrency || 'EGP',
+        type: rt.type,
+        groupId: rt.groupId,
+        clientId: rt.clientId || '',
+        date: today,
+        items: [{ id: Date.now().toString() + Math.random().toString(36).substr(2, 9), name: rt.title, price: rt.amount, quantity: 1 }],
+        isDebt: false,
+        note: state.language === 'ar' ? 'تم الدفع يدوياً (متكرر)' : 'Paid Manually (Recurring)',
+        recurringTransactionId: rt.id
+      };
+
+      let newBalance = state.walletBalance;
+      if (isIncomeLike(newTx as any)) newBalance += rt.amount;
+      else if (isExpenseLike(newTx as any)) newBalance -= rt.amount;
+
+      // Base it on nextDate if fixed, otherwise base on today
+      const dateObj = new Date(rt.isFixedDate !== false ? (rt.nextDate || today) : today);
+      if (rt.interval === 'daily') dateObj.setDate(dateObj.getDate() + 1);
+      else if (rt.interval === 'weekly') dateObj.setDate(dateObj.getDate() + 7);
+      else if (rt.interval === 'monthly') dateObj.setMonth(dateObj.getMonth() + 1);
+      else if (rt.interval === 'yearly') dateObj.setFullYear(dateObj.getFullYear() + 1);
+      
+      const nextDate = dateObj.toISOString().split('T')[0];
+
+      return {
+        ...state,
+        transactions: [newTx as any, ...state.transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        walletBalance: newBalance,
+        recurringTransactions: (state.recurringTransactions || []).map(r => r.id === rt.id ? { ...r, nextDate } : r)
+      };
+    }
     case 'PROCESS_RECURRING_TRANSACTIONS': {
       const today = new Date().toISOString().split('T')[0];
       let newTransactions = [...state.transactions];
@@ -1131,6 +1172,22 @@ const appReducer = (state: AppState, action: Action): AppState => {
       
       let newBalance = state.walletBalance;
       let updatedCreditCards = state.creditCards || [];
+      let updatedRecurringTransactions = state.recurringTransactions || [];
+
+      if (t.recurringTransactionId) {
+        const rt = updatedRecurringTransactions.find(r => r.id === t.recurringTransactionId);
+        if (rt) {
+          const dateObj = new Date(rt.nextDate);
+          if (rt.interval === 'daily') dateObj.setDate(dateObj.getDate() - 1);
+          else if (rt.interval === 'weekly') dateObj.setDate(dateObj.getDate() - 7);
+          else if (rt.interval === 'monthly') dateObj.setMonth(dateObj.getMonth() - 1);
+          else if (rt.interval === 'yearly') dateObj.setFullYear(dateObj.getFullYear() - 1);
+          
+          updatedRecurringTransactions = updatedRecurringTransactions.map(r => 
+            r.id === rt.id ? { ...r, nextDate: dateObj.toISOString().split('T')[0] } : r
+          );
+        }
+      }
 
       if (t.paymentMethod === 'credit' && t.creditCardId) {
         if (isIncomeLike(t)) {
@@ -1162,7 +1219,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
         ...state, 
         transactions: state.transactions.filter(t => t.id !== action.payload), 
         walletBalance: newBalance,
-        creditCards: updatedCreditCards
+        creditCards: updatedCreditCards,
+        recurringTransactions: updatedRecurringTransactions
       };
     }
     case 'UPDATE_WALLET_BALANCE':
@@ -1407,6 +1465,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addRecurringTransaction: (rt: Omit<import('./types').RecurringTransaction, 'id'>) => dispatch({ type: 'ADD_RECURRING_TRANSACTION', payload: rt }),
     updateRecurringTransaction: (id: string, update: Partial<import('./types').RecurringTransaction>) => dispatch({ type: 'UPDATE_RECURRING_TRANSACTION', payload: { id, update } }),
     deleteRecurringTransaction: (id: string) => dispatch({ type: 'DELETE_RECURRING_TRANSACTION', payload: id }),
+    payRecurringTransactionNow: (id: string) => dispatch({ type: 'PAY_RECURRING_TRANSACTION_NOW', payload: { id } }),
     processRecurringTransactions: () => dispatch({ type: 'PROCESS_RECURRING_TRANSACTIONS' }),
     enableCloudSync: (token: string) => dispatch({ type: 'ENABLE_CLOUD_SYNC', payload: token }),
     disableCloudSync: () => dispatch({ type: 'DISABLE_CLOUD_SYNC' }),

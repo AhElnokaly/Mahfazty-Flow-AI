@@ -104,6 +104,7 @@ const AddFlow: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [isScanningBarcode, setIsScanningBarcode] = useState(false);
   const [items, setItems] = useState<TransactionItem[]>([]);
+  const itemsTotal = items.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
   const [showItems, setShowItems] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -200,11 +201,14 @@ const AddFlow: React.FC = () => {
     }
   }, [groupId, clients]);
 
-  // Recalculate total amount when items change
+  // Auto-calculate only if amount is empty or 0
   useEffect(() => {
     if (items.length > 0) {
       const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-      setAmount(total.toString());
+      setAmount(currentAmount => {
+        if (!currentAmount || parseFloat(currentAmount) === 0) return total.toString();
+        return currentAmount;
+      });
     }
   }, [items]);
 
@@ -665,7 +669,7 @@ const AddFlow: React.FC = () => {
                     value={amount}
                     onChange={setAmount}
                     placeholder="0.00"
-                    disabled={items.length > 0 || type === TransactionType.INVESTMENT}
+                    disabled={type === TransactionType.INVESTMENT}
                     className="w-full py-6 md:py-8 bg-transparent border-b-4 border-slate-100 dark:border-slate-800 text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 dark:text-white focus:outline-none focus:border-blue-600 transition-all disabled:opacity-50"
                   />
                 </div>
@@ -1025,10 +1029,21 @@ const AddFlow: React.FC = () => {
             {type !== TransactionType.INVESTMENT && (
             <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800/50">
               <div className="flex items-center justify-between mb-4">
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-                  <ShoppingCart size={14} />
-                  {language === 'ar' ? 'تفاصيل السلع (اختياري)' : 'Itemized Details (Optional)'}
-                </label>
+                <div className="flex items-center gap-4">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                    <ShoppingCart size={14} />
+                    {language === 'ar' ? 'تفاصيل السلع (' + items.length + ')' : 'Itemized Details (' + items.length + ')'}
+                  </label>
+                  {items.length > 0 && itemsTotal > 0 && parseFloat(amount || '0') !== itemsTotal && (
+                    <button
+                      type="button"
+                      onClick={() => setAmount(itemsTotal.toString())}
+                      className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-2 py-1 flex items-center gap-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                    >
+                      {language === 'ar' ? 'التعيين كمجموع كلي' : 'Set as Total'}
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => {
